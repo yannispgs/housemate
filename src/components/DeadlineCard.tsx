@@ -220,6 +220,84 @@ interface PlantState {
   readonly guides: Readonly<Record<string, string>>;
 }
 
+/**
+ * Le guide de coupe d'une plante : le champ pendant la saisie, le lien quand
+ * il existe, sinon l'invitation à en ajouter un.
+ */
+function GuideActions({
+  plantName,
+  guide,
+  editing,
+  draft,
+  onDraft,
+  onEdit,
+  onSave,
+}: Readonly<{
+  plantName: string;
+  guide: string;
+  editing: boolean;
+  draft: string;
+  onDraft: (value: string) => void;
+  onEdit: () => void;
+  onSave: () => void;
+}>) {
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <input
+          type="url"
+          value={draft}
+          onChange={event => onDraft(event.target.value)}
+          placeholder="https://…"
+          aria-label={`Lien du guide de coupe : ${plantName}`}
+          className="h-[38px] min-w-0 flex-1 rounded-full border border-border bg-surface px-3.5 text-[13.5px] leading-none text-ink outline-none"
+        />
+        <button
+          type="button"
+          onClick={onSave}
+          className="h-[38px] flex-none cursor-pointer rounded-full bg-brand-strong px-3.5 font-display text-[13px] text-white hover:brightness-[1.08]"
+        >
+          Enregistrer
+        </button>
+      </div>
+    );
+  }
+
+  if (guide) {
+    return (
+      <div className="flex flex-wrap items-center gap-2.5">
+        <a
+          href={guide}
+          target="_blank"
+          rel="noopener"
+          className="touch-target inline-flex min-h-9 items-center gap-[7px] rounded-full border border-border bg-surface px-3.5 font-display text-[13px] text-ink no-underline hover:border-baseline"
+        >
+          Guide de coupe
+          <ExternalIcon size={13} />
+        </a>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="touch-target cursor-pointer bg-transparent p-0 text-[12px] leading-none text-ink-muted underline underline-offset-[3px] hover:text-ink"
+        >
+          Changer le lien
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onEdit}
+      className="touch-target inline-flex min-h-9 cursor-pointer items-center gap-1.5 self-start rounded-full border border-dashed border-baseline bg-transparent px-3.5 text-[13px] leading-none text-ink-secondary hover:text-ink"
+    >
+      <PlusIcon size={13} />
+      Ajouter un guide de coupe
+    </button>
+  );
+}
+
 /** Une plante d'une échéance regroupée : à cocher, à déplier. */
 function PlantLine({
   plant,
@@ -308,62 +386,21 @@ function PlantLine({
           <span className="text-[12.5px] leading-normal text-pretty text-ink-secondary">
             {plant.instruction}
           </span>
-          {editing ? (
-            <div className="flex items-center gap-2">
-              <input
-                type="url"
-                value={draft}
-                onChange={event => setDraft(event.target.value)}
-                placeholder="https://…"
-                aria-label={`Lien du guide de coupe : ${plant.name}`}
-                className="h-[38px] min-w-0 flex-1 rounded-full border border-border bg-surface px-3.5 text-[13.5px] leading-none text-ink outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  onSaveGuide(draft.trim());
-                  setEditing(false);
-                }}
-                className="h-[38px] flex-none cursor-pointer rounded-full bg-brand-strong px-3.5 font-display text-[13px] text-white hover:brightness-[1.08]"
-              >
-                Enregistrer
-              </button>
-            </div>
-          ) : guide ? (
-            <div className="flex flex-wrap items-center gap-2.5">
-              <a
-                href={guide}
-                target="_blank"
-                rel="noopener"
-                className="touch-target inline-flex min-h-9 items-center gap-[7px] rounded-full border border-border bg-surface px-3.5 font-display text-[13px] text-ink no-underline hover:border-baseline"
-              >
-                Guide de coupe
-                <ExternalIcon size={13} />
-              </a>
-              <button
-                type="button"
-                onClick={() => {
-                  setDraft(guide);
-                  setEditing(true);
-                }}
-                className="touch-target cursor-pointer bg-transparent p-0 text-[12px] leading-none text-ink-muted underline underline-offset-[3px] hover:text-ink"
-              >
-                Changer le lien
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setDraft("");
-                setEditing(true);
-              }}
-              className="touch-target inline-flex min-h-9 cursor-pointer items-center gap-1.5 self-start rounded-full border border-dashed border-baseline bg-transparent px-3.5 text-[13px] leading-none text-ink-secondary hover:text-ink"
-            >
-              <PlusIcon size={13} />
-              Ajouter un guide de coupe
-            </button>
-          )}
+          <GuideActions
+            plantName={plant.name}
+            guide={guide}
+            editing={editing}
+            draft={draft}
+            onDraft={setDraft}
+            onEdit={() => {
+              setDraft(guide);
+              setEditing(true);
+            }}
+            onSave={() => {
+              onSaveGuide(draft.trim());
+              setEditing(false);
+            }}
+          />
         </div>
       )}
     </div>

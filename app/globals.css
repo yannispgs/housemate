@@ -194,10 +194,12 @@
  * VISIBLE : une zone invisible, centrée, déborde autour des petites commandes
  * de la maquette (pilules de 36 px, étiquettes cliquables, liens discrets).
  */
-@utility touch-target {
-  position: relative;
+@layer utilities {
+  .touch-target {
+    position: relative;
+  }
 
-  &::after {
+  .touch-target::after {
     content: "";
     position: absolute;
     top: 50%;
