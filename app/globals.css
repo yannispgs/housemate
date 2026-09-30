@@ -13,18 +13,19 @@
  * SOURCE : `design_handoff_housemate/README.md`, section « Rôles sémantiques
  * de l'application ». Les deux jeux de valeurs y sont donnés explicitement.
  *
- * ⚠️ Le handoff contredit `valsTheme()` dans `Ecran.dc.html` sur trois
- * valeurs SOMBRES : `--ink-primary` (neutral-300 contre neutral-100),
- * `--ink-secondary` (400 contre 300) et `--ink-muted` (500 contre 400). Le
- * handoff fait foi — c'est le document désigné pour la reproduction — mais
- * l'écart est à signaler côté design, l'un des deux ayant tort.
- *
- * Le mode sombre est CHOISI, pas inversé, et n'est pas encore livré : le
- * CLAUDE.md du projet de design dit « prévu plus tard, ne pas décrire comme
- * exclu ». Les valeurs sont là, la bascule ne l'est pas.
+ * Le mode sombre est livré (Réglages : Clair, Sombre, Auto). Ses valeurs
+ * sont celles du handoff, qui concordent désormais avec `valsTheme()` dans
+ * `Ecran.dc.html`. En sombre, les titres passent en Young Serif : Caprasimo
+ * s'épaissit trop sur fond sombre.
  */
 
 @theme inline {
+  /* Polices : `font-display` (titres) et `font-text` (le reste). Pas
+     `--font-heading` ici : Tailwind émettrait `--font-heading:
+     var(--font-heading)`, une variable qui se référence elle-même. */
+  --font-display: var(--font-heading);
+  --font-text: var(--font-body);
+
   --color-page: var(--page);
   --color-surface: var(--surface);
   --color-ink: var(--ink-primary);
@@ -84,6 +85,10 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 
+    /* Titres en Young Serif : Caprasimo s'épaissit trop sur fond sombre. */
+    --font-heading:
+      var(--font-heading-dark-loaded), "Young Serif", Georgia, serif;
+
     --page: var(--color-neutral-900);
     --surface: var(--color-neutral-800);
     --ink-primary: var(--color-neutral-300);
@@ -112,6 +117,9 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
+  --font-heading:
+    var(--font-heading-dark-loaded), "Young Serif", Georgia, serif;
+
   --page: var(--color-neutral-900);
   --surface: var(--color-neutral-800);
   --ink-primary: var(--color-neutral-300);
@@ -133,46 +141,69 @@
   --critical-tint: color-mix(in srgb, #f07a7a 22%, #2a2b2e);
 }
 
-body {
-  margin: 0;
-  background: var(--page);
-  color: var(--ink-primary);
-  font-family: var(--font-body);
-  font-size: 15px;
-  line-height: 1.55;
-}
+/*
+ * Styles de base, DANS la couche `base` : hors couche, ils l'emporteraient sur
+ * les utilitaires Tailwind, et un `h1` ou un bouton ne pourrait plus suivre la
+ * maquette.
+ */
+@layer base {
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink-primary);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.55;
+  }
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  font-family: var(--font-heading);
-  font-weight: var(--font-heading-weight);
-  line-height: 1.12;
-  letter-spacing: -0.015em;
-  margin: 0 0 var(--space-2);
-}
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading);
+    font-weight: var(--font-heading-weight);
+    line-height: 1.12;
+    margin: 0;
+  }
 
-/* États d'interaction thématisés — jamais les défauts du navigateur. */
-:focus {
-  outline: none;
-}
-
-:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-
-::selection {
-  background: color-mix(in srgb, var(--brand) 30%, transparent);
-}
-
-/* Cibles tactiles d'au moins 44 px — l'usage principal est un iPhone. */
-@media (pointer: coarse) {
-  a,
   button {
-    min-height: 44px;
+    border: none;
+    font: inherit;
+    color: inherit;
+  }
+
+  /* États d'interaction thématisés — jamais les défauts du navigateur. */
+  :focus {
+    outline: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--brand) 30%, transparent);
+  }
+}
+
+/*
+ * Cible tactile d'au moins 44 px (conventions § 7) sans changer la taille
+ * VISIBLE : une zone invisible, centrée, déborde autour des petites commandes
+ * de la maquette (pilules de 36 px, étiquettes cliquables, liens discrets).
+ */
+@utility touch-target {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
   }
 }

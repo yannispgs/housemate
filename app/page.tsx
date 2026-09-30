@@ -1,20 +1,30 @@
 import type { Metadata } from "next";
-import { PageHeader, Placeholder } from "@/components/page-header";
+import { HomeScreen } from "@/components/screens/HomeScreen";
+import {
+  DEMO_ASIDE,
+  DEMO_DEADLINES,
+  DEMO_NEXT_UP,
+  DEMO_TODAY,
+} from "@/demo/data";
+import { demoEnabled } from "@/demo/mode";
 
-export const metadata: Metadata = { title: "À traiter" };
+export const metadata: Metadata = { title: "Accueil" };
 
 export default function Page() {
+  // Aucune donnée n'est encore branchée : démonstration hors production,
+  // état vide en production.
+  if (!demoEnabled()) {
+    return (
+      <HomeScreen deadlines={[]} fixedToday={null} nextUp={null} aside={null} />
+    );
+  }
+
   return (
-    <>
-      <PageHeader
-        title="À traiter"
-        purpose="Ce qui demande une attention maintenant — jamais le corpus entier."
-      />
-      <Placeholder>
-        Liste bornée de trois à six cartes d'échéance, ordonnées par urgence, et
-        l'état vide qui doit se lire « rien ne t'attend ». SPEC § 10, brief de
-        design problème (a).
-      </Placeholder>
-    </>
+    <HomeScreen
+      deadlines={DEMO_DEADLINES}
+      fixedToday={DEMO_TODAY}
+      nextUp={DEMO_NEXT_UP}
+      aside={DEMO_ASIDE}
+    />
   );
 }
