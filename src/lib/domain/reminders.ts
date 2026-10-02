@@ -38,6 +38,10 @@ export type ImportanceLevel = "critical" | "important" | "normal" | "memo";
 
 export class InvalidReminderError extends Error {}
 
+/** Les unités qui se comptent en jours ; le mois, lui, varie. */
+const DAYS_PER_UNIT: Readonly<Record<Exclude<ReminderUnit, "month">, number>> =
+  { day: 1, week: 7 };
+
 /** La date à laquelle part un rappel, pour une occurrence donnée. */
 export function reminderDate(
   occurrence: PlainDate,
@@ -47,10 +51,7 @@ export function reminderDate(
     return addMonths(occurrence, -reminder.amount);
   }
 
-  return addDays(
-    occurrence,
-    -reminder.amount * (reminder.unit === "week" ? 7 : 1),
-  );
+  return addDays(occurrence, -reminder.amount * DAYS_PER_UNIT[reminder.unit]);
 }
 
 /**
@@ -72,9 +73,11 @@ export function defaultReminders(importance: ImportanceLevel): Reminder[] {
  * le même délai. Les mois ne se convertissent pas (leur longueur varie).
  */
 function leadKey(reminder: Reminder): string {
-  return reminder.unit === "month"
-    ? `month:${reminder.amount}`
-    : `day:${reminder.amount * (reminder.unit === "week" ? 7 : 1)}`;
+  if (reminder.unit === "month") {
+    return `month:${reminder.amount}`;
+  }
+
+  return `day:${reminder.amount * DAYS_PER_UNIT[reminder.unit]}`;
 }
 
 function assertWellFormed(reminder: Reminder): void {
