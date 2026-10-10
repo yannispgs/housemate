@@ -28,6 +28,21 @@ export type Duration = {
 
 export class InvalidRecurrenceError extends Error {}
 
+/**
+ * Un décalage de dérivation peut être négatif (SPEC § 3.4a) : les échéances les
+ * plus coûteuses se calculent à l'envers, depuis une date qu'on ne choisit pas
+ * — un passeport six mois avant son expiration, un contrat un mois avant sa
+ * date anniversaire. Sans cela, l'échéance tomberait au moment précis où il
+ * est trop tard pour agir. Seule exigence : un nombre entier.
+ */
+function assertWholeOffset(duration: Duration): void {
+  if (!Number.isInteger(duration.count)) {
+    throw new InvalidRecurrenceError(
+      `Un décalage est un nombre entier, reçu ${duration.count}.`,
+    );
+  }
+}
+
 function assertPositive(duration: Duration): void {
   if (!Number.isInteger(duration.count) || duration.count < 1) {
     throw new InvalidRecurrenceError(
@@ -69,6 +84,13 @@ export type IntervalRecurrence = {
   readonly kind: "interval";
   readonly anchor: PlainDate;
   readonly every: Duration;
+  /**
+   * Un premier saut différent des suivants (SPEC § 3.4c) : le contrôle
+   * technique tombe 4 ans après la mise en circulation, puis tous les 2 ans.
+   * ⚠️ C'est la durée du premier saut qui change, pas l'ancre : la série
+   * reste ancrée sur la date d'origine.
+   */
+  readonly firstAfter?: Duration;
 };
 
 /** 2 — Date annuelle fixe : anniversaires, fêtes. */
@@ -93,7 +115,11 @@ export type SinceCompletionRecurrence = {
   readonly after: Duration;
 };
 
-/** 5 — Dérivée d'un attribut de fiche : date d'achat + durée de garantie. */
+/**
+ * 5 — Dérivée d'un attribut de fiche : date d'achat + durée de garantie, ou
+ * expiration − 6 mois. Le décalage est **négatif** quand l'échéance précède sa
+ * source.
+ */
 export type DerivedRecurrence = {
   readonly kind: "derived";
   readonly sourceDate: PlainDate;
@@ -134,13 +160,28 @@ export type ThresholdRecurrence = {
  * Les faire passer par la même fonction obligerait à renvoyer `null` sans que
  * l'appelant sache s'il s'agit d'une absence normale ou d'une erreur.
  */
+/**
+ * « Au premier des deux termes échus » (SPEC § 3.4b) : plusieurs motifs, et
+ * l'occurrence retenue est la plus proche. Révision tous les 20 000 km OU tous
+ * les ans ; garantie constructeur en années OU en kilomètres.
+ *
+ * ⚠️ Un compteur (motif 8) ne se calcule pas depuis une date : il n'entre dans
+ * une composite que par une date ESTIMÉE à partir de la série de ses relevés
+ * (§ 5.3), sous la forme d'une échéance ponctuelle.
+ */
+export type CompositeRecurrence = {
+  readonly kind: "composite";
+  readonly parts: readonly ScheduledRecurrence[];
+};
+
 export type ScheduledRecurrence =
   | IntervalRecurrence
   | AnnualRecurrence
   | SeasonalRecurrence
   | SinceCompletionRecurrence
   | DerivedRecurrence
-  | OnceRecurrence;
+  | OnceRecurrence
+  | CompositeRecurrence;
 
 export type UnscheduledRecurrence =
   | DormantRecurrence
@@ -336,6 +377,28 @@ function nextSeasonal(
   return null;
 }
 
+/** La plus proche des prochaines occurrences de chaque motif d'une composite. */
+function earliestOf(
+  recurrence: CompositeRecurrence,
+  context: OccurrenceContext,
+): PlainDate | null {
+  if (recurrence.parts.length === 0) {
+    throw new InvalidRecurrenceError("Une récurrence composite sans motif.");
+  }
+
+  let earliest: PlainDate | null = null;
+
+  for (const part of recurrence.parts) {
+    const candidate = nextOccurrence(part, context);
+
+    if (candidate && (!earliest || compare(candidate, earliest) < 0)) {
+      earliest = candidate;
+    }
+  }
+
+  return earliest;
+}
+
 /**
  * La prochaine occurrence à partir de `context.from`, ou `null` s'il n'y en a
  * plus — cas d'une échéance ponctuelle déjà passée, ou d'une saison vide.
@@ -352,13 +415,27 @@ export function nextOccurrence(
 
     case "interval": {
       assertPositive(recurrence.every);
+
+      if (recurrence.firstAfter) {
+        assertPositive(recurrence.firstAfter);
+      }
+
+      // Avec un premier saut distinct, la série « régulière » démarre à la
+      // première échéance, et l'ancre elle-même n'est jamais une occurrence.
+      const start = recurrence.firstAfter
+        ? addDuration(recurrence.anchor, recurrence.firstAfter, 1)
+        : recurrence.anchor;
       const repetition = firstRepetitionAtOrAfter(
-        recurrence.anchor,
+        start,
         recurrence.every,
         from,
       );
-      return addDuration(recurrence.anchor, recurrence.every, repetition);
+
+      return addDuration(start, recurrence.every, repetition);
     }
+
+    case "composite":
+      return earliestOf(recurrence, context);
 
     case "annual": {
       const thisYear = annualOccurrenceIn(
@@ -372,7 +449,7 @@ export function nextOccurrence(
     }
 
     case "derived": {
-      assertPositive(recurrence.offset);
+      assertWholeOffset(recurrence.offset);
       const due = addDuration(recurrence.sourceDate, recurrence.offset, 1);
       return notBefore(due, from) ? due : null;
     }
