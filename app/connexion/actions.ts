@@ -28,6 +28,13 @@ function raison(
   return (error.status ?? 500) >= 500 ? "service" : "code";
 }
 
+/** Un champ texte du formulaire, ou une chaîne vide. */
+function champ(formulaire: FormData, nom: string): string {
+  const valeur = formulaire.get(nom);
+
+  return typeof valeur === "string" ? valeur : "";
+}
+
 /**
  * Une seule action pour les deux étapes : l'étape en cours voyage dans le
  * formulaire, l'adresse aussi une fois le code demandé.
@@ -37,7 +44,7 @@ export async function connexion(
   formulaire: FormData,
 ): Promise<EtatConnexion> {
   const auth = neonAuth();
-  const email = String(formulaire.get("email") ?? "");
+  const email = champ(formulaire, "email");
 
   if (formulaire.get("etape") !== "code") {
     return demanderCode(email, {
@@ -54,7 +61,7 @@ export async function connexion(
 
   const enTetes = await headers();
   const jar = await cookies();
-  const etat = await verifierCode(email, String(formulaire.get("code") ?? ""), {
+  const etat = await verifierCode(email, champ(formulaire, "code"), {
     verifierCode: async (adresse, otp) => {
       const { data, error } = await auth.signIn.emailOtp({
         email: adresse,

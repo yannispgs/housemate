@@ -39,10 +39,10 @@ export function resolveAuthMode(
     );
   }
 
-  const baseUrl = env.NEON_AUTH_BASE_URL;
+  const baseUrl = env.NEON_AUTH_BASE_URL ?? "";
   const cookieSecret = env.NEON_AUTH_COOKIE_SECRET;
 
-  if (baseUrl === undefined || !baseUrl.startsWith("https://")) {
+  if (!baseUrl.startsWith("https://")) {
     throw new Error(
       "NEON_AUTH_BASE_URL manquante ou non HTTPS : l'authentification ne peut pas démarrer.",
     );

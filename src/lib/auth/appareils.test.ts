@@ -52,7 +52,7 @@ describe("decrireAppareil", () => {
 
   it("se contente de ce qu'il reconnaît", () => {
     expect(decrireAppareil("curl/8.5.0")).toBe("Appareil non reconnu");
-    expect(decrireAppareil(null)).toBe("Appareil non reconnu");
+    expect(decrireAppareil("")).toBe("Appareil non reconnu");
     expect(decrireAppareil("Linux x86_64")).toBe("Linux");
   });
 });

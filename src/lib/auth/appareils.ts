@@ -47,10 +47,9 @@ const SYSTEMES: readonly (readonly [RegExp, string])[] = [
  * « Safari sur iPhone » : assez pour qu'une personne reconnaisse (ou non) son
  * appareil, sans prétendre à une précision que l'en-tête ne donne pas.
  */
-export function decrireAppareil(userAgent: string | null): string {
-  const ua = userAgent ?? "";
-  const navigateur = NAVIGATEURS.find(([motif]) => motif.test(ua))?.[1];
-  const systeme = SYSTEMES.find(([motif]) => motif.test(ua))?.[1];
+export function decrireAppareil(userAgent: string): string {
+  const navigateur = NAVIGATEURS.find(([motif]) => motif.test(userAgent))?.[1];
+  const systeme = SYSTEMES.find(([motif]) => motif.test(userAgent))?.[1];
 
   if (navigateur !== undefined && systeme !== undefined) {
     return `${navigateur} sur ${systeme}`;

@@ -107,8 +107,8 @@ export async function verifierCode(
   // reste valable, et l'échec est signalé plutôt que tu.
   try {
     await verifierAppareil(resultat.userId, email, deps);
-  } catch (erreur) {
-    deps.signaler(erreur);
+  } catch (error_) {
+    deps.signaler(error_);
   }
 
   return { etape: "connecte" };
@@ -126,7 +126,7 @@ async function verifierAppareil(
     deps.poserAppareil(identifiant);
   }
 
-  const description = decrireAppareil(deps.userAgent);
+  const description = decrireAppareil(deps.userAgent ?? "");
   const nouveau = await deps.noterAppareil(
     userId,
     empreinte(identifiant),

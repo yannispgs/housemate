@@ -25,7 +25,7 @@ export function FormulaireConnexion() {
             HouseMate, un code à six chiffres vient d'y être envoyé.
           </p>
           <label className="flex flex-col gap-1 text-sm text-ink">
-            Code reçu
+            <span>Code reçu</span>
             <input
               name="code"
               className={`${CHAMP} tracking-[0.3em]`}
@@ -34,14 +34,12 @@ export function FormulaireConnexion() {
               pattern="[0-9 ]{6,7}"
               maxLength={7}
               required
-              // biome-ignore lint/a11y/noAutofocus: l'étape n'a qu'un champ, celui qu'on vient d'annoncer.
-              autoFocus
             />
           </label>
         </>
       ) : (
         <label className="flex flex-col gap-1 text-sm text-ink">
-          Adresse e-mail
+          <span>Adresse e-mail</span>
           <input
             name="email"
             type="email"
