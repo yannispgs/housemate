@@ -60,9 +60,9 @@ export function FormulaireConnexion() {
       )}
 
       {etat.etape === "code" && etat.info !== undefined ? (
-        <p role="status" className="m-0 text-[13.5px] text-ink-secondary">
+        <output className="block text-[13.5px] text-ink-secondary">
           {etat.info}
-        </p>
+        </output>
       ) : null}
 
       {erreur === undefined ? null : (
