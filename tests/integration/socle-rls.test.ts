@@ -322,6 +322,58 @@ describe("le privé strict", () => {
       ),
     ).rejects.toThrow(/permission denied/);
   });
+
+  it("laisse l'auteur rendre sa fiche privée, puis publique", async () => {
+    const fiche = await createFiche("nous-moi");
+
+    const toPrivate = await as(
+      "nous-moi",
+      tx => tx`update app.fiches set prive = true where id = ${fiche.id}`,
+    );
+    const toPublic = await as(
+      "nous-moi",
+      tx => tx`update app.fiches set prive = false where id = ${fiche.id}`,
+    );
+
+    expect(toPrivate.count).toBe(1);
+    expect(toPublic.count).toBe(1);
+  });
+
+  it("refuse qu'un autre membre rende privée la fiche d'autrui", async () => {
+    const fiche = await createFiche("nous-moi");
+
+    await expect(
+      as(
+        "nous-conjoint",
+        tx => tx`update app.fiches set prive = true where id = ${fiche.id}`,
+      ),
+    ).rejects.toThrow(/Seul l'auteur/);
+  });
+
+  it("refuse aussi qu'un autre membre rende privée l'échéance d'autrui", async () => {
+    const id = await createEcheance("nous-moi");
+
+    await expect(
+      as(
+        "nous-conjoint",
+        tx => tx`update app.echeances set prive = true where id = ${id}`,
+      ),
+    ).rejects.toThrow(/Seul l'auteur/);
+  });
+
+  it("laisse un autre membre modifier la fiche, et la masquer pour une surprise", async () => {
+    const fiche = await createFiche("nous-moi");
+
+    const edited = await as(
+      "nous-conjoint",
+      tx => tx`
+        update app.fiches set titre = 'Chaudière du sous-sol',
+          masque_pour = ${nous.moi}
+        where id = ${fiche.id}`,
+    );
+
+    expect(edited.count).toBe(1);
+  });
 });
 
 describe("les groupes", () => {
