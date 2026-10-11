@@ -7,7 +7,7 @@
  * Port 587 et STARTTLS, comme pour le collecteur : le relais Brevo n'y filtre
  * pas les IP, contrairement à son API (et une fonction Vercel change d'IP).
  */
-import { connect, type Socket } from "node:net";
+import { connect, isIP, type Socket } from "node:net";
 import { connect as connectTls } from "node:tls";
 import {
   ReplyReader,
@@ -18,7 +18,15 @@ import {
 /** Au-delà, l'envoi est abandonné : un webhook Neon attend 5 s au plus. */
 const TIMEOUT_MS = 4000;
 
-export function openSmtpNode(hostname: string, port = 587): SmtpConnection {
+/**
+ * `ca` remplace les autorités reconnues : pour les tests seulement, avec un
+ * certificat jetable. La vérification du certificat n'est jamais coupée.
+ */
+export function openSmtpNode(
+  hostname: string,
+  port = 587,
+  ca?: Buffer,
+): SmtpConnection {
   let socket: Socket = connect({ host: hostname, port });
   const parser = new ReplyReader();
   const ready: SmtpReply[] = [];
@@ -79,8 +87,16 @@ export function openSmtpNode(hostname: string, port = 587): SmtpConnection {
     startTls() {
       return new Promise((resolve, reject) => {
         socket.removeAllListeners("data");
-        const secure = connectTls({ socket, servername: hostname }, () =>
-          resolve(),
+        const secure = connectTls(
+          {
+            socket,
+            // L'identité que le certificat doit porter.
+            host: hostname,
+            // Le nom annoncé (SNI) ne peut pas être une adresse IP.
+            ...(isIP(hostname) === 0 ? { servername: hostname } : {}),
+            ...(ca === undefined ? {} : { ca }),
+          },
+          () => resolve(),
         );
         secure.once("error", reject);
         socket = secure;

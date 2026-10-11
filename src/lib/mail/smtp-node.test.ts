@@ -113,18 +113,14 @@ describe("openSmtpNode", () => {
         secure.on("error", () => {});
       }
     });
-    const smtp = openSmtpNode("127.0.0.1", port);
+    // Le certificat jetable devient la seule autorité reconnue : la
+    // vérification reste entière.
+    const smtp = openSmtpNode("127.0.0.1", port, certificat.cert);
 
     await smtp.reply();
     await smtp.send("STARTTLS");
     expect((await smtp.reply()).code).toBe(220);
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
-    try {
-      await smtp.startTls();
-    } finally {
-      delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-    }
+    await smtp.startTls();
 
     await smtp.send("EHLO test");
     expect(await smtp.reply()).toEqual({ code: 250, lines: ["chiffré"] });
@@ -149,6 +145,8 @@ function certificatJetable(): { key: Buffer; cert: Buffer } {
         "-nodes",
         "-subj",
         "/CN=127.0.0.1",
+        "-addext",
+        "subjectAltName=IP:127.0.0.1",
         "-days",
         "1",
         "-keyout",
