@@ -7,6 +7,8 @@ import {
   demanderCode,
   type EtatConnexion,
   type ResultatCode,
+  type ResultatDemande,
+  renvoyerCode,
   verifierCode,
 } from "@/lib/auth/connexion";
 import { authMode, envoyerMail, neonAuth, portierSql } from "@/lib/auth/server";
@@ -52,17 +54,30 @@ export async function connexion(
   const auth = neonAuth();
   const email = champ(formulaire, "email");
 
-  if (formulaire.get("etape") !== "code") {
-    return demanderCode(email, {
-      demanderCode: async adresse => {
-        const { error } = await auth.emailOtp.sendVerificationOtp({
-          email: adresse,
-          type: "sign-in",
-        });
+  const envoi = {
+    demanderCode: async (adresse: string): Promise<ResultatDemande> => {
+      const { error } = await auth.emailOtp.sendVerificationOtp({
+        email: adresse,
+        type: "sign-in",
+      });
 
-        return { ok: error === null || error === undefined };
-      },
-    });
+      if (error === null || error === undefined) {
+        return { ok: true };
+      }
+
+      return {
+        ok: false,
+        raison: (error as NeonError).status === 429 ? "tentatives" : "service",
+      };
+    },
+  };
+
+  if (formulaire.get("etape") !== "code") {
+    return demanderCode(email, envoi);
+  }
+
+  if (champ(formulaire, "intention") === "renvoyer") {
+    return renvoyerCode(email, envoi);
   }
 
   const enTetes = await headers();

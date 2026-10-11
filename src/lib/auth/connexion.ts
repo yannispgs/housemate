@@ -26,6 +26,8 @@ export type EtatConnexion =
       readonly etape: "code";
       readonly email: string;
       readonly erreur?: string;
+      /** Une information, pas une erreur : « un nouveau code vient d'être envoyé ». */
+      readonly info?: string;
     }
   | { readonly etape: "connecte" };
 
@@ -35,8 +37,12 @@ export type ResultatCode =
   | { readonly ok: true; readonly userId: string }
   | { readonly ok: false; readonly raison: "code" | "tentatives" | "service" };
 
+export type ResultatDemande =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly raison: "tentatives" | "service" };
+
 export interface ConnexionDeps {
-  demanderCode(email: string): Promise<{ readonly ok: boolean }>;
+  demanderCode(email: string): Promise<ResultatDemande>;
   verifierCode(email: string, code: string): Promise<ResultatCode>;
   /** L'identifiant d'appareil du cookie, s'il y en a un. */
   lireAppareil(): string | undefined;
@@ -67,17 +73,40 @@ export async function demanderCode(
     return { etape: "adresse", erreur: "Cette adresse n'est pas valide." };
   }
 
-  const { ok } = await deps.demanderCode(email);
+  const resultat = await deps.demanderCode(email);
 
-  if (!ok) {
-    return {
-      etape: "adresse",
-      erreur:
-        "Le service de connexion ne répond pas. Réessayez dans un instant.",
-    };
+  if (!resultat.ok) {
+    return { etape: "adresse", erreur: MESSAGES_DEMANDE[resultat.raison] };
   }
 
   return { etape: "code", email };
+}
+
+const MESSAGES_DEMANDE = {
+  tentatives:
+    "Trop de demandes. Patientez une minute avant de redemander un code.",
+  service: "Le service de connexion ne répond pas. Réessayez dans un instant.",
+} as const;
+
+/**
+ * Un nouveau code pour la même adresse, depuis l'étape du code. Le précédent
+ * ne vaut plus : Neon Auth n'en garde qu'un par adresse.
+ */
+export async function renvoyerCode(
+  email: string,
+  deps: Pick<ConnexionDeps, "demanderCode">,
+): Promise<EtatConnexion> {
+  const resultat = await deps.demanderCode(email);
+
+  if (!resultat.ok) {
+    return { etape: "code", email, erreur: MESSAGES_DEMANDE[resultat.raison] };
+  }
+
+  return {
+    etape: "code",
+    email,
+    info: "Un nouveau code vient d'être envoyé. Seul ce dernier est valable.",
+  };
 }
 
 const MESSAGES = {

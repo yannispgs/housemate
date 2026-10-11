@@ -3,6 +3,8 @@ import {
   type ConnexionDeps,
   demanderCode,
   type ResultatCode,
+  type ResultatDemande,
+  renvoyerCode,
   verifierCode,
 } from "@/lib/auth/connexion";
 
@@ -16,7 +18,9 @@ function deps(
 ) {
   const poses: string[] = [];
   const d = {
-    demanderCode: vi.fn(() => Promise.resolve({ ok: true })),
+    demanderCode: vi.fn(
+      (): Promise<ResultatDemande> => Promise.resolve({ ok: true }),
+    ),
     verifierCode: vi.fn(() => Promise.resolve(resultat)),
     lireAppareil: () => options.appareil,
     poserAppareil: (id: string) => {
@@ -56,11 +60,47 @@ describe("demanderCode", () => {
 
   it("le dit quand le service ne répond pas", async () => {
     const { d } = deps();
-    d.demanderCode.mockResolvedValueOnce({ ok: false });
+    d.demanderCode.mockResolvedValueOnce({ ok: false, raison: "service" });
 
     expect(await demanderCode("parent@exemple.fr", d)).toMatchObject({
       etape: "adresse",
       erreur: expect.stringMatching(/ne répond pas/),
+    });
+  });
+});
+
+describe("demanderCode — trop de demandes", () => {
+  it("demande de patienter", async () => {
+    const { d } = deps();
+    d.demanderCode.mockResolvedValueOnce({ ok: false, raison: "tentatives" });
+
+    expect(await demanderCode("parent@exemple.fr", d)).toMatchObject({
+      etape: "adresse",
+      erreur: expect.stringMatching(/Patientez/),
+    });
+  });
+});
+
+describe("renvoyerCode", () => {
+  it("renvoie un code et dit que seul le dernier vaut", async () => {
+    const { d } = deps();
+
+    expect(await renvoyerCode("parent@exemple.fr", d)).toEqual({
+      etape: "code",
+      email: "parent@exemple.fr",
+      info: expect.stringMatching(/Seul ce dernier est valable/),
+    });
+    expect(d.demanderCode).toHaveBeenCalledWith("parent@exemple.fr");
+  });
+
+  it("reste à l'étape du code, avec une erreur, si l'envoi est refusé", async () => {
+    const { d } = deps();
+    d.demanderCode.mockResolvedValueOnce({ ok: false, raison: "tentatives" });
+
+    expect(await renvoyerCode("parent@exemple.fr", d)).toEqual({
+      etape: "code",
+      email: "parent@exemple.fr",
+      erreur: expect.stringMatching(/Patientez/),
     });
   });
 });
