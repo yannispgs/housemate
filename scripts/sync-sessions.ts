@@ -17,6 +17,7 @@ import {
   type AuthSession,
   type AuthUser,
   type BranchSnapshot,
+  type BranchWrites,
   planSessionSync,
 } from "../src/lib/db/session-sync.ts";
 
@@ -58,66 +59,95 @@ const targets = branches.filter(b =>
 
 const connections = new Map<string, postgres.Sql>();
 
-try {
-  const snapshots: BranchSnapshot[] = [];
-
-  for (const branch of targets) {
-    const { uri } = await neon<{ uri: string }>(
-      `/connection_uri?branch_id=${branch.id}&database_name=${DATABASE}&role_name=${ROLE}`,
-    );
-    const sql = postgres(uri, { max: 1, onnotice: () => {} });
-    connections.set(branch.name, sql);
-
-    const users = await sql<AuthUser[]>`
+/** Lit les comptes et sessions d'une branche, et garde sa connexion. */
+async function snapshot(branch: {
+  id: string;
+  name: string;
+}): Promise<BranchSnapshot> {
+  const { uri } = await neon<{ uri: string }>(
+    `/connection_uri?branch_id=${branch.id}&database_name=${DATABASE}&role_name=${ROLE}`,
+  );
+  const sql = postgres(uri, { max: 1, onnotice: () => {} });
+  connections.set(branch.name, sql);
+  const [users, sessions] = [
+    await sql<AuthUser[]>`
       select id::text, email, name, "emailVerified", "createdAt", "updatedAt"
-      from neon_auth."user"`;
-    const sessions = await sql<AuthSession[]>`
+      from neon_auth."user"`,
+    await sql<AuthSession[]>`
       select id::text, token, "userId"::text, "expiresAt", "createdAt",
              "updatedAt", "ipAddress", "userAgent"
-      from neon_auth.session`;
-    snapshots.push({ branch: branch.name, users, sessions });
+      from neon_auth.session`,
+  ];
+
+  return { branch: branch.name, users, sessions };
+}
+
+/** Écrit dans une branche ce que le plan lui destine, en une transaction. */
+async function apply(writes: BranchWrites): Promise<string> {
+  const { users, sessions } = writes;
+
+  if (users.length === 0 && sessions.length === 0) {
+    return `${writes.branch} : à jour`;
   }
 
-  for (const writes of planSessionSync(snapshots, new Date())) {
-    const sql = connections.get(writes.branch) as postgres.Sql;
+  const sql = connections.get(writes.branch) as postgres.Sql;
 
-    if (writes.users.length === 0 && writes.sessions.length === 0) {
-      console.log(`${writes.branch} : à jour`);
-      continue;
+  await sql.begin(async tx => {
+    if (users.length > 0) {
+      await tx`
+        insert into neon_auth."user"
+          ${tx(
+            users.map(u => ({ ...u })),
+            "id",
+            "email",
+            "name",
+            "emailVerified",
+            "createdAt",
+            "updatedAt",
+          )}
+        on conflict do nothing`;
+      // Ces comptes n'ont pas été créés ici : `user.created` n'a pas eu lieu,
+      // le rattachement au foyer non plus. Sans effet hors liste blanche.
+      await tx`
+        insert into app.membres (foyer_id, auth_user_id)
+        select l.foyer_id, c.id
+        from unnest(${users.map(u => u.id)}::text[], ${users.map(u => u.email)}::text[])
+          as c (id, email)
+        join app.liste_blanche l on l.email = c.email
+        on conflict (auth_user_id) do nothing`;
     }
 
-    await sql.begin(async tx => {
-      for (const u of writes.users) {
-        await tx`
-          insert into neon_auth."user"
-            (id, email, name, "emailVerified", "createdAt", "updatedAt")
-          values (${u.id}, ${u.email}, ${u.name}, ${u.emailVerified},
-                  ${u.createdAt}, ${u.updatedAt})
-          on conflict do nothing`;
-        // Le compte n'a pas été créé ici : `user.created` n'a pas eu lieu,
-        // le rattachement au foyer non plus. Sans effet hors liste blanche.
-        await tx`
-          insert into app.membres (foyer_id, auth_user_id)
-          select foyer_id, ${u.id} from app.liste_blanche where email = ${u.email}
-          on conflict (auth_user_id) do nothing`;
-      }
+    if (sessions.length > 0) {
+      await tx`
+        insert into neon_auth.session
+          ${tx(
+            sessions.map(s => ({ ...s })),
+            "id",
+            "token",
+            "userId",
+            "expiresAt",
+            "createdAt",
+            "updatedAt",
+            "ipAddress",
+            "userAgent",
+          )}
+        on conflict (token) do update
+          set "expiresAt" = greatest(neon_auth.session."expiresAt", excluded."expiresAt"),
+              "updatedAt" = now()`;
+    }
+  });
 
-      for (const s of writes.sessions) {
-        await tx`
-          insert into neon_auth.session
-            (id, token, "userId", "expiresAt", "createdAt", "updatedAt",
-             "ipAddress", "userAgent")
-          values (${s.id}, ${s.token}, ${s.userId}, ${s.expiresAt},
-                  ${s.createdAt}, ${s.updatedAt}, ${s.ipAddress}, ${s.userAgent})
-          on conflict (token) do update
-            set "expiresAt" = greatest(neon_auth.session."expiresAt", excluded."expiresAt"),
-                "updatedAt" = now()`;
-      }
-    });
+  return `${writes.branch} : ${users.length} compte(s), ${sessions.length} session(s)`;
+}
 
-    console.log(
-      `${writes.branch} : ${writes.users.length} compte(s), ${writes.sessions.length} session(s)`,
-    );
+try {
+  const snapshots = await Promise.all(targets.map(snapshot));
+  const reports = await Promise.all(
+    planSessionSync(snapshots, new Date()).map(apply),
+  );
+
+  for (const report of reports) {
+    console.log(report);
   }
 } finally {
   await Promise.all([...connections.values()].map(sql => sql.end()));
