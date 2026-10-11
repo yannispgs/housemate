@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
-import { AppShell } from "@/components/app-shell";
+import { AppShell } from "@/components/AppShell";
+import { DEMO_HOUSEHOLD } from "@/demo/data";
+import { demoEnabled } from "@/demo/mode";
+import { THEME_BOOT_SCRIPT } from "@/lib/ui/theme";
 import "./globals.css";
 
 /*
@@ -19,7 +22,10 @@ import "./globals.css";
  * échouer la CI au hasard. Sous-ensemble latin (français compris : é, ç, œ,
  * «», €), tel que Google le sert.
  *
- * Caprasimo et Figtree sont sous SIL Open Font License : redistribution
+ * Young Serif remplace Caprasimo pour les titres en mode sombre (handoff de
+ * design) : chargée elle aussi, pour que la bascule ne fasse rien clignoter.
+ *
+ * Caprasimo, Figtree et Young Serif sont sous SIL Open Font License : redistribution
  * permise, licences à côté des fichiers (app/fonts/OFL-*.txt).
  */
 const caprasimo = localFont({
@@ -34,6 +40,13 @@ const figtree = localFont({
   src: "./fonts/figtree-latin.woff2",
   weight: "400 700",
   variable: "--font-body-loaded",
+  display: "swap",
+});
+
+const youngSerif = localFont({
+  src: "./fonts/young-serif-latin.woff2",
+  weight: "400",
+  variable: "--font-heading-dark-loaded",
   display: "swap",
 });
 
@@ -67,9 +80,22 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="fr" className={`${caprasimo.variable} ${figtree.variable}`}>
+    <html
+      lang="fr"
+      className={`${caprasimo.variable} ${figtree.variable} ${youngSerif.variable}`}
+      // Le script ci-dessous pose `data-theme` avant l'hydratation.
+      suppressHydrationWarning
+    >
+      <head>
+        {/* Avant le premier rendu : sans lui, un mode sombre CHOISI
+            s'afficherait d'abord en clair. Voir `THEME_BOOT_SCRIPT`. */}
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: script constant, écrit dans le dépôt, sans aucune donnée extérieure. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body>
-        <AppShell>{children}</AppShell>
+        <AppShell household={demoEnabled() ? DEMO_HOUSEHOLD : ""}>
+          {children}
+        </AppShell>
       </body>
     </html>
   );
