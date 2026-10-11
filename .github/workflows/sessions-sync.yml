@@ -1,0 +1,37 @@
+name: Sessions sync
+
+# One sign-in for every preview (decision of 2026-09-27): the session cookie is
+# shared on `.preview.house-mate.app`, but each preview has its own database,
+# hence its own sessions. This copies them between `seed` and every preview
+# database, so a sign-in on one preview reaches the others within a quarter of
+# an hour, and every new preview (copied from `seed`) is born knowing it.
+# Preview-open runs the same copy on every push.
+#
+# ⚠️ GitHub disables a scheduled workflow after 60 days without activity on the
+# repository. Harmless here: at worst, a new preview asks to sign in again.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: sessions-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Copy sessions between previews
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup
+
+      - uses: ./.github/actions/sessions-sync
+        with:
+          api-key: ${{ secrets.NEON_API_KEY }}
+          project: ${{ vars.NEON_PROJECT_ID }}

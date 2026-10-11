@@ -32,7 +32,7 @@ export function neonAuth(): NeonAuth {
 
   auth ??= createNeonAuth({
     baseUrl: current.baseUrl,
-    cookies: { secret: current.cookieSecret },
+    cookies: { secret: current.cookieSecret, domain: current.cookieDomain },
   });
 
   return auth;

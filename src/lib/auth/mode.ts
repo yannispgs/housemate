@@ -14,6 +14,12 @@ export type AuthMode =
       /** Adresse de Neon Auth pour la branche de base de cet environnement. */
       readonly baseUrl: string;
       readonly cookieSecret: string;
+      /**
+       * Domaine des cookies de session, partagé entre sous-domaines : sur les
+       * previews, `.preview.house-mate.app`, pour qu'une connexion vaille sur
+       * toutes. Absent en prod : le cookie reste limité à son adresse.
+       */
+      readonly cookieDomain?: string;
     }
   | { readonly kind: "desactivee" };
 
@@ -54,5 +60,17 @@ export function resolveAuthMode(
     );
   }
 
-  return { kind: "active", baseUrl, cookieSecret };
+  const cookieDomain = env.NEON_AUTH_COOKIE_DOMAIN;
+
+  if (cookieDomain === undefined || cookieDomain === "") {
+    return { kind: "active", baseUrl, cookieSecret };
+  }
+
+  if (!/^\.[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(cookieDomain)) {
+    throw new Error(
+      `NEON_AUTH_COOKIE_DOMAIN invalide : « ${cookieDomain} ». Attendu : un domaine précédé d'un point, comme .preview.house-mate.app.`,
+    );
+  }
+
+  return { kind: "active", baseUrl, cookieSecret, cookieDomain };
 }

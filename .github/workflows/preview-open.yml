@@ -8,7 +8,8 @@ name: Preview — open
 #   - the link between the two: `DATABASE_URL`, `PORTIER_DATABASE_URL` and
 #     `NEON_AUTH_BASE_URL`, variables scoped to that Git branch alone;
 #   - sign-in: the branch's Neon Auth sends its webhooks to that address, and
-#     trusts it as an origin.
+#     trusts it as an origin; the sessions of the other previews are copied in
+#     (sessions-sync.yml), so one sign-in counts everywhere.
 # Every pass (opening, push, reopening) creates whichever is missing: a PR
 # opened before this workflow existed gets its full preview on its next push.
 # Removal: preview-close.yml. Keeping `seed` current: seed-update.yml.
@@ -61,6 +62,13 @@ jobs:
         with:
           branch-id: ${{ steps.branch.outputs.id }}
           reset-from: ${{ steps.branch.outputs.seed-id }}
+          api-key: ${{ secrets.NEON_API_KEY }}
+          project: ${{ vars.NEON_PROJECT_ID }}
+
+      # Before the deployment needs them: the sessions of the other previews,
+      # so a sign-in elsewhere already counts here.
+      - uses: ./.github/actions/sessions-sync
+        with:
           api-key: ${{ secrets.NEON_API_KEY }}
           project: ${{ vars.NEON_PROJECT_ID }}
 

@@ -14,6 +14,46 @@ describe("resolveAuthMode", () => {
     ).toEqual({ kind: "active", baseUrl: BASE, cookieSecret: SECRET });
   });
 
+  it("partage les cookies sur un domaine parent quand il est donné", () => {
+    expect(
+      resolveAuthMode({
+        NEON_AUTH_BASE_URL: BASE,
+        NEON_AUTH_COOKIE_SECRET: SECRET,
+        NEON_AUTH_COOKIE_DOMAIN: ".preview.house-mate.app",
+      }),
+    ).toEqual({
+      kind: "active",
+      baseUrl: BASE,
+      cookieSecret: SECRET,
+      cookieDomain: ".preview.house-mate.app",
+    });
+  });
+
+  it("ignore un domaine de cookie vide", () => {
+    expect(
+      resolveAuthMode({
+        NEON_AUTH_BASE_URL: BASE,
+        NEON_AUTH_COOKIE_SECRET: SECRET,
+        NEON_AUTH_COOKIE_DOMAIN: "",
+      }),
+    ).not.toHaveProperty("cookieDomain");
+  });
+
+  it.each([
+    "preview.house-mate.app",
+    ".",
+    ".house mate.app",
+    ".app",
+  ])("refuse le domaine de cookie « %s »", domain => {
+    expect(() =>
+      resolveAuthMode({
+        NEON_AUTH_BASE_URL: BASE,
+        NEON_AUTH_COOKIE_SECRET: SECRET,
+        NEON_AUTH_COOKIE_DOMAIN: domain,
+      }),
+    ).toThrow(/NEON_AUTH_COOKIE_DOMAIN invalide/);
+  });
+
   it("⚠️ refuse de démarrer sans réglage, plutôt que laisser passer", () => {
     expect(() => resolveAuthMode({})).toThrow(/NEON_AUTH_BASE_URL/);
   });

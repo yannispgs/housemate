@@ -1,0 +1,22 @@
+name: Sessions sync
+description: >-
+  Copies sign-in sessions between `seed` and every preview database, so that
+  one sign-in counts on every preview (scripts/sync-sessions.ts). Previews
+  project only, never prod. Safe to repeat.
+
+inputs:
+  api-key:
+    description: Neon API key.
+    required: true
+  project:
+    description: Neon project id (`housemate-previews`).
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        NEON_API_KEY: ${{ inputs.api-key }}
+        NEON_PROJECT_ID: ${{ inputs.project }}
+      run: node scripts/sync-sessions.ts

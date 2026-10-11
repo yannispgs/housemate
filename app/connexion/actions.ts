@@ -9,7 +9,7 @@ import {
   type ResultatCode,
   verifierCode,
 } from "@/lib/auth/connexion";
-import { envoyerMail, neonAuth, portierSql } from "@/lib/auth/server";
+import { authMode, envoyerMail, neonAuth, portierSql } from "@/lib/auth/server";
 import { noterAppareil } from "@/lib/auth/store";
 
 interface NeonError {
@@ -26,6 +26,12 @@ function raison(
   }
 
   return (error.status ?? 500) >= 500 ? "service" : "code";
+}
+
+function cookieDomain(): string | undefined {
+  const mode = authMode();
+
+  return mode.kind === "active" ? mode.cookieDomain : undefined;
 }
 
 /** Un champ texte du formulaire, ou une chaîne vide. */
@@ -81,6 +87,8 @@ export async function connexion(
         sameSite: "lax",
         path: "/",
         maxAge: APPAREIL_COOKIE_MAX_AGE,
+        // Comme la session : partagé entre previews, limité à son adresse en prod.
+        domain: cookieDomain(),
       });
     },
     noterAppareil: (userId, empreinte, description) =>
