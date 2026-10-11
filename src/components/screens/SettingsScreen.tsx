@@ -66,7 +66,12 @@ export interface SettingsRow {
 
 export function SettingsScreen({
   rows,
-}: Readonly<{ rows: readonly SettingsRow[] }>) {
+  signOut,
+}: Readonly<{
+  rows: readonly SettingsRow[];
+  /** Server action de déconnexion. */
+  signOut: () => Promise<void>;
+}>) {
   const { mode, systemDark, choose } = useAppearance();
   const [critical, setCritical] = useState(true);
   const current = systemDark ? "sombre" : "clair";
@@ -169,6 +174,19 @@ export function SettingsScreen({
             </button>
           ))}
         </Panel>
+
+        {/* ⚠️ Provisoire : la déconnexion n'est pas encore dessinée dans
+            Claude Design (a-dessiner.md). Ici en attendant sa maquette. */}
+        <form action={signOut}>
+          <Panel className="px-[18px] py-1.5">
+            <button
+              type="submit"
+              className="flex min-h-14 cursor-pointer items-center bg-transparent p-0 text-left text-[15px] leading-[1.3] text-ink-critical"
+            >
+              Se déconnecter
+            </button>
+          </Panel>
+        </form>
       </div>
     </Screen>
   );

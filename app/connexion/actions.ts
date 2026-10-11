@@ -110,6 +110,10 @@ export async function connexion(
 }
 
 export async function deconnexion(): Promise<void> {
-  await neonAuth().signOut();
+  // Sans authentification (e2e, développement), il n'y a rien à fermer.
+  if (authMode().kind === "active") {
+    await neonAuth().signOut();
+  }
+
   redirect("/connexion");
 }

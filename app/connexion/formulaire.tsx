@@ -6,8 +6,9 @@ import { connexion } from "./actions";
 
 const CHAMP =
   "min-h-11 w-full rounded-md border border-border bg-surface px-3 text-base text-ink";
+// Le bouton principal de la refonte (DeadlineCard) : pilule, texte blanc.
 const BOUTON =
-  "min-h-11 w-full rounded-md bg-brand px-4 text-base font-semibold text-brand-ink disabled:opacity-60";
+  "min-h-11 w-full cursor-pointer rounded-full bg-brand-strong px-5 text-[15px] font-semibold text-white hover:brightness-[1.08] active:brightness-[.92] disabled:opacity-60";
 
 /** Les deux étapes de la connexion : l'adresse, puis le code reçu. */
 export function FormulaireConnexion() {
