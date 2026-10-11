@@ -65,6 +65,15 @@ jobs:
           api-key: ${{ secrets.NEON_API_KEY }}
           project: ${{ vars.NEON_PROJECT_ID }}
 
+      # Accounts for allow-listed addresses added since `seed` was copied.
+      - uses: ./.github/actions/provision-accounts
+        with:
+          api-key: ${{ secrets.NEON_API_KEY }}
+          project: ${{ vars.NEON_PROJECT_ID }}
+          branch-id: ${{ steps.branch.outputs.id }}
+          database: housemate-previews
+          role: housemate-previews_owner
+
       # Before the deployment needs them: the sessions of the other previews,
       # so a sign-in elsewhere already counts here.
       - uses: ./.github/actions/sessions-sync

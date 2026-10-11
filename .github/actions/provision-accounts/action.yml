@@ -1,0 +1,35 @@
+name: Provision accounts
+description: >-
+  Creates the Neon Auth account of every allow-listed address that has none,
+  and links it to its household (scripts/provision-accounts.ts). Neon Auth
+  sends no sign-in code to an address without an account, so the first
+  sign-in cannot create it. Safe to repeat.
+
+inputs:
+  api-key:
+    description: Neon API key.
+    required: true
+  project:
+    description: Neon project id.
+    required: true
+  branch-id:
+    description: The Neon branch to provision.
+    required: true
+  database:
+    description: Database name.
+    required: true
+  role:
+    description: Owner role of the database.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        NEON_API_KEY: ${{ inputs.api-key }}
+        NEON_PROJECT_ID: ${{ inputs.project }}
+        NEON_BRANCH_ID: ${{ inputs.branch-id }}
+        DATABASE_NAME: ${{ inputs.database }}
+        DATABASE_ROLE: ${{ inputs.role }}
+      run: node scripts/provision-accounts.ts
