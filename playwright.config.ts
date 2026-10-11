@@ -43,6 +43,9 @@ export default defineConfig({
   ],
   webServer: {
     command: `yarn build && yarn start --port ${PORT}`,
+    // Les parcours testent les écrans, pas la connexion : celle-ci dépend de
+    // Neon Auth, absent ici. Désactivation refusée sur Vercel (src/lib/auth/mode.ts).
+    env: { HOUSEMATE_AUTH: "desactivee" },
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

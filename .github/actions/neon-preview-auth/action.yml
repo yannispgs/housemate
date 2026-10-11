@@ -1,0 +1,57 @@
+name: Neon preview auth
+description: >-
+  Points a preview branch's Neon Auth at its own preview: the webhooks (allow
+  list, code delivery, linking a new account to its household) go to
+  pr-<n>'s `/api/neon-auth`, and pr-<n> becomes a trusted origin. A branch
+  copied from `seed` inherits `seed`'s settings, which point nowhere useful.
+  Every call is safe to repeat.
+
+inputs:
+  api-key:
+    description: Neon API key.
+    required: true
+  project:
+    description: Neon project id (`housemate-previews`).
+    required: true
+  branch-id:
+    description: The PR's Neon branch.
+    required: true
+  origin:
+    description: The preview's address, e.g. `https://pr-14.preview.house-mate.app`.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        NEON_KEY: ${{ inputs.api-key }}
+        PROJECT: ${{ inputs.project }}
+        BRANCH: ${{ inputs.branch-id }}
+        ORIGIN: ${{ inputs.origin }}
+      run: |
+        set -euo pipefail
+        auth="Authorization: Bearer ${NEON_KEY}"
+        api="https://console.neon.tech/api/v2/projects/${PROJECT}/branches/${BRANCH}/auth"
+
+        # ⚠️ Fail closed: if this preview's route cannot answer, Neon Auth
+        # refuses every sign-up and sends no code. Nothing gets in by default.
+        curl -sSf -o /dev/null -X PUT "${api}/webhooks" \
+          -H "$auth" -H "Content-Type: application/json" \
+          -d "$(jq -n --arg u "${ORIGIN}/api/neon-auth" '{
+            enabled: true,
+            webhook_url: $u,
+            enabled_events: ["user.before_create", "user.created", "send.otp"],
+            timeout_seconds: 5
+          }')"
+        echo "Webhooks → ${ORIGIN}/api/neon-auth"
+
+        if curl -sSf -H "$auth" "${api}/domains" \
+          | jq -e --arg o "$ORIGIN" '.domains[] | select(.domain == $o)' >/dev/null; then
+          echo "${ORIGIN} already trusted"
+        else
+          curl -sSf -o /dev/null -X POST "${api}/domains" \
+            -H "$auth" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg o "$ORIGIN" '{domain: $o, auth_provider: "better_auth"}')"
+          echo "${ORIGIN} trusted"
+        fi
