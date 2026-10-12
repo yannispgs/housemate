@@ -157,6 +157,8 @@ export interface FrostScale {
   readonly estimate: number;
   readonly lowerBound: number;
   readonly upperBound: number;
+  /** Deux degrés au-dessus du seuil de dégâts : le vert commence là. */
+  readonly safe: number;
 }
 
 /**
@@ -177,5 +179,31 @@ export function frostScale(range: FrostRange): FrostScale {
     estimate: at(range.estimate),
     lowerBound: at(range.estimate - range.margin),
     upperBound: at(range.estimate + range.margin),
+    safe: at(range.damageThreshold + SAFE_MARGIN),
   };
+}
+
+/** L'écart au-dessus du seuil de dégâts à partir duquel la plante est sauve. */
+export const SAFE_MARGIN = 2;
+
+/**
+ * Le fond de la frise, par zones (demande du foyer, 2026-10-12) : rouge sous
+ * le seuil de mort, orange jusqu'au seuil de dégâts, puis jaune vers vert
+ * jusqu'à deux degrés au-dessus, vert au-delà. Les changements tombent net
+ * sur les seuils ; seule la zone de sécurité se fond, parce que la marge y
+ * est progressive.
+ */
+export function frostGradient(scale: FrostScale): string {
+  const pct = (value: number) => `${value.toFixed(1)}%`;
+
+  return [
+    "linear-gradient(90deg",
+    `var(--ink-critical) 0%`,
+    `var(--ink-critical) ${pct(scale.death)}`,
+    `var(--ink-serious) ${pct(scale.death)}`,
+    `var(--ink-serious) ${pct(scale.damage)}`,
+    `var(--ink-warning) ${pct(scale.damage)}`,
+    `var(--ink-good) ${pct(scale.safe)}`,
+    "var(--ink-good) 100%)",
+  ].join(", ");
 }
