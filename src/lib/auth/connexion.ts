@@ -28,6 +28,8 @@ export type EtatConnexion =
       readonly erreur?: string;
       /** Une information, pas une erreur : « un nouveau code vient d'être envoyé ». */
       readonly info?: string;
+      /** Un code vient de partir : le délai avant de pouvoir le renvoyer repart. */
+      readonly codeEnvoye?: true;
     }
   | { readonly etape: "connecte" };
 
@@ -79,7 +81,7 @@ export async function demanderCode(
     return { etape: "adresse", erreur: MESSAGES_DEMANDE[resultat.raison] };
   }
 
-  return { etape: "code", email };
+  return { etape: "code", email, codeEnvoye: true };
 }
 
 const MESSAGES_DEMANDE = {
@@ -106,6 +108,7 @@ export async function renvoyerCode(
     etape: "code",
     email,
     info: "Un nouveau code vient d'être envoyé. Seul ce dernier est valable.",
+    codeEnvoye: true,
   };
 }
 

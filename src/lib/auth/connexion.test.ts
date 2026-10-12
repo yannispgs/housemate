@@ -44,6 +44,7 @@ describe("demanderCode", () => {
     expect(await demanderCode("  Parent@Exemple.fr ", d)).toEqual({
       etape: "code",
       email: "parent@exemple.fr",
+      codeEnvoye: true,
     });
     expect(d.demanderCode).toHaveBeenCalledWith("parent@exemple.fr");
   });
@@ -89,6 +90,7 @@ describe("renvoyerCode", () => {
       etape: "code",
       email: "parent@exemple.fr",
       info: expect.stringMatching(/Seul ce dernier est valable/),
+      codeEnvoye: true,
     });
     expect(d.demanderCode).toHaveBeenCalledWith("parent@exemple.fr");
   });

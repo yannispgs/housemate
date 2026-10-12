@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
-import { ETAT_INITIAL } from "@/lib/auth/connexion";
+import { useActionState, useEffect, useState } from "react";
+import { ETAT_INITIAL, type EtatConnexion } from "@/lib/auth/connexion";
+import { libelleRenvoi, secondesAvantRenvoi } from "@/lib/auth/renvoi";
 import { connexion } from "./actions";
 
 // Le champ en pilule de la refonte (DeadlineCard), mais en 16 px : en dessous,
@@ -18,9 +19,44 @@ const LIBELLE =
 const BOUTON =
   "min-h-11 w-full cursor-pointer rounded-full bg-brand-strong px-5 text-[15px] font-semibold text-white hover:brightness-[1.08] active:brightness-[.92] disabled:opacity-60";
 
+/**
+ * Les secondes avant de pouvoir renvoyer un code : le décompte repart à
+ * chaque envoi réussi, mesuré à l'heure de CE navigateur (pas de décalage
+ * d'horloge avec le serveur).
+ */
+function useDelaiRenvoi(etat: EtatConnexion): number {
+  const [envoyeA, setEnvoyeA] = useState<number | null>(null);
+  const [maintenant, setMaintenant] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (etat.etape === "code" && etat.codeEnvoye === true) {
+      const now = Date.now();
+      setEnvoyeA(now);
+      setMaintenant(now);
+    }
+  }, [etat]);
+
+  const secondes = secondesAvantRenvoi(envoyeA, maintenant);
+  const enAttente = secondes > 0;
+
+  // Un seul minuteur par décompte, arrêté à zéro.
+  useEffect(() => {
+    if (!enAttente) {
+      return;
+    }
+
+    const tic = setInterval(() => setMaintenant(Date.now()), 1000);
+
+    return () => clearInterval(tic);
+  }, [enAttente]);
+
+  return secondes;
+}
+
 /** Les deux étapes de la connexion : l'adresse, puis le code reçu. */
 export function FormulaireConnexion() {
   const [etat, agir, enCours] = useActionState(connexion, ETAT_INITIAL);
+  const avantRenvoi = useDelaiRenvoi(etat);
   const erreur = etat.etape === "connecte" ? undefined : etat.erreur;
 
   return (
@@ -84,9 +120,9 @@ export function FormulaireConnexion() {
             value="renvoyer"
             formNoValidate
             className={BOUTON_SECONDAIRE}
-            disabled={enCours}
+            disabled={enCours || avantRenvoi > 0}
           >
-            Renvoyer le code
+            {libelleRenvoi(avantRenvoi)}
           </button>
           <a
             href="/connexion"
