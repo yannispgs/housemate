@@ -23,7 +23,7 @@ export default async function Page() {
       <main className="mx-auto flex min-h-full w-full max-w-[460px] flex-col gap-[26px] px-[18px] pt-[max(env(safe-area-inset-top),28px)] pb-10 md:justify-center">
         {/* La marque, comme dans la coquille de l'app. */}
         <span className="inline-flex flex-none flex-col gap-[5px] self-start px-1">
-          <span className="font-display text-[13px] text-ink">Housemate</span>
+          <span className="font-display text-[13px] text-ink">HouseMate</span>
           <span className="h-0.5 rounded-sm bg-brand" />
         </span>
 
