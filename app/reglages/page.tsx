@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { SettingsScreen } from "@/components/screens/SettingsScreen";
 import { demoEnabled } from "@/demo/mode";
+import { deconnexion } from "../connexion/actions";
 
 export const metadata: Metadata = { title: "Réglages" };
 
@@ -9,6 +10,7 @@ export default function Page() {
 
   return (
     <SettingsScreen
+      signOut={deconnexion}
       rows={[
         { title: "Récap hebdomadaire", value: "Dimanche · 18:00" },
         { title: "Membres du foyer", value: demo ? "Moi, Parents" : "" },

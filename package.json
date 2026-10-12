@@ -28,6 +28,7 @@
     "collecteur:deploy": "wrangler deploy --config workers/collecteur/wrangler.jsonc"
   },
   "dependencies": {
+    "@neondatabase/auth": "0.5.0-beta",
     "@neondatabase/serverless": "^1.1.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.107.0",

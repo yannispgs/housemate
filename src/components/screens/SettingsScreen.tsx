@@ -59,6 +59,56 @@ function useAppearance() {
   return { mode, systemDark, choose };
 }
 
+/**
+ * Se déconnecter, après confirmation : un appui par erreur obligerait à
+ * redemander un code par e-mail.
+ */
+function SignOutPanel({ signOut }: Readonly<{ signOut: () => Promise<void> }>) {
+  const [confirming, setConfirming] = useState(false);
+
+  if (!confirming) {
+    return (
+      <Panel className="px-[18px] py-1.5">
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          className="flex min-h-14 cursor-pointer items-center bg-transparent p-0 text-left text-[15px] leading-[1.3] text-ink-critical"
+        >
+          Se déconnecter
+        </button>
+      </Panel>
+    );
+  }
+
+  return (
+    <form action={signOut}>
+      <Panel className="gap-3 p-[18px]">
+        <span className="text-[15px] leading-[1.3] text-ink">
+          Se déconnecter de cet appareil ?
+        </span>
+        <span className="text-[12.5px] leading-normal text-ink-secondary">
+          Pour revenir, il faudra un nouveau code reçu par e-mail.
+        </span>
+        <div className="flex gap-2.5">
+          <button
+            type="button"
+            onClick={() => setConfirming(false)}
+            className="min-h-11 flex-1 cursor-pointer rounded-full border border-border bg-transparent px-4 text-[15px] font-semibold text-ink"
+          >
+            Annuler
+          </button>
+          <button
+            type="submit"
+            className="min-h-11 flex-1 cursor-pointer rounded-full border border-transparent bg-ink-critical px-4 text-[15px] font-semibold text-white"
+          >
+            Se déconnecter
+          </button>
+        </div>
+      </Panel>
+    </form>
+  );
+}
+
 export interface SettingsRow {
   readonly title: string;
   readonly value: string;
@@ -66,7 +116,12 @@ export interface SettingsRow {
 
 export function SettingsScreen({
   rows,
-}: Readonly<{ rows: readonly SettingsRow[] }>) {
+  signOut,
+}: Readonly<{
+  rows: readonly SettingsRow[];
+  /** Server action de déconnexion. */
+  signOut: () => Promise<void>;
+}>) {
   const { mode, systemDark, choose } = useAppearance();
   const [critical, setCritical] = useState(true);
   const current = systemDark ? "sombre" : "clair";
@@ -169,6 +224,10 @@ export function SettingsScreen({
             </button>
           ))}
         </Panel>
+
+        {/* ⚠️ Provisoire : la déconnexion n'est pas encore dessinée dans
+            Claude Design (a-dessiner.md). Ici en attendant sa maquette. */}
+        <SignOutPanel signOut={signOut} />
       </div>
     </Screen>
   );

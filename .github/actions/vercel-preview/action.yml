@@ -1,9 +1,9 @@
 name: Vercel preview
 description: >-
-  `attach`: gives a PR's Git branch its database (a `DATABASE_URL` variable
+  `attach`: gives a PR's Git branch its database and its Neon Auth (variables
   scoped to that branch alone) and its address (pr-<n> on the preview domain),
-  creating whichever is missing, then rebuilds the preview if the variable is
-  new. `detach`: removes both. Every call is safe to repeat.
+  creating whichever is missing, then rebuilds the preview if a variable is
+  new. `detach`: removes them all. Every call is safe to repeat.
 
 inputs:
   operation:
@@ -28,7 +28,7 @@ inputs:
     description: Parent domain of the previews, e.g. `preview.house-mate.app`.
     required: true
   neon-api-key:
-    description: Neon API key (attach only), to read the pooled connection.
+    description: Neon API key (attach only), to read the pooled connection and the branch's Neon Auth address.
     required: false
     default: ""
   neon-project:
@@ -51,7 +51,12 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Variable DATABASE_URL for this branch only
+    - name: Variables for this branch only
+      # DATABASE_URL: the app's database. PORTIER_DATABASE_URL: what the
+      # authentication reads and writes before anyone is signed in (migration
+      # 0006) — the owner here, as for DATABASE_URL: a preview database holds
+      # nothing but `seed`. NEON_AUTH_BASE_URL: the branch's own Neon Auth,
+      # since each branch has its own address.
       id: env
       if: inputs.operation == 'attach'
       shell: bash
@@ -66,31 +71,42 @@ runs:
       run: |
         set -euo pipefail
         auth="Authorization: Bearer ${VERCEL_TOKEN}"
+        neon="https://console.neon.tech/api/v2/projects/${NEON_PROJECT}"
         existing=$(curl -sSf -H "$auth" \
           "https://api.vercel.com/v10/projects/${PROJECT}/env?gitBranch=${GIT_BRANCH}&teamId=${TEAM}" \
-          | jq -r --arg b "$GIT_BRANCH" '[.envs[] | select(.key == "DATABASE_URL" and .gitBranch == $b)] | length')
+          | jq -r --arg b "$GIT_BRANCH" '[.envs[] | select(.gitBranch == $b) | .key] | join(" ")')
+        created=false
 
-        if [ "$existing" != 0 ]; then
-          echo "DATABASE_URL already set for ${GIT_BRANCH}"
-          echo "created=false" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
+        # Sets KEY for this Git branch, unless it already is.
+        set_var() {
+          local key=$1 value=$2
+          case " ${existing} " in
+            *" ${key} "*) echo "${key} already set for ${GIT_BRANCH}"; return ;;
+          esac
+          curl -sSf -o /dev/null -X POST \
+            "https://api.vercel.com/v10/projects/${PROJECT}/env?upsert=true&teamId=${TEAM}" \
+            -H "$auth" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg k "$key" --arg v "$value" --arg b "$GIT_BRANCH" '{
+              key: $k, value: $v, type: "sensitive",
+              target: ["preview"], gitBranch: $b
+            }')"
+          echo "${key} set for ${GIT_BRANCH}"
+          created=true
+        }
 
         # The app queries through the pool; only migrations need the direct
         # connection.
         uri=$(curl -sSf -H "Authorization: Bearer ${NEON_KEY}" \
-          "https://console.neon.tech/api/v2/projects/${NEON_PROJECT}/connection_uri?branch_id=${NEON_BRANCH}&database_name=housemate-previews&role_name=housemate-previews_owner&pooled=true" \
+          "${neon}/connection_uri?branch_id=${NEON_BRANCH}&database_name=housemate-previews&role_name=housemate-previews_owner&pooled=true" \
           | jq -r .uri)
         echo "::add-mask::${uri}"
-        curl -sSf -o /dev/null -X POST \
-          "https://api.vercel.com/v10/projects/${PROJECT}/env?upsert=true&teamId=${TEAM}" \
-          -H "$auth" -H "Content-Type: application/json" \
-          -d "$(jq -n --arg v "$uri" --arg b "$GIT_BRANCH" '{
-            key: "DATABASE_URL", value: $v, type: "sensitive",
-            target: ["preview"], gitBranch: $b
-          }')"
-        echo "DATABASE_URL set for ${GIT_BRANCH}"
-        echo "created=true" >> "$GITHUB_OUTPUT"
+        auth_url=$(curl -sSf -H "Authorization: Bearer ${NEON_KEY}" \
+          "${neon}/branches/${NEON_BRANCH}/auth" | jq -r .base_url)
+
+        set_var DATABASE_URL "$uri"
+        set_var PORTIER_DATABASE_URL "$uri"
+        set_var NEON_AUTH_BASE_URL "$auth_url"
+        echo "created=${created}" >> "$GITHUB_OUTPUT"
 
     - name: Address pr-<n> on the preview domain
       if: inputs.operation == 'attach'
@@ -137,10 +153,10 @@ runs:
 
         echo "Preview: https://${DOMAIN}" >> "$GITHUB_STEP_SUMMARY"
 
-    - name: Rebuild, now that the variable exists
+    - name: Rebuild, now that the variables exist
       # Vercel fixes a deployment's variables when it builds: the build it
       # started on this push predates a variable created just now. Once the
-      # variable exists, every later push builds with it.
+      # variables exist, every later push builds with them.
       if: inputs.operation == 'attach' && steps.env.outputs.created == 'true'
       shell: bash
       env:

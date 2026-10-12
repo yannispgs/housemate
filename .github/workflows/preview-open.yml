@@ -5,8 +5,11 @@ name: Preview — open
 #     PR's migrations applied;
 #   - an address: https://pr-<n>.preview.house-mate.app, a Vercel domain linked
 #     to the PR's Git branch, so Vercel serves every push there by itself;
-#   - the link between the two: a `DATABASE_URL` variable scoped to that Git
-#     branch alone.
+#   - the link between the two: `DATABASE_URL`, `PORTIER_DATABASE_URL` and
+#     `NEON_AUTH_BASE_URL`, variables scoped to that Git branch alone;
+#   - sign-in: the branch's Neon Auth sends its webhooks to that address, and
+#     trusts it as an origin; the sessions of the other previews are copied in
+#     (sessions-sync.yml), so one sign-in counts everywhere.
 # Every pass (opening, push, reopening) creates whichever is missing: a PR
 # opened before this workflow existed gets its full preview on its next push.
 # Removal: preview-close.yml. Keeping `seed` current: seed-update.yml.
@@ -61,6 +64,29 @@ jobs:
           reset-from: ${{ steps.branch.outputs.seed-id }}
           api-key: ${{ secrets.NEON_API_KEY }}
           project: ${{ vars.NEON_PROJECT_ID }}
+
+      # Accounts for allow-listed addresses added since `seed` was copied.
+      - uses: ./.github/actions/provision-accounts
+        with:
+          api-key: ${{ secrets.NEON_API_KEY }}
+          project: ${{ vars.NEON_PROJECT_ID }}
+          branch-id: ${{ steps.branch.outputs.id }}
+          database: housemate-previews
+          role: housemate-previews_owner
+
+      # Before the deployment needs them: the sessions of the other previews,
+      # so a sign-in elsewhere already counts here.
+      - uses: ./.github/actions/sessions-sync
+        with:
+          api-key: ${{ secrets.NEON_API_KEY }}
+          project: ${{ vars.NEON_PROJECT_ID }}
+
+      - uses: ./.github/actions/neon-preview-auth
+        with:
+          api-key: ${{ secrets.NEON_API_KEY }}
+          project: ${{ vars.NEON_PROJECT_ID }}
+          branch-id: ${{ steps.branch.outputs.id }}
+          origin: https://pr-${{ github.event.pull_request.number }}.${{ vars.PREVIEW_BASE_DOMAIN }}
 
       - uses: ./.github/actions/vercel-preview
         with:

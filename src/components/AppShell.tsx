@@ -34,7 +34,7 @@ import {
 function Brand() {
   return (
     <span className="inline-flex flex-none flex-col gap-[5px]">
-      <span className="font-display text-[13px] text-ink">Housemate</span>
+      <span className="font-display text-[13px] text-ink">HouseMate</span>
       <span className="h-0.5 rounded-sm bg-brand" />
     </span>
   );

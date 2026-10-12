@@ -1,0 +1,134 @@
+"use server";
+
+import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { APPAREIL_COOKIE, APPAREIL_COOKIE_MAX_AGE } from "@/lib/auth/appareils";
+import {
+  demanderCode,
+  type EtatConnexion,
+  type ResultatCode,
+  type ResultatDemande,
+  renvoyerCode,
+  verifierCode,
+} from "@/lib/auth/connexion";
+import { authMode, envoyerMail, neonAuth, portierSql } from "@/lib/auth/server";
+import { noterAppareil } from "@/lib/auth/store";
+
+interface NeonError {
+  readonly status?: number;
+  readonly code?: string;
+}
+
+/** Traduit un refus de Neon Auth en raison lisible par le parcours. */
+function raison(
+  error: NeonError,
+): Exclude<ResultatCode, { ok: true }>["raison"] {
+  if (error.status === 429 || error.code === "TOO_MANY_ATTEMPTS") {
+    return "tentatives";
+  }
+
+  return (error.status ?? 500) >= 500 ? "service" : "code";
+}
+
+function cookieDomain(): string | undefined {
+  const mode = authMode();
+
+  return mode.kind === "active" ? mode.cookieDomain : undefined;
+}
+
+/** Un champ texte du formulaire, ou une chaîne vide. */
+function champ(formulaire: FormData, nom: string): string {
+  const valeur = formulaire.get(nom);
+
+  return typeof valeur === "string" ? valeur : "";
+}
+
+/**
+ * Une seule action pour les deux étapes : l'étape en cours voyage dans le
+ * formulaire, l'adresse aussi une fois le code demandé.
+ */
+export async function connexion(
+  _precedent: EtatConnexion,
+  formulaire: FormData,
+): Promise<EtatConnexion> {
+  const auth = neonAuth();
+  const email = champ(formulaire, "email");
+
+  const envoi = {
+    demanderCode: async (adresse: string): Promise<ResultatDemande> => {
+      const { error } = await auth.emailOtp.sendVerificationOtp({
+        email: adresse,
+        type: "sign-in",
+      });
+
+      if (error === null || error === undefined) {
+        return { ok: true };
+      }
+
+      return {
+        ok: false,
+        raison: (error as NeonError).status === 429 ? "tentatives" : "service",
+      };
+    },
+  };
+
+  if (formulaire.get("etape") !== "code") {
+    return demanderCode(email, envoi);
+  }
+
+  if (champ(formulaire, "intention") === "renvoyer") {
+    return renvoyerCode(email, envoi);
+  }
+
+  const enTetes = await headers();
+  const jar = await cookies();
+  const etat = await verifierCode(email, champ(formulaire, "code"), {
+    verifierCode: async (adresse, otp) => {
+      const { data, error } = await auth.signIn.emailOtp({
+        email: adresse,
+        otp,
+      });
+      const userId = (data as { user?: { id?: string } } | null)?.user?.id;
+
+      return error || userId === undefined
+        ? { ok: false, raison: raison((error ?? {}) as NeonError) }
+        : { ok: true, userId };
+    },
+    lireAppareil: () => jar.get(APPAREIL_COOKIE)?.value,
+    poserAppareil: identifiant => {
+      jar.set(APPAREIL_COOKIE, identifiant, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: APPAREIL_COOKIE_MAX_AGE,
+        // Comme la session : partagé entre previews, limité à son adresse en prod.
+        domain: cookieDomain(),
+      });
+    },
+    noterAppareil: (userId, empreinte, description) =>
+      noterAppareil(portierSql(), userId, empreinte, description),
+    avertir: (adresse, message) => envoyerMail()(adresse, message),
+    signaler: erreur => {
+      console.error("[connexion] vérification d'appareil en échec", erreur);
+    },
+    userAgent: enTetes.get("user-agent"),
+    site: `https://${enTetes.get("host") ?? "house-mate.app"}`,
+    maintenant: new Date(),
+  });
+
+  if (etat.etape === "connecte") {
+    redirect("/");
+  }
+
+  return etat;
+}
+
+export async function deconnexion(): Promise<void> {
+  // Sans authentification (e2e, développement), il n'y a rien à fermer.
+  if (authMode().kind === "active") {
+    await neonAuth().signOut();
+  }
+
+  redirect("/connexion");
+}
