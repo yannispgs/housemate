@@ -155,8 +155,10 @@ function FrostRangePanel({ range }: Readonly<{ range: FrostRange }>) {
                 "linear-gradient(90deg,#2a78d6 0%,#7fa3c9 55%,#a19786 100%)",
             }}
           />
+          {/* Trait plein pour les seuils de la plante (connus), pointillés
+              pour la prévision (estimée) : demande du foyer, 2026-10-12. */}
           <div
-            className="absolute top-px h-5 rounded-[5px] border-l-[3px] border-ink"
+            className="absolute top-px h-5 rounded-[5px]"
             style={{
               left: `${scale.lowerBound}%`,
               width: `${scale.upperBound - scale.lowerBound}%`,
@@ -164,8 +166,14 @@ function FrostRangePanel({ range }: Readonly<{ range: FrostRange }>) {
                 "color-mix(in srgb, var(--color-text) 12%, transparent)",
             }}
           />
+          {/* La borne basse, plus épaisse que l'estimation : c'est elle qui
+              décide. */}
           <div
-            className="absolute top-0 h-[22px] w-0.5 rounded-sm bg-ink"
+            className="absolute top-0 h-[22px] w-0 -translate-x-px border-l-[3px] border-dashed border-ink"
+            style={{ left: `${scale.lowerBound}%` }}
+          />
+          <div
+            className="absolute top-0 h-[22px] w-0 border-l-2 border-dashed border-ink"
             style={{ left: `${scale.estimate}%` }}
           />
           <div
@@ -173,7 +181,7 @@ function FrostRangePanel({ range }: Readonly<{ range: FrostRange }>) {
             style={{ left: `${scale.death}%` }}
           />
           <div
-            className="absolute top-0 h-[22px] w-0 border-l-2 border-dashed border-ink-serious"
+            className="absolute top-0 h-[22px] w-0.5 rounded-sm bg-ink-serious"
             style={{ left: `${scale.damage}%` }}
           />
         </div>
