@@ -14,6 +14,11 @@ name: Preview — open
 # opened before this workflow existed gets its full preview on its next push.
 # Removal: preview-close.yml. Keeping `seed` current: seed-update.yml.
 #
+# Every API call (Vercel, Neon) retries up to 4 times, 3 s apart, on
+# transient errors (429, 5xx, network): rebasing several PRs at once runs
+# their previews together, and Vercel answered 429 on 2026-10-12, leaving two
+# previews without their sign-in settings. Every call here is safe to repeat.
+#
 # Why not the Neon <-> Vercel integration: it creates a Neon branch for every
 # branch Vercel builds, PR or not, within a free quota of ten.
 

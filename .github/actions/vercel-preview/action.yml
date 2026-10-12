@@ -72,7 +72,7 @@ runs:
         set -euo pipefail
         auth="Authorization: Bearer ${VERCEL_TOKEN}"
         neon="https://console.neon.tech/api/v2/projects/${NEON_PROJECT}"
-        existing=$(curl -sSf -H "$auth" \
+        existing=$(curl --retry 4 --retry-delay 3 -sSf -H "$auth" \
           "https://api.vercel.com/v10/projects/${PROJECT}/env?gitBranch=${GIT_BRANCH}&teamId=${TEAM}" \
           | jq -r --arg b "$GIT_BRANCH" '[.envs[] | select(.gitBranch == $b) | .key] | join(" ")')
         created=false
@@ -83,7 +83,7 @@ runs:
           case " ${existing} " in
             *" ${key} "*) echo "${key} already set for ${GIT_BRANCH}"; return ;;
           esac
-          curl -sSf -o /dev/null -X POST \
+          curl --retry 4 --retry-delay 3 -sSf -o /dev/null -X POST \
             "https://api.vercel.com/v10/projects/${PROJECT}/env?upsert=true&teamId=${TEAM}" \
             -H "$auth" -H "Content-Type: application/json" \
             -d "$(jq -n --arg k "$key" --arg v "$value" --arg b "$GIT_BRANCH" '{
@@ -96,11 +96,11 @@ runs:
 
         # The app queries through the pool; only migrations need the direct
         # connection.
-        uri=$(curl -sSf -H "Authorization: Bearer ${NEON_KEY}" \
+        uri=$(curl --retry 4 --retry-delay 3 -sSf -H "Authorization: Bearer ${NEON_KEY}" \
           "${neon}/connection_uri?branch_id=${NEON_BRANCH}&database_name=housemate-previews&role_name=housemate-previews_owner&pooled=true" \
           | jq -r .uri)
         echo "::add-mask::${uri}"
-        auth_url=$(curl -sSf -H "Authorization: Bearer ${NEON_KEY}" \
+        auth_url=$(curl --retry 4 --retry-delay 3 -sSf -H "Authorization: Bearer ${NEON_KEY}" \
           "${neon}/branches/${NEON_BRANCH}/auth" | jq -r .base_url)
 
         set_var DATABASE_URL "$uri"
@@ -121,7 +121,7 @@ runs:
         set -euo pipefail
         auth="Authorization: Bearer ${VERCEL_TOKEN}"
         base="https://api.vercel.com"
-        code=$(curl -sS -o /tmp/domain.json -w '%{http_code}' -H "$auth" \
+        code=$(curl --retry 4 --retry-delay 3 -sS -o /tmp/domain.json -w '%{http_code}' -H "$auth" \
           "${base}/v9/projects/${PROJECT}/domains/${DOMAIN}?teamId=${TEAM}")
 
         case "$code" in
@@ -130,7 +130,7 @@ runs:
               echo "${DOMAIN} already serves ${GIT_BRANCH}"
             else
               # Pointing elsewhere (a reopened PR, a renamed branch): re-point.
-              curl -sSf -o /dev/null -X PATCH \
+              curl --retry 4 --retry-delay 3 -sSf -o /dev/null -X PATCH \
                 "${base}/v9/projects/${PROJECT}/domains/${DOMAIN}?teamId=${TEAM}" \
                 -H "$auth" -H "Content-Type: application/json" \
                 -d "$(jq -n --arg b "$GIT_BRANCH" '{gitBranch: $b}')"
@@ -138,7 +138,7 @@ runs:
             fi
             ;;
           404)
-            curl -sSf -o /dev/null -X POST \
+            curl --retry 4 --retry-delay 3 -sSf -o /dev/null -X POST \
               "${base}/v10/projects/${PROJECT}/domains?teamId=${TEAM}" \
               -H "$auth" -H "Content-Type: application/json" \
               -d "$(jq -n --arg n "$DOMAIN" --arg b "$GIT_BRANCH" '{name: $n, gitBranch: $b}')"
@@ -168,7 +168,7 @@ runs:
         HEAD_SHA: ${{ inputs.head-sha }}
       run: |
         set -euo pipefail
-        url=$(curl -sSf -X POST "https://api.vercel.com/v13/deployments?teamId=${TEAM}" \
+        url=$(curl --retry 4 --retry-delay 3 -sSf -X POST "https://api.vercel.com/v13/deployments?teamId=${TEAM}" \
           -H "Authorization: Bearer ${VERCEL_TOKEN}" -H "Content-Type: application/json" \
           -d "$(jq -n --arg p "$PROJECT" --arg r "$REPO_ID" --arg b "$GIT_BRANCH" --arg s "$HEAD_SHA" '{
             name: "housemate", project: $p,
@@ -187,7 +187,7 @@ runs:
       run: |
         set -euo pipefail
         # Already gone (404) is the desired state.
-        code=$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE \
+        code=$(curl --retry 4 --retry-delay 3 -sS -o /dev/null -w '%{http_code}' -X DELETE \
           "https://api.vercel.com/v9/projects/${PROJECT}/domains/${DOMAIN}?teamId=${TEAM}" \
           -H "Authorization: Bearer ${VERCEL_TOKEN}")
         echo "${DOMAIN}: HTTP ${code}"
@@ -203,12 +203,12 @@ runs:
       run: |
         set -euo pipefail
         auth="Authorization: Bearer ${VERCEL_TOKEN}"
-        ids=$(curl -sSf -H "$auth" \
+        ids=$(curl --retry 4 --retry-delay 3 -sSf -H "$auth" \
           "https://api.vercel.com/v10/projects/${PROJECT}/env?gitBranch=${GIT_BRANCH}&teamId=${TEAM}" \
           | jq -r --arg b "$GIT_BRANCH" '.envs[] | select(.gitBranch == $b) | .id')
 
         for id in $ids; do
-          curl -sSf -o /dev/null -X DELETE -H "$auth" \
+          curl --retry 4 --retry-delay 3 -sSf -o /dev/null -X DELETE -H "$auth" \
             "https://api.vercel.com/v9/projects/${PROJECT}/env/${id}?teamId=${TEAM}"
           echo "Removed variable ${id}"
         done
