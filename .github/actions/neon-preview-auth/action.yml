@@ -36,7 +36,7 @@ runs:
 
         # ⚠️ Fail closed: if this preview's route cannot answer, Neon Auth
         # refuses every sign-up and sends no code. Nothing gets in by default.
-        curl -sSf -o /dev/null -X PUT "${api}/webhooks" \
+        curl --retry 4 --retry-delay 3 -sSf -o /dev/null -X PUT "${api}/webhooks" \
           -H "$auth" -H "Content-Type: application/json" \
           -d "$(jq -n --arg u "${ORIGIN}/api/neon-auth" '{
             enabled: true,
@@ -46,11 +46,11 @@ runs:
           }')"
         echo "Webhooks → ${ORIGIN}/api/neon-auth"
 
-        if curl -sSf -H "$auth" "${api}/domains" \
+        if curl --retry 4 --retry-delay 3 -sSf -H "$auth" "${api}/domains" \
           | jq -e --arg o "$ORIGIN" '.domains[] | select(.domain == $o)' >/dev/null; then
           echo "${ORIGIN} already trusted"
         else
-          curl -sSf -o /dev/null -X POST "${api}/domains" \
+          curl --retry 4 --retry-delay 3 -sSf -o /dev/null -X POST "${api}/domains" \
             -H "$auth" -H "Content-Type: application/json" \
             -d "$(jq -n --arg o "$ORIGIN" '{domain: $o, auth_provider: "better_auth"}')"
           echo "${ORIGIN} trusted"

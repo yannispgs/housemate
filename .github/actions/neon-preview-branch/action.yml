@@ -49,7 +49,7 @@ runs:
         esac
 
         api="https://console.neon.tech/api/v2/projects/${PROJECT}"
-        neon() { curl -sSf -H "Authorization: Bearer ${NEON_KEY}" -H "Content-Type: application/json" "$@"; }
+        neon() { curl --retry 4 --retry-delay 3 -sSf -H "Authorization: Bearer ${NEON_KEY}" -H "Content-Type: application/json" "$@"; }
         branches=$(neon "${api}/branches")
         id=$(jq -r --arg n "$NAME" '.branches[] | select(.name == $n) | .id' <<<"$branches")
 

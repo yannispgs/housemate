@@ -35,7 +35,7 @@ runs:
       run: |
         set -euo pipefail
         api="https://console.neon.tech/api/v2/projects/${PROJECT}"
-        neon() { curl -sSf -H "Authorization: Bearer ${NEON_KEY}" -H "Content-Type: application/json" "$@"; }
+        neon() { curl --retry 4 --retry-delay 3 -sSf -H "Authorization: Bearer ${NEON_KEY}" -H "Content-Type: application/json" "$@"; }
         # Direct connection: the migration lock lives in the session, which a
         # transaction-mode pool would lose (scripts/migrate.ts).
         uri=$(neon "${api}/connection_uri?branch_id=${BRANCH_ID}&database_name=housemate-previews&role_name=housemate-previews_owner" | jq -r .uri)
