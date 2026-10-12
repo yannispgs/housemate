@@ -55,11 +55,14 @@ export function portierSql(): Sql {
   return portier;
 }
 
+/** Le relais SMTP de Brevo (STARTTLS sur 587). */
+export const SMTP_RELAY = "smtp-relay.brevo.com";
+
 let envoyer: Envoyer | undefined;
 
 export function envoyerMail(): Envoyer {
   envoyer ??= createEnvoyer(mailConfig(process.env), () =>
-    openSmtpNode("smtp-relay.brevo.com"),
+    openSmtpNode(SMTP_RELAY),
   );
 
   return envoyer;

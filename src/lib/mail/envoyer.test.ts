@@ -40,6 +40,22 @@ describe("createEnvoyer", () => {
   });
 });
 
+describe("createEnvoyer — date par défaut", () => {
+  it("date le message de l'heure d'envoi", async () => {
+    const { connection, sent } = relais();
+    const avant = Date.now();
+
+    await createEnvoyer({ login: "l", key: "k" }, () => connection)(
+      "parent@exemple.fr",
+      { subject: "Sujet", text: "Corps" },
+    );
+
+    const data = sent.find(line => line.startsWith("From:")) ?? "";
+    const date = Date.parse(/Date: (.+)/.exec(data)?.[1] ?? "");
+    expect(date).toBeGreaterThanOrEqual(Math.floor(avant / 1000) * 1000);
+  });
+});
+
 describe("mailConfig", () => {
   it("lit les identifiants du relais", () => {
     expect(mailConfig({ SMTP_LOGIN: "l", SMTP_KEY: "k" })).toEqual({

@@ -142,6 +142,15 @@ describe("verifyNeonSignature", () => {
     ).toBe(false);
   });
 
+  it("refuse une clé publiée illisible, sans lever d'erreur", async () => {
+    const illisible: KeyLookup = () =>
+      Promise.resolve({ kty: "OKP", crv: "Ed25519", x: "!!", kid: KID });
+
+    expect(await verifyNeonSignature(signed(BODY, NOW), illisible, NOW)).toBe(
+      false,
+    );
+  });
+
   it("refuse une clé publiée d'un type inattendu", async () => {
     const rsa = generateKeyPairSync("rsa", { modulusLength: 2048 }).publicKey;
     const wrongType: KeyLookup = () =>

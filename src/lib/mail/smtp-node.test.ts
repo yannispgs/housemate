@@ -55,7 +55,7 @@ describe("openSmtpNode", () => {
         socket.write("250-relais\r\n250 STARTTLS\r\n");
       }
     });
-    const smtp = openSmtpNode("127.0.0.1", port);
+    const smtp = openSmtpNode("127.0.0.1", { port });
 
     expect(await smtp.reply()).toEqual({ code: 220, lines: ["relais prêt"] });
     await smtp.send("EHLO test");
@@ -68,7 +68,7 @@ describe("openSmtpNode", () => {
 
   it("garde les réponses arrivées avant d'être lues", async () => {
     const port = await relais(() => {}, "220 un\r\n220 deux\r\n");
-    const smtp = openSmtpNode("127.0.0.1", port);
+    const smtp = openSmtpNode("127.0.0.1", { port });
 
     await new Promise(resolve => setTimeout(resolve, 50));
     expect((await smtp.reply()).lines).toEqual(["un"]);
@@ -79,7 +79,7 @@ describe("openSmtpNode", () => {
   it("échoue proprement si le relais est injoignable", async () => {
     const port = await relais(() => {});
     server?.close();
-    const smtp = openSmtpNode("127.0.0.1", port);
+    const smtp = openSmtpNode("127.0.0.1", { port });
 
     await expect(smtp.reply()).rejects.toThrow();
     // Une erreur déjà survenue est rendue à la lecture suivante.
@@ -115,7 +115,7 @@ describe("openSmtpNode", () => {
     });
     // Le certificat jetable devient la seule autorité reconnue : la
     // vérification reste entière.
-    const smtp = openSmtpNode("127.0.0.1", port, certificat.cert);
+    const smtp = openSmtpNode("127.0.0.1", { port, ca: certificat.cert });
 
     await smtp.reply();
     await smtp.send("STARTTLS");
@@ -125,6 +125,81 @@ describe("openSmtpNode", () => {
     await smtp.send("EHLO test");
     expect(await smtp.reply()).toEqual({ code: 250, lines: ["chiffré"] });
     await smtp.close();
+  });
+});
+
+/** Un relais qui passe en TLS sur STARTTLS et répond « 250 chiffré » à EHLO. */
+function relaisTls(certificat: { key: Buffer; cert: Buffer }): Promise<number> {
+  return relais((line, socket) => {
+    if (line === "STARTTLS") {
+      socket.write("220 allons-y\r\n");
+      socket.removeAllListeners("data");
+      const secure = new TLSSocket(socket, { isServer: true, ...certificat });
+      secure.setEncoding("utf8");
+      secure.on("data", (chunk: string) => {
+        if (chunk.startsWith("EHLO")) {
+          secure.write("250 chiffré\r\n");
+        }
+      });
+      secure.on("error", () => {});
+    }
+  });
+}
+
+/** Ouvre le dialogue jusqu'au passage en TLS, exclu. */
+async function jusquAStarttls(
+  hostname: string,
+  port: number,
+  ca?: Buffer,
+): Promise<ReturnType<typeof openSmtpNode>> {
+  const smtp = openSmtpNode(hostname, { port, ca });
+  await smtp.reply();
+  await smtp.send("STARTTLS");
+  await smtp.reply();
+
+  return smtp;
+}
+
+describe("openSmtpNode — sécurité et délais", () => {
+  it("⚠️ refuse un certificat qu'aucune autorité reconnue n'a signé", async () => {
+    let certificat: { key: Buffer; cert: Buffer };
+
+    try {
+      certificat = certificatJetable();
+    } catch {
+      return;
+    }
+
+    const smtp = await jusquAStarttls("127.0.0.1", await relaisTls(certificat));
+
+    await expect(smtp.startTls()).rejects.toThrow(/self[- ]signed/i);
+  });
+
+  it("annonce le nom du serveur (SNI) quand ce n'est pas une adresse IP", async () => {
+    let certificat: { key: Buffer; cert: Buffer };
+
+    try {
+      certificat = certificatJetable();
+    } catch {
+      return;
+    }
+
+    const port = await relaisTls(certificat);
+    const smtp = await jusquAStarttls("localhost", port, certificat.cert);
+    await smtp.startTls();
+    await smtp.send("EHLO test");
+
+    expect((await smtp.reply()).lines).toEqual(["chiffré"]);
+    await smtp.close();
+  });
+
+  it("abandonne après un silence trop long du relais", async () => {
+    const port = await relais(() => {}, "");
+    const smtp = openSmtpNode("127.0.0.1", { port, timeoutMs: 50 });
+
+    await expect(smtp.reply()).rejects.toThrow(/délai dépassé/);
+    // La connexion est fermée : écrire échoue, sans rester en suspens.
+    await expect(smtp.send("QUIT")).rejects.toThrow();
   });
 });
 
@@ -146,7 +221,7 @@ function certificatJetable(): { key: Buffer; cert: Buffer } {
         "-subj",
         "/CN=127.0.0.1",
         "-addext",
-        "subjectAltName=IP:127.0.0.1",
+        "subjectAltName=IP:127.0.0.1,DNS:localhost",
         "-days",
         "1",
         "-keyout",

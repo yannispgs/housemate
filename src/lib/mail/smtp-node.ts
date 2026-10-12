@@ -18,14 +18,20 @@ import {
 /** Au-delà, l'envoi est abandonné : un webhook Neon attend 5 s au plus. */
 const TIMEOUT_MS = 4000;
 
-/**
- * `ca` remplace les autorités reconnues : pour les tests seulement, avec un
- * certificat jetable. La vérification du certificat n'est jamais coupée.
- */
+export interface SmtpNodeOptions {
+  readonly port?: number;
+  /**
+   * Remplace les autorités reconnues : pour les tests seulement, avec un
+   * certificat jetable. La vérification du certificat n'est jamais coupée.
+   */
+  readonly ca?: Buffer;
+  /** Silence au-delà duquel la connexion est abandonnée (tests). */
+  readonly timeoutMs?: number;
+}
+
 export function openSmtpNode(
   hostname: string,
-  port = 587,
-  ca?: Buffer,
+  { port = 587, ca, timeoutMs = TIMEOUT_MS }: SmtpNodeOptions = {},
 ): SmtpConnection {
   let socket: Socket = connect({ host: hostname, port });
   const parser = new ReplyReader();
@@ -36,7 +42,7 @@ export function openSmtpNode(
 
   function listen(stream: Socket): void {
     stream.setEncoding("utf8");
-    stream.setTimeout(TIMEOUT_MS, () => {
+    stream.setTimeout(timeoutMs, () => {
       stream.destroy(new Error("SMTP : délai dépassé."));
     });
     stream.on("data", (chunk: string) => {

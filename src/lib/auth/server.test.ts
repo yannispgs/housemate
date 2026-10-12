@@ -5,6 +5,15 @@ vi.mock("@neondatabase/auth/next/server", () => ({
   createNeonAuth: (config: unknown) => ({ config }),
 }));
 
+// Aucun réseau : la connexion au relais échoue tout de suite.
+const openSmtpNode = vi.fn(() => ({
+  send: () => Promise.resolve(),
+  reply: () => Promise.reject(new Error("pas de réseau dans les tests")),
+  startTls: () => Promise.resolve(),
+  close: () => Promise.resolve(),
+}));
+vi.mock("@/lib/mail/smtp-node", () => ({ openSmtpNode }));
+
 /**
  * L'assemblage des instances serveur, réglage par réglage. Chaque test
  * recharge le module : ses instances sont créées une fois par processus.
@@ -61,6 +70,12 @@ describe("instances serveur de l'authentification", () => {
     const server = await load();
 
     expect(server.envoyerMail()).toBe(server.envoyerMail());
+
+    // L'envoi passe par le relais de Brevo.
+    await expect(
+      server.envoyerMail()("parent@exemple.fr", { subject: "s", text: "t" }),
+    ).rejects.toThrow(/pas de réseau/);
+    expect(openSmtpNode).toHaveBeenCalledWith(server.SMTP_RELAY);
 
     vi.stubEnv("SMTP_KEY", "");
     await expect(load().then(s => s.envoyerMail())).rejects.toThrow(/SMTP/);

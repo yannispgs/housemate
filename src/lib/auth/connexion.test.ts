@@ -136,6 +136,20 @@ describe("verifierCode", () => {
     );
   });
 
+  it("décrit un navigateur sans en-tête d'identification", async () => {
+    const { d } = deps();
+
+    await verifierCode("parent@exemple.fr", "481516", {
+      ...d,
+      userAgent: null,
+    });
+    expect(d.noterAppareil).toHaveBeenCalledWith(
+      "compte-1",
+      expect.any(String),
+      "Appareil non reconnu",
+    );
+  });
+
   it("remplace un identifiant d'appareil fabriqué", async () => {
     const { d, poses } = deps(undefined, { appareil: "fabrique" });
 
