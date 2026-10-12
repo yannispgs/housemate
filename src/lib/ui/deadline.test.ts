@@ -3,6 +3,7 @@ import {
   cardFrame,
   doneTodayText,
   formatTemperature,
+  frostGradient,
   frostScale,
   type GroupedPlant,
   plantsProgress,
@@ -74,6 +75,19 @@ describe("frostScale", () => {
     expect(scale.estimate).toBeCloseTo(50);
     expect(scale.lowerBound).toBeCloseTo(35);
     expect(scale.upperBound).toBeCloseTo(65);
+  });
+
+  it("place la zone sauve deux degrés au-dessus des dégâts", () => {
+    // Échelle de −7 à 3 °C : 2 °C tombe à 90 %.
+    expect(frostScale(range).safe).toBeCloseTo(90);
+  });
+
+  it("colore le fond par zones, avec des bords nets aux seuils", () => {
+    expect(frostGradient(frostScale(range))).toBe(
+      "linear-gradient(90deg, var(--ink-critical) 0%, var(--ink-critical) 20.0%, " +
+        "var(--ink-serious) 20.0%, var(--ink-serious) 70.0%, " +
+        "var(--ink-warning) 70.0%, var(--ink-good) 90.0%, var(--ink-good) 100%)",
+    );
   });
 
   it("ramène au bord une borne hors de l'échelle", () => {
