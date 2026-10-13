@@ -20,6 +20,11 @@ const NATURE_ICON: Readonly<
   Équipement: EquipmentIcon,
   Contrat: ContractIcon,
   Séjour: StayIcon,
+  // ⚠️ Provisoire : icônes réutilisées, ces natures ne sont pas dessinées.
+  Animal: DropIcon,
+  Document: ContractIcon,
+  Personne: StayIcon,
+  Lieu: EquipmentIcon,
 };
 
 export function RecordCard({ record }: Readonly<{ record: RecordView }>) {

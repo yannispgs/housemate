@@ -25,6 +25,7 @@ import {
 import {
   AlertIcon,
   ArrowUpIcon,
+  CalendarIcon,
   CheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
@@ -46,6 +47,7 @@ const CATEGORY_ICON: Readonly<
   vehicle: VehicleIcon,
   fertiliser: DropIcon,
   pruning: PruningIcon,
+  generic: CalendarIcon,
 };
 
 function ImportanceMark({ deadline }: Readonly<{ deadline: DeadlineView }>) {

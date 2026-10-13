@@ -8,7 +8,12 @@ export type RecordNature =
   | "Véhicule"
   | "Équipement"
   | "Contrat"
-  | "Séjour";
+  | "Séjour"
+  // Natures de la base (SPEC § 4.1) que la maquette ne dessine pas encore.
+  | "Animal"
+  | "Document"
+  | "Personne"
+  | "Lieu";
 
 export interface RecordView {
   readonly title: string;

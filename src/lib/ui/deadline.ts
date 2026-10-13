@@ -37,7 +37,9 @@ export type CategoryIcon =
   | "warranty"
   | "vehicle"
   | "fertiliser"
-  | "pruning";
+  | "pruning"
+  // Une catégorie sans icône propre (provisoire, pas dans la maquette).
+  | "generic";
 
 export interface HistoryEntry {
   readonly date: string;
