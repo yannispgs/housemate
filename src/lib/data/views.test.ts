@@ -39,6 +39,7 @@ describe("recordViews", () => {
       ]),
     ).toEqual([
       {
+        id: "f",
         title: "La voiture",
         nature: "Véhicule",
         category: SANS_CATEGORIE,

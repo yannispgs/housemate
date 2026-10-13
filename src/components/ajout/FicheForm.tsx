@@ -1,0 +1,44 @@
+"use client";
+
+/** Ajouter une fiche vierge. ⚠️ Provisoire : pas encore dessiné. */
+import { useRouter } from "next/navigation";
+import { useActionState, useEffect } from "react";
+import { ETAT_AJOUT } from "@/lib/data/ajout-etat";
+import { NATURE_LABELS, NATURES } from "@/lib/data/views";
+import { ajouterFiche } from "../../../app/_actions/ajout";
+import { BOUTON, CHAMP, Champ, LISTE } from "../forms/Champ";
+
+export function FicheForm() {
+  const [etat, agir, enCours] = useActionState(ajouterFiche, ETAT_AJOUT);
+  const router = useRouter();
+  const erreurs = etat.etape === "saisie" ? (etat.erreurs ?? {}) : {};
+
+  useEffect(() => {
+    if (etat.etape === "creee") {
+      router.push(`/fiches/${etat.ficheId}`);
+    }
+  }, [etat, router]);
+
+  return (
+    <form action={agir} className="flex flex-col gap-4">
+      <Champ libelle="Nature" erreur={erreurs.nature}>
+        <select name="nature" defaultValue="equipement" className={LISTE}>
+          {NATURES.map(nature => (
+            <option key={nature} value={nature}>
+              {NATURE_LABELS[nature]}
+            </option>
+          ))}
+        </select>
+      </Champ>
+      <Champ libelle="Nom" erreur={erreurs.titre}>
+        <input name="titre" className={CHAMP} required maxLength={120} />
+      </Champ>
+      <Champ libelle="Catégorie" erreur={erreurs.categorie}>
+        <input name="categorie" className={CHAMP} maxLength={120} />
+      </Champ>
+      <button type="submit" className={BOUTON} disabled={enCours}>
+        Créer la fiche
+      </button>
+    </form>
+  );
+}

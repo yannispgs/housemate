@@ -203,6 +203,14 @@ describe("garantie — la fiche de l'objet et sa fin de garantie", () => {
     });
   });
 
+  it("se passe de marque et de modèle", () => {
+    const r = lire(garantieSaisie, { ...balance, marque: "", modele: "" });
+
+    expect(
+      r.ok && nouvelleGarantie(r.valeur).fiche.attributs.map(a => a.libelle),
+    ).toEqual(["Date d'achat", "Durée de garantie"]);
+  });
+
   it("accepte une garantie en mois", () => {
     const r = lire(garantieSaisie, {
       ...balance,
