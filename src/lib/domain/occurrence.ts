@@ -90,15 +90,11 @@ export function currentOccurrence(
   const { recurrence, today } = inputs;
 
   if (recurrence.kind === "sinceCompletion") {
+    // Ce motif a toujours une prochaine date : au plus tard, `from`.
     const due = nextOccurrence(recurrence, {
       from: inputs.lastDone ? addDays(inputs.lastDone, 1) : inputs.since,
       lastCompletion: inputs.lastDone,
-    });
-
-    if (due === null) {
-      return null;
-    }
-
+    }) as PlainDate;
     const state = stateOn(due, today, inputs);
 
     return { due, state: state === "abandonnee" ? "due" : state };
@@ -128,11 +124,9 @@ export function currentOccurrence(
       continue;
     }
 
-    const state = stateOn(due, today, inputs);
-
-    if (state !== "abandonnee") {
-      return { due, state };
-    }
+    // Jamais « abandonnée » ici : une échéance ferme ne s'abandonne pas, et
+    // une souple ne cherche qu'à partir d'« aujourd'hui − tolérance ».
+    return { due, state: stateOn(due, today, inputs) as OccurrenceState };
   }
 
   return null;

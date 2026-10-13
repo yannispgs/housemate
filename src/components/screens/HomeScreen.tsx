@@ -42,21 +42,61 @@ function EmptyState({ nextUp }: Readonly<{ nextUp: string | null }>) {
   );
 }
 
+/** Les actions réelles, quand l'accueil lit la base (absentes en démo). */
+export interface HomeActions {
+  /** Coche l'échéance ; rend l'id de la complétion, ou `null`. */
+  readonly cocher: (echeanceId: string) => Promise<string | null>;
+  readonly annuler: (completionIds: readonly string[]) => Promise<void>;
+}
+
 export function HomeScreen({
   deadlines,
   fixedToday,
   nextUp,
   aside,
+  actions,
 }: Readonly<{
   deadlines: readonly DeadlineView[];
   /** Date figée des données de démonstration, sinon `null`. */
   fixedToday: string | null;
   nextUp: string | null;
   aside: AsideContent | null;
+  actions?: HomeActions;
 }>) {
   const today = useToday(fixedToday);
   const [done, setDone] = useState<readonly string[]>([]);
   const [open, setOpen] = useState<readonly string[]>([]);
+  // Les complétions enregistrées depuis l'accueil, pour « Annuler ».
+  const [completions, setCompletions] = useState<readonly string[]>([]);
+  const [erreur, setErreur] = useState<string | null>(null);
+
+  const faire = (id: string) => {
+    setDone(ids => [...ids, id]);
+    setOpen(ids => ids.filter(other => other !== id));
+    setErreur(null);
+    actions
+      ?.cocher(id)
+      .then(completion => {
+        if (completion !== null) {
+          setCompletions(list => [...list, completion]);
+        }
+      })
+      .catch(() => {
+        // Rien n'a été enregistré : la carte revient.
+        setDone(ids => ids.filter(other => other !== id));
+        setErreur("L'enregistrement a échoué. Réessaie dans un instant.");
+      });
+  };
+
+  const annulerTout = () => {
+    const aAnnuler = completions;
+    setDone([]);
+    setCompletions([]);
+    setErreur(null);
+    actions?.annuler(aAnnuler).catch(() => {
+      setErreur("L'annulation a échoué : recharge la page.");
+    });
+  };
   const remaining = deadlines.filter(deadline => !done.includes(deadline.id));
   const toggle = (id: string) =>
     setOpen(ids =>
@@ -82,13 +122,16 @@ export function HomeScreen({
               open={open.includes(deadline.id)}
               todayLabel={shortDate(today)}
               onToggle={() => toggle(deadline.id)}
-              onDone={() => {
-                setDone(ids => [...ids, deadline.id]);
-                setOpen(ids => ids.filter(other => other !== deadline.id));
-              }}
+              onDone={() => faire(deadline.id)}
             />
           ))}
         </div>
+      )}
+
+      {erreur && (
+        <p role="alert" className="m-0 px-1 text-[13px] text-ink-critical">
+          {erreur}
+        </p>
       )}
 
       {remaining.length === 0 && <EmptyState nextUp={nextUp} />}
@@ -105,7 +148,7 @@ export function HomeScreen({
           </span>
           <button
             type="button"
-            onClick={() => setDone([])}
+            onClick={annulerTout}
             className="touch-target ml-auto cursor-pointer bg-transparent p-1.5 text-[12.5px] leading-none text-ink-secondary underline md:ml-0"
           >
             Annuler

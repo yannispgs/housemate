@@ -1,6 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
+  annulerCompletions,
   commeMembre,
   completer,
   listerEcheances,
@@ -185,6 +186,25 @@ describe("complétions", () => {
     expect(vue?.completions).toEqual([
       { occurrence: fromISO("2026-10-20"), faiteLe: fromISO("2026-10-09") },
     ]);
+  });
+
+  it("annule une complétion par un nouvel événement, sans rien effacer", async () => {
+    const id = await creerEcheance(moi, { titre: "Annulée" });
+    const completion = await commeMembre(sql(), moi.compte, tx =>
+      completer(tx, id, fromISO("2026-10-20"), fromISO("2026-10-09")),
+    );
+    await commeMembre(sql(), moi.compte, tx =>
+      annulerCompletions(tx, [completion]),
+    );
+
+    const [vue] = (
+      await commeMembre(sql(), moi.compte, listerEcheances)
+    ).filter(e => e.id === id);
+    const lignes = await owner`
+      select annulee from app.completions where echeance_id = ${id}`;
+
+    expect(vue?.completions).toEqual([]);
+    expect(lignes.map(l => l.annulee).sort()).toEqual([false, true]);
   });
 
   it("⚠️ refuse de cocher l'échéance d'un autre foyer", async () => {

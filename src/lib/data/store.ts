@@ -109,14 +109,32 @@ export async function listerEcheances(tx: Tx): Promise<EcheanceRow[]> {
   }));
 }
 
-/** Coche une occurrence : « fait », le jour réel du geste. */
+/** Coche une occurrence : « fait », le jour réel du geste. Rend son id. */
 export async function completer(
   tx: Tx,
   echeanceId: string,
   occurrence: PlainDate,
   faiteLe: PlainDate,
+): Promise<string> {
+  const [row] = await tx`
+    insert into app.completions (echeance_id, occurrence, faite_le)
+    values (${echeanceId}, ${toISO(occurrence)}, ${toISO(faiteLe)})
+    returning id::text`;
+
+  return row?.id as string;
+}
+
+/**
+ * Annule une complétion. Le journal ne s'efface jamais (§ 3.3) : l'annulation
+ * est une nouvelle ligne, qui corrige la précédente en la déclarant annulée.
+ */
+export async function annulerCompletions(
+  tx: Tx,
+  completionIds: readonly string[],
 ): Promise<void> {
   await tx`
-    insert into app.completions (echeance_id, occurrence, faite_le)
-    values (${echeanceId}, ${toISO(occurrence)}, ${toISO(faiteLe)})`;
+    insert into app.completions
+      (echeance_id, occurrence, faite_le, corrige, annulee)
+    select echeance_id, occurrence, faite_le, id, true
+    from app.completions where id = any(${completionIds as string[]}::uuid[])`;
 }

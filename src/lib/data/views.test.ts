@@ -131,6 +131,72 @@ describe("homeDeadlines — l'accueil (§ 10.1)", () => {
     });
   });
 
+  it("garde les trois derniers gestes, du plus récent au plus ancien", () => {
+    const [view] = homeDeadlines(
+      [
+        echeance({
+          recurrence: {
+            kind: "interval",
+            anchor: d("2026-09-01"),
+            every: { count: 1, unit: "week" },
+          },
+          creeLe: d("2026-09-01"),
+          completions: ["01", "08", "15", "22"].map(jour => ({
+            occurrence: d(`2026-09-${jour}`),
+            faiteLe: d(`2026-09-${jour}`),
+          })),
+        }),
+      ],
+      TODAY,
+    );
+
+    expect(view?.history.map(h => h.date)).toEqual([
+      "22 sept.",
+      "15 sept.",
+      "8 sept.",
+    ]);
+  });
+
+  it("teinte une critique : alerte à faire, sérieuse en préavis", () => {
+    const [due, preavis] = homeDeadlines(
+      [
+        echeance({ id: "due", importance: "critique" }),
+        echeance({
+          id: "preavis",
+          importance: "critique",
+          recurrence: { kind: "once", on: d("2026-10-16") },
+        }),
+      ],
+      TODAY,
+    );
+
+    expect(due?.tone).toBe("critical");
+    expect(preavis?.tone).toBe("serious");
+  });
+
+  it("départage deux échéances du même rang par leur date", () => {
+    expect(
+      ids([
+        echeance({
+          id: "hier",
+          recurrence: { kind: "once", on: d("2026-10-12") },
+        }),
+        echeance({
+          id: "avant-hier",
+          recurrence: { kind: "once", on: d("2026-10-11") },
+        }),
+      ]),
+    ).toEqual(["avant-hier", "hier"]);
+  });
+
+  it("range une échéance sans catégorie sous « Sans catégorie »", () => {
+    const [view] = homeDeadlines([echeance({ categorie: null })], TODAY);
+    const [item] = upcomingItems([echeance({ categorie: null })], TODAY);
+
+    expect(view?.category).toBe(SANS_CATEGORIE);
+    expect(item?.category).toBe(SANS_CATEGORIE);
+  });
+
   it("décrit l'ouverture du préavis", () => {
     const [view] = homeDeadlines(
       [echeance({ recurrence: { kind: "once", on: d("2026-10-18") } })],
@@ -215,6 +281,24 @@ describe("nextUpText — l'accueil vide", () => {
     ).toBe(
       "Le prochain rendez-vous est le 1 novembre 2026 : rentrer le citronnier. Il apparaîtra ici quand son préavis s'ouvrira.",
     );
+  });
+
+  it("choisit la plus proche des échéances dormantes", () => {
+    expect(
+      nextUpText(
+        [
+          echeance({
+            titre: "Plus tard",
+            recurrence: { kind: "once", on: d("2027-01-01") },
+          }),
+          echeance({
+            titre: "Bientôt",
+            recurrence: { kind: "once", on: d("2026-11-01") },
+          }),
+        ],
+        TODAY,
+      ),
+    ).toContain("bientôt");
   });
 
   it("ne dit rien s'il n'y a rien à venir", () => {
