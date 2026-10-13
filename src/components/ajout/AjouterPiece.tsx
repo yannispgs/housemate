@@ -10,29 +10,36 @@ export function AjouterPiece({ ficheId }: Readonly<{ ficheId: string }>) {
   const fichier = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const [nom, setNom] = useState("Facture");
-  const [etat, setEtat] = useState<"repos" | "envoi" | string>("repos");
+  const [etat, setEtat] = useState<
+    | { statut: "repos" }
+    | { statut: "envoi" }
+    | { statut: "erreur"; message: string }
+  >({ statut: "repos" });
 
   const envoyer = async () => {
     const choisi = fichier.current?.files?.[0];
 
     if (choisi === undefined) {
-      setEtat("Choisis d'abord une photo ou un PDF.");
+      setEtat({
+        statut: "erreur",
+        message: "Choisis d'abord une photo ou un PDF.",
+      });
       return;
     }
 
-    setEtat("envoi");
+    setEtat({ statut: "envoi" });
     const erreur = await envoyerPieceJointe(ficheId, choisi, nom).catch(
       () => "L'envoi a échoué.",
     );
 
     if (erreur === null) {
-      setEtat("repos");
+      setEtat({ statut: "repos" });
       if (fichier.current) {
         fichier.current.value = "";
       }
       router.refresh();
     } else {
-      setEtat(erreur);
+      setEtat({ statut: "erreur", message: erreur });
     }
   };
 
@@ -49,7 +56,7 @@ export function AjouterPiece({ ficheId }: Readonly<{ ficheId: string }>) {
       <Champ
         libelle="Fichier"
         aide="Une photo ou un PDF, 4 Mo au plus. La photo est réduite et nettoyée de sa position GPS avant l'envoi."
-        erreur={etat !== "repos" && etat !== "envoi" ? etat : undefined}
+        erreur={etat.statut === "erreur" ? etat.message : undefined}
       >
         <input
           ref={fichier}
@@ -62,9 +69,9 @@ export function AjouterPiece({ ficheId }: Readonly<{ ficheId: string }>) {
         type="button"
         onClick={envoyer}
         className={BOUTON_SECONDAIRE}
-        disabled={etat === "envoi"}
+        disabled={etat.statut === "envoi"}
       >
-        {etat === "envoi" ? "Envoi…" : "Joindre"}
+        {etat.statut === "envoi" ? "Envoi…" : "Joindre"}
       </button>
     </div>
   );

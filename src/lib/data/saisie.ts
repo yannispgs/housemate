@@ -106,7 +106,7 @@ export const echeanceSaisie = z
     ficheId: z
       .union([z.uuid(), z.literal("")])
       .optional()
-      .transform(v => (v ? v : null)),
+      .transform(v => v || null),
     motif: z.enum(["once", "interval", "annual", "sinceCompletion"], {
       error: "Récurrence inconnue.",
     }),
@@ -115,7 +115,7 @@ export const echeanceSaisie = z
     date: z
       .union([dateIso, z.literal("")])
       .optional()
-      .transform(v => (v ? v : null)),
+      .transform(v => v || null),
     nombre: entier(1, 1000).optional(),
     unite: unite.optional(),
   })
