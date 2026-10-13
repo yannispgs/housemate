@@ -4,8 +4,8 @@
  * « AAAA-MM-JJ » : lisibles, et comparables à l'œil.
  *
  * Première version (décision du foyer, 2026-10-13) : les quatre motifs
- * courants seulement — une seule fois, intervalle, date annuelle, depuis la
- * dernière fois. Le moteur sait les neuf ; une récurrence d'un autre motif est
+ * courants — une seule fois, intervalle, date annuelle, depuis la dernière
+ * fois — et la dérivée d'une date, pour les garanties. Le moteur sait les neuf ; une récurrence d'un autre motif est
  * refusée à la lecture plutôt qu'interprétée de travers.
  */
 import { z } from "zod";
@@ -33,6 +33,19 @@ export const recurrenceJson = z.discriminatedUnion("kind", [
     day: z.number().int().min(1).max(31),
   }),
   z.object({ kind: z.literal("sinceCompletion"), after: duration }),
+  // 5 — dérivée d'une date : la fin de garantie, date d'achat + durée
+  // (décision du foyer, 2026-10-13). Le décalage peut être négatif (§ 3.4a).
+  z.object({
+    kind: z.literal("derived"),
+    sourceDate: isoDate,
+    offset: z.object({
+      count: z
+        .number()
+        .int()
+        .refine(n => n !== 0),
+      unit: z.enum(["day", "week", "month", "year"]),
+    }),
+  }),
 ]);
 
 export type RecurrenceJson = z.infer<typeof recurrenceJson>;
@@ -61,6 +74,12 @@ export function parseRecurrence(value: unknown): ScheduledRecurrence | null {
       return { kind: "annual", month: r.month as Month, day: r.day };
     case "sinceCompletion":
       return { kind: "sinceCompletion", after: r.after as Duration };
+    case "derived":
+      return {
+        kind: "derived",
+        sourceDate: fromISO(r.sourceDate),
+        offset: r.offset as Duration,
+      };
   }
 }
 
@@ -85,6 +104,12 @@ export function serializeRecurrence(
       };
     case "sinceCompletion":
       return { kind: "sinceCompletion", after: recurrence.after };
+    case "derived":
+      return {
+        kind: "derived",
+        sourceDate: toISO(recurrence.sourceDate),
+        offset: recurrence.offset,
+      };
     default:
       throw new Error(
         `Motif « ${recurrence.kind} » : pas encore pris en charge à la saisie.`,
