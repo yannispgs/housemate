@@ -17,7 +17,11 @@ export function GarantieForm({ aujourdhui }: Readonly<{ aujourdhui: string }>) {
   const [etat, agir, enCours] = useActionState(ajouterGarantie, ETAT_AJOUT);
   const facture = useRef<HTMLInputElement>(null);
   const router = useRouter();
-  const [envoi, setEnvoi] = useState<"aucun" | "en cours" | string>("aucun");
+  const [envoi, setEnvoi] = useState<
+    | { statut: "aucun" }
+    | { statut: "en cours" }
+    | { statut: "echec"; message: string }
+  >({ statut: "aucun" });
   const erreurs = etat.etape === "saisie" ? (etat.erreurs ?? {}) : {};
 
   // La garantie créée, on joint la facture, puis on ouvre la fiche.
@@ -33,23 +37,28 @@ export function GarantieForm({ aujourdhui }: Readonly<{ aujourdhui: string }>) {
       return;
     }
 
-    setEnvoi("en cours");
-    envoyerPieceJointe(etat.ficheId, fichier, "Facture")
-      .catch(() => "L'envoi de la facture a échoué.")
-      .then(erreur => {
-        if (erreur === null) {
-          router.push(`/fiches/${etat.ficheId}`);
-        } else {
-          setEnvoi(erreur);
-        }
-      });
+    const ficheId = etat.ficheId;
+    setEnvoi({ statut: "en cours" });
+    void (async () => {
+      const erreur = await envoyerPieceJointe(
+        ficheId,
+        fichier,
+        "Facture",
+      ).catch(() => "L'envoi de la facture a échoué.");
+
+      if (erreur === null) {
+        router.push(`/fiches/${ficheId}`);
+      } else {
+        setEnvoi({ statut: "echec", message: erreur });
+      }
+    })();
   }, [etat, router]);
 
-  if (etat.etape === "creee" && envoi !== "aucun" && envoi !== "en cours") {
+  if (etat.etape === "creee" && envoi.statut === "echec") {
     return (
       <div className="flex flex-col gap-3">
         <p className="m-0 text-[14.5px] text-ink">
-          La garantie est enregistrée, mais pas la facture : {envoi}
+          La garantie est enregistrée, mais pas la facture : {envoi.message}
         </p>
         <Link href={`/fiches/${etat.ficheId}`} className="text-ink underline">
           Ouvrir la fiche pour joindre la facture
@@ -130,9 +139,9 @@ export function GarantieForm({ aujourdhui }: Readonly<{ aujourdhui: string }>) {
       <button
         type="submit"
         className={BOUTON}
-        disabled={enCours || envoi === "en cours"}
+        disabled={enCours || envoi.statut === "en cours"}
       >
-        {envoi === "en cours"
+        {envoi.statut === "en cours"
           ? "Envoi de la facture…"
           : "Enregistrer la garantie"}
       </button>
