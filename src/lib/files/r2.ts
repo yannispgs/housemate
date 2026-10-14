@@ -180,7 +180,7 @@ export function lireCleEnAttente(
 ): { readonly type: TypeAccepte; readonly definitive: string } | null {
   const morceaux = ATTENTE.exec(cle);
 
-  if (morceaux === null || morceaux[1] !== ficheId) {
+  if (morceaux?.[1] !== ficheId) {
     return null;
   }
 
@@ -223,6 +223,16 @@ export function enTetesDEnvoi(type: string): Record<string, string> {
   return { "content-type": type, "if-none-match": "*" };
 }
 
+function exiger(reponse: Response, action: string): Response {
+  if (!reponse.ok) {
+    throw new Error(
+      `${action} refusé par le stockage : HTTP ${reponse.status}.`,
+    );
+  }
+
+  return reponse;
+}
+
 export function creerStockage(config: R2Config): Stockage {
   const client = new AwsClient({
     accessKeyId: config.accessKeyId,
@@ -233,16 +243,6 @@ export function creerStockage(config: R2Config): Stockage {
   const racine = `${config.endpoint}/${config.bucket}`;
   const url = (cle: string) =>
     `${racine}/${cle.split("/").map(encodeURIComponent).join("/")}`;
-
-  async function exiger(reponse: Response, action: string): Promise<Response> {
-    if (!reponse.ok) {
-      throw new Error(
-        `${action} refusé par le stockage : HTTP ${reponse.status}.`,
-      );
-    }
-
-    return reponse;
-  }
 
   return {
     async lienDEnvoi(cle, type, taille) {
@@ -264,7 +264,7 @@ export function creerStockage(config: R2Config): Stockage {
         return null;
       }
 
-      await exiger(reponse, "Lecture");
+      exiger(reponse, "Lecture");
 
       return {
         taille: Number(reponse.headers.get("content-length")),
@@ -273,7 +273,7 @@ export function creerStockage(config: R2Config): Stockage {
     },
 
     async debut(cle, n) {
-      const reponse = await exiger(
+      const reponse = exiger(
         await client.fetch(url(cle), {
           headers: { range: `bytes=0-${n - 1}` },
         }),
@@ -284,7 +284,7 @@ export function creerStockage(config: R2Config): Stockage {
     },
 
     async copier(source, destination) {
-      await exiger(
+      exiger(
         await client.fetch(url(destination), {
           method: "PUT",
           headers: {
@@ -296,17 +296,12 @@ export function creerStockage(config: R2Config): Stockage {
     },
 
     async supprimer(cle) {
-      await exiger(
-        await client.fetch(url(cle), { method: "DELETE" }),
-        "Suppression",
-      );
+      exiger(await client.fetch(url(cle), { method: "DELETE" }), "Suppression");
     },
 
-    async volume(prefixe) {
-      let total = 0;
-      let suite: string | null = null;
-
-      do {
+    volume(prefixe) {
+      // Page après page : chacune donne le jeton de la suivante.
+      const depuis = async (suite: string | null): Promise<number> => {
         const liste = new URL(racine);
         liste.searchParams.set("list-type", "2");
         liste.searchParams.set("prefix", prefixe);
@@ -315,21 +310,23 @@ export function creerStockage(config: R2Config): Stockage {
           liste.searchParams.set("continuation-token", suite);
         }
 
-        const xml = await (
-          await exiger(await client.fetch(liste.toString()), "Liste")
+        const xml = await exiger(
+          await client.fetch(liste.toString()),
+          "Liste",
         ).text();
+        const total = [...xml.matchAll(/<Size>(\d+)<\/Size>/g)].reduce(
+          (somme, [, taille]) => somme + Number(taille),
+          0,
+        );
+        const prochaine =
+          /<NextContinuationToken>([^<]+)<\/NextContinuationToken>/.exec(xml);
 
-        for (const [, taille] of xml.matchAll(/<Size>(\d+)<\/Size>/g)) {
-          total += Number(taille);
-        }
+        return prochaine === null
+          ? total
+          : total + (await depuis(prochaine[1] as string));
+      };
 
-        suite =
-          /<NextContinuationToken>([^<]+)<\/NextContinuationToken>/.exec(
-            xml,
-          )?.[1] ?? null;
-      } while (suite !== null);
-
-      return total;
+      return depuis(null);
     },
 
     async lienDeLecture(cle, nom) {
