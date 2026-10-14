@@ -18,8 +18,9 @@ create table app.pieces_jointes (
   type_mime text not null check (
     type_mime in ('image/jpeg', 'image/png', 'image/webp', 'application/pdf')
   ),
-  -- 4 Mo au plus : le fichier passe par une fonction Vercel (limite 4,5 Mo).
-  taille integer not null check (taille > 0 and taille <= 4194304),
+  -- 25 Mo au plus : le fichier va du navigateur au stockage par un lien
+  -- signé, sans passer par une fonction Vercel (limite 4,5 Mo).
+  taille integer not null check (taille > 0 and taille <= 26214400),
   -- La clé de l'objet dans le stockage : jamais une adresse publique.
   cle text not null unique,
   ajoutee_par uuid not null default app.membre_courant() references app.membres,
@@ -40,3 +41,15 @@ create policy ajoutables on app.pieces_jointes for insert to authenticated
     and ajoutee_par = app.membre_courant()
     and fiche_id in (select id from app.fiches)
   );
+
+-- Le volume des pièces jointes du foyer, pour son quota. SECURITY DEFINER :
+-- les pièces des fiches privées des autres membres comptent aussi, sans que
+-- la personne en voie rien d'autre que ce total.
+create function app.volume_pieces_jointes() returns bigint
+  language sql stable security definer set search_path = ''
+  as $$
+    select coalesce(sum(taille), 0)::bigint from app.pieces_jointes
+    where foyer_id = app.foyer_courant()
+  $$;
+
+grant execute on function app.volume_pieces_jointes() to authenticated;

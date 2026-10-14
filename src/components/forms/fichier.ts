@@ -38,27 +38,65 @@ export async function preparerFichier(fichier: File): Promise<File> {
   return new File([jpeg], `${nom}.jpg`, { type: "image/jpeg" });
 }
 
-/** Envoie la pièce jointe ; rend `null` si tout va bien, sinon l'erreur. */
+const ECHEC = "L'envoi de la pièce jointe a échoué.";
+
+async function erreurDe(reponse: Response): Promise<string> {
+  const corps = (await reponse.json().catch(() => ({}))) as { erreur?: string };
+
+  return corps.erreur ?? ECHEC;
+}
+
+function enJson(corps: unknown): RequestInit {
+  return {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(corps),
+  };
+}
+
+/**
+ * Envoie la pièce jointe ; rend `null` si tout va bien, sinon l'erreur.
+ *
+ * Trois temps : le serveur donne un lien d'envoi signé pour ce fichier, le
+ * navigateur envoie le fichier directement au stockage (sans passer par
+ * Vercel, limité à 4,5 Mo), puis le serveur vérifie ce qui a été reçu.
+ */
 export async function envoyerPieceJointe(
   ficheId: string,
   fichier: File,
   nom: string,
 ): Promise<string | null> {
-  const formulaire = new FormData();
-  formulaire.set("ficheId", ficheId);
-  formulaire.set("nom", nom);
-  formulaire.set("fichier", await preparerFichier(fichier));
+  const pret = await preparerFichier(fichier);
 
-  const reponse = await fetch("/api/pieces-jointes", {
-    method: "POST",
-    body: formulaire,
-  });
+  const autorisation = await fetch(
+    "/api/pieces-jointes/envoi",
+    enJson({ ficheId, type: pret.type, taille: pret.size }),
+  );
 
-  if (reponse.ok) {
-    return null;
+  if (!autorisation.ok) {
+    return erreurDe(autorisation);
   }
 
-  const corps = (await reponse.json().catch(() => ({}))) as { erreur?: string };
+  const { cle, url, enTetes } = (await autorisation.json()) as {
+    cle: string;
+    url: string;
+    enTetes: Record<string, string>;
+  };
 
-  return corps.erreur ?? "L'envoi de la pièce jointe a échoué.";
+  const envoi = await fetch(url, {
+    method: "PUT",
+    headers: enTetes,
+    body: pret,
+  }).catch(() => null);
+
+  if (!envoi?.ok) {
+    return ECHEC;
+  }
+
+  const confirmation = await fetch(
+    "/api/pieces-jointes",
+    enJson({ ficheId, cle, nom, nomFichier: fichier.name }),
+  );
+
+  return confirmation.ok ? null : erreurDe(confirmation);
 }

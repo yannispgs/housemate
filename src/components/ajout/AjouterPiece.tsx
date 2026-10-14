@@ -55,7 +55,7 @@ export function AjouterPiece({ ficheId }: Readonly<{ ficheId: string }>) {
       </Champ>
       <Champ
         libelle="Fichier"
-        aide="Une photo ou un PDF, 4 Mo au plus. La photo est réduite et nettoyée de sa position GPS avant l'envoi."
+        aide="Une photo ou un PDF, 25 Mo au plus. La photo est réduite et nettoyée de sa position GPS avant l'envoi."
         erreur={etat.statut === "erreur" ? etat.message : undefined}
       >
         <input

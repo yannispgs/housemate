@@ -224,6 +224,13 @@ export async function ajouterPieceJointe(
   return row?.id as string;
 }
 
+/** Le volume des pièces jointes du foyer, en octets, fiches privées comprises. */
+export async function volumePiecesJointes(tx: Tx): Promise<number> {
+  const [row] = await tx`select app.volume_pieces_jointes()::text as volume`;
+
+  return Number(row?.volume);
+}
+
 /* ------------------------------------------------------------------------ */
 /* Une fiche, en détail                                                     */
 /* ------------------------------------------------------------------------ */

@@ -19,6 +19,7 @@ import {
   lirePieceJointe,
   listerEcheances,
   listerFiches,
+  volumePiecesJointes,
 } from "@/lib/data/store";
 import { fromISO } from "@/lib/domain/plain-date";
 import { DIRECT_URL } from "./env";
@@ -437,9 +438,36 @@ describe("pièces jointes", () => {
     ).rejects.toThrow(/check constraint/);
     await expect(
       commeMembre(sql(), moi.compte, tx =>
-        ajouterPieceJointe(tx, { ...piece(ficheId), taille: 5_000_000 }),
+        ajouterPieceJointe(tx, { ...piece(ficheId), taille: 30_000_000 }),
       ),
     ).rejects.toThrow(/check constraint/);
+  });
+
+  it("accepte une facture de 25 Mo", async () => {
+    const ficheId = await fiche(moi);
+
+    await expect(
+      commeMembre(sql(), moi.compte, tx =>
+        ajouterPieceJointe(tx, { ...piece(ficheId), taille: 25 * 1024 * 1024 }),
+      ),
+    ).resolves.toBeTypeOf("string");
+  });
+
+  it("⚠️ le quota compte les fiches privées des autres, pas les autres foyers", async () => {
+    const privee = await fiche(moi, true);
+    const commune = await fiche(moi);
+    const ailleurs = await fiche(voisin);
+    await commeMembre(sql(), moi.compte, async tx => {
+      await ajouterPieceJointe(tx, piece(privee));
+      await ajouterPieceJointe(tx, piece(commune));
+    });
+    await commeMembre(sql(), voisin.compte, tx =>
+      ajouterPieceJointe(tx, piece(ailleurs)),
+    );
+
+    expect(await commeMembre(sql(), conjoint.compte, volumePiecesJointes)).toBe(
+      2 * 1234,
+    );
   });
 
   it("⚠️ rien ne s'efface : ni modification ni suppression", async () => {

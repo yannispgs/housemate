@@ -1,30 +1,25 @@
 import { enMonNom } from "@/lib/data/server";
-import { ajouterPieceJointe, lireFiche } from "@/lib/data/store";
-import { deposerPieceJointe, type FichierRecu } from "@/lib/files/depot";
-import { stockageDesPieces } from "@/lib/files/server";
+import { confirmerEnvoi } from "@/lib/files/depot";
+import { corps, depotDeps } from "./deps";
 
 /**
- * Joindre un fichier à une fiche (formulaire multipart : `ficheId`, `nom`,
- * `fichier`). Session exigée par le proxy ; droits vérifiés sous la RLS.
+ * Confirmer un envoi (JSON : `ficheId`, `cle`, `nom`, `nomFichier`) : le
+ * serveur vérifie ce que le stockage a reçu, puis joint le fichier à la
+ * fiche. Session exigée par le proxy ; droits vérifiés sous la RLS.
  */
 export async function POST(request: Request): Promise<Response> {
-  const formulaire = await request.formData();
-  const fichier = formulaire.get("fichier");
-  const nom = formulaire.get("nom");
+  const demande = await corps(request);
+  const texte = (valeur: unknown) => (typeof valeur === "string" ? valeur : "");
 
   const resultat = await enMonNom(tx =>
-    deposerPieceJointe(
+    confirmerEnvoi(
       {
-        ficheId: formulaire.get("ficheId"),
-        nom: typeof nom === "string" ? nom : null,
-        fichier: fichier instanceof File ? (fichier as FichierRecu) : null,
+        ficheId: demande.ficheId,
+        cle: demande.cle,
+        nom: texte(demande.nom),
+        nomFichier: texte(demande.nomFichier),
       },
-      {
-        ficheVisible: async id => (await lireFiche(tx, id)) !== null,
-        enregistrer: piece => ajouterPieceJointe(tx, piece),
-        stockage: stockageDesPieces(),
-        identifiant: () => crypto.randomUUID(),
-      },
+      depotDeps(tx),
     ),
   );
 

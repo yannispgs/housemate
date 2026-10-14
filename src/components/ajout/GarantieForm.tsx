@@ -125,7 +125,7 @@ export function GarantieForm({ aujourdhui }: Readonly<{ aujourdhui: string }>) {
       </Champ>
       <Champ
         libelle="Facture"
-        aide="Une photo ou un PDF, 4 Mo au plus. La photo est réduite et nettoyée de sa position GPS avant l'envoi."
+        aide="Une photo ou un PDF, 25 Mo au plus. La photo est réduite et nettoyée de sa position GPS avant l'envoi."
       >
         <input
           ref={facture}
