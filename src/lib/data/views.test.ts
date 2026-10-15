@@ -363,6 +363,8 @@ describe("libelleFoyer", () => {
     ["  foyer de démonstration ", "Foyer · Démonstration"],
     ["Foyer d'Artagnan", "Foyer · Artagnan"],
     ["Foyer des Martin", "Foyer · Martin"],
+    // Sans « Foyer » devant, rien n'est retiré.
+    ["Des Martin", "Foyer · Des Martin"],
     ["Foyer", ""],
     ["   ", ""],
     [null, ""],

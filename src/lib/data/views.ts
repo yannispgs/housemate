@@ -404,14 +404,15 @@ export function nextUpText(
  * nommé « Foyer Dulong » ou « Dulong ». Vide sans nom.
  */
 export function libelleFoyer(nom: string | null): string {
-  const sansPrefixe = (nom ?? "")
-    .trim()
-    .replace(/^foyer(?:\s+(?:de\s+|des\s+|du\s+|d')?|$)/i, "")
-    .trim();
+  const brut = (nom ?? "").trim();
+  const sansFoyer = brut.replace(/^foyer(?=\s|$)/i, "").trim();
+  // « de », « des », « du », « d' » ne tombent qu'après « Foyer ».
+  const reste =
+    sansFoyer === brut ? brut : sansFoyer.replace(/^(?:d(?:es?|u)\s+|d')/i, "");
 
-  if (sansPrefixe === "") {
+  if (reste === "") {
     return "";
   }
 
-  return `Foyer · ${sansPrefixe.charAt(0).toUpperCase()}${sansPrefixe.slice(1)}`;
+  return `Foyer · ${reste.charAt(0).toUpperCase()}${reste.slice(1)}`;
 }

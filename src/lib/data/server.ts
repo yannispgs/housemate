@@ -61,8 +61,8 @@ export async function foyerConnecte(): Promise<string> {
 
   try {
     return libelleFoyer(await commeMembre(baseApp(), id, lireFoyer));
-  } catch (erreur) {
-    console.error("[en-tête] nom du foyer illisible", erreur);
+  } catch (error_) {
+    console.error("[en-tête] nom du foyer illisible", error_);
 
     return "";
   }
