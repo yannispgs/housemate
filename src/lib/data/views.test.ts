@@ -3,6 +3,7 @@ import {
   type EcheanceRow,
   homeDeadlines,
   iconFor,
+  libelleFoyer,
   nextUpText,
   occurrenceACocher,
   recordViews,
@@ -352,5 +353,20 @@ describe("textes et icônes", () => {
     [null, "generic"],
   ])("iconFor %s → %s", (categorie, icone) => {
     expect(iconFor(categorie)).toBe(icone);
+  });
+});
+
+describe("libelleFoyer", () => {
+  it.each([
+    ["Foyer Dulong", "Foyer · Dulong"],
+    ["Dulong", "Foyer · Dulong"],
+    ["  foyer de démonstration ", "Foyer · Démonstration"],
+    ["Foyer d'Artagnan", "Foyer · Artagnan"],
+    ["Foyer des Martin", "Foyer · Martin"],
+    ["Foyer", ""],
+    ["   ", ""],
+    [null, ""],
+  ])("« %s » → « %s »", (nom, libelle) => {
+    expect(libelleFoyer(nom)).toBe(libelle);
   });
 });

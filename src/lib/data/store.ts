@@ -31,6 +31,13 @@ export async function commeMembre<T>(
   })) as T;
 }
 
+/** Le nom du foyer de la personne connectée, ou `null` sans foyer. */
+export async function lireFoyer(tx: Tx): Promise<string | null> {
+  const [row] = await tx`select nom from app.foyers`;
+
+  return (row?.nom as string | undefined) ?? null;
+}
+
 export async function listerFiches(tx: Tx): Promise<FicheRow[]> {
   return (await tx`
     select id::text, nature, titre, categorie

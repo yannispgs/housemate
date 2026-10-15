@@ -398,3 +398,20 @@ export function nextUpText(
 
   return `Le prochain rendez-vous est le ${longDate(next.occurrence.due)} : ${next.row.titre.toLowerCase()}. Il apparaîtra ici quand son préavis s'ouvrira.`;
 }
+
+/**
+ * Ce que l'en-tête du bureau dit du foyer : « Foyer · Dulong » pour un foyer
+ * nommé « Foyer Dulong » ou « Dulong ». Vide sans nom.
+ */
+export function libelleFoyer(nom: string | null): string {
+  const sansPrefixe = (nom ?? "")
+    .trim()
+    .replace(/^foyer(?:\s+(?:de\s+|des\s+|du\s+|d')?|$)/i, "")
+    .trim();
+
+  if (sansPrefixe === "") {
+    return "";
+  }
+
+  return `Foyer · ${sansPrefixe.charAt(0).toUpperCase()}${sansPrefixe.slice(1)}`;
+}

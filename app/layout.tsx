@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/AppShell";
 import { DEMO_HOUSEHOLD } from "@/demo/data";
 import { demoEnabled } from "@/demo/mode";
+import { foyerConnecte } from "@/lib/data/server";
 import { THEME_BOOT_SCRIPT } from "@/lib/ui/theme";
 import "./globals.css";
 
@@ -76,7 +77,7 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   return (
@@ -93,7 +94,9 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
       <body>
-        <AppShell household={demoEnabled() ? DEMO_HOUSEHOLD : ""}>
+        <AppShell
+          household={demoEnabled() ? DEMO_HOUSEHOLD : await foyerConnecte()}
+        >
           {children}
         </AppShell>
       </body>
