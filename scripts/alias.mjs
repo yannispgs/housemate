@@ -17,10 +17,10 @@ registerHooks({
 
     try {
       return nextResolve(cible, context);
-    } catch (erreur) {
+    } catch (error_) {
       // Un paquet (`zod`, `postgres`) se résout tel quel, ou pas du tout.
       if (!/^(\.|\/|file:)/.test(cible)) {
-        throw erreur;
+        throw error_;
       }
 
       for (const suffixe of [".ts", "/index.ts"]) {
@@ -31,7 +31,7 @@ registerHooks({
         }
       }
 
-      throw erreur;
+      throw error_;
     }
   },
 });
