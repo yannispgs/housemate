@@ -146,6 +146,18 @@ function compare(sort: UpcomingSort) {
   };
 }
 
+/** Une ligne datée : « dim », « 03 ». */
+export function asRow(item: UpcomingItem): UpcomingRow {
+  const day = atNoon(item.date);
+
+  return {
+    ...item,
+    /* c8 ignore next -- repli inatteignable : `getDay()` rend 0 à 6. */
+    weekday: WEEKDAYS[day.getDay()] ?? "",
+    dayOfMonth: String(day.getDate()).padStart(2, "0"),
+  };
+}
+
 /**
  * Les groupes à afficher : par mois en tri par date, sinon par niveau ou par
  * catégorie, toujours par date à l'intérieur. Hors tri par date, le mois
@@ -166,18 +178,16 @@ export function groupUpcoming(
       groups.push(group);
     }
 
-    const day = atNoon(item.date);
     const month = monthOf(item.date).toLowerCase();
-    group.rows.push({
-      ...item,
-      /* c8 ignore next -- repli inatteignable : `getDay()` rend 0 à 6. */
-      weekday: WEEKDAYS[day.getDay()] ?? "",
-      dayOfMonth: String(day.getDate()).padStart(2, "0"),
-      detail:
-        sort === "date"
-          ? item.detail
-          : [month, item.detail].filter(Boolean).join(" · "),
-    });
+    group.rows.push(
+      asRow({
+        ...item,
+        detail:
+          sort === "date"
+            ? item.detail
+            : [month, item.detail].filter(Boolean).join(" · "),
+      }),
+    );
   }
 
   return groups;
