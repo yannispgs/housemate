@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { connection } from "next/server";
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/AppShell";
 import { DEMO_HOUSEHOLD } from "@/demo/data";
@@ -77,6 +78,20 @@ export const viewport: Viewport = {
   ],
 };
 
+/** Le foyer dans l'en-tête : celui de la session, ou celui de la démo. */
+async function household(): Promise<string> {
+  if (demoEnabled()) {
+    return DEMO_HOUSEHOLD;
+  }
+
+  // Lu à chaque requête : la session n'existe pas au build, et une page
+  // pré-calculée (`/_not-found`) ferait sinon démarrer l'authentification
+  // sans sa configuration.
+  await connection();
+
+  return foyerConnecte();
+}
+
 export default async function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
@@ -94,11 +109,7 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
       <body>
-        <AppShell
-          household={demoEnabled() ? DEMO_HOUSEHOLD : await foyerConnecte()}
-        >
-          {children}
-        </AppShell>
+        <AppShell household={await household()}>{children}</AppShell>
       </body>
     </html>
   );
