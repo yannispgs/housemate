@@ -1,5 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { jeuFictif } from "@/lib/data/jeu-fictif";
+import { foyerVide, remplirFoyer } from "@/lib/data/remplissage";
 import {
   echeanceSaisie,
   garantieSaisie,
@@ -21,6 +23,7 @@ import {
   listerFiches,
   volumePiecesJointes,
 } from "@/lib/data/store";
+import { homeDeadlines } from "@/lib/data/views";
 import { fromISO } from "@/lib/domain/plain-date";
 import { DIRECT_URL } from "./env";
 
@@ -483,5 +486,41 @@ describe("pièces jointes", () => {
         tx => tx`delete from app.pieces_jointes where id = ${pieceId}`,
       ),
     ).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("remplissage d'une preview", () => {
+  const TODAY = fromISO("2026-10-15");
+
+  it("remplit un foyer vide, sous la RLS, et rien d'autre", async () => {
+    expect(await commeMembre(sql(), moi.compte, foyerVide)).toBe(true);
+
+    expect(
+      await commeMembre(sql(), moi.compte, tx =>
+        remplirFoyer(tx, jeuFictif(TODAY)),
+      ),
+    ).toEqual({ fiches: 12, echeances: 18 });
+
+    expect(await commeMembre(sql(), conjoint.compte, foyerVide)).toBe(false);
+    // ⚠️ Le foyer voisin n'en voit rien.
+    expect(await commeMembre(sql(), voisin.compte, foyerVide)).toBe(true);
+  });
+
+  it("donne un accueil vivant : critique en tête, à faire, en préavis", async () => {
+    await commeMembre(sql(), moi.compte, tx =>
+      remplirFoyer(tx, jeuFictif(TODAY)),
+    );
+    const accueil = homeDeadlines(
+      await commeMembre(sql(), moi.compte, listerEcheances),
+      TODAY,
+    );
+
+    expect(accueil.map(v => v.state)).toEqual(
+      expect.arrayContaining(["en retard", "due", "en préavis"]),
+    );
+    expect(accueil[0]?.title).toBe("Purger les radiateurs");
+    expect(
+      (await commeMembre(sql(), moi.compte, listerFiches)).map(f => f.titre),
+    ).toContain("La balance de cuisine");
   });
 });

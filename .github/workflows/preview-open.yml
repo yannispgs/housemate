@@ -7,6 +7,8 @@ name: Preview — open
 #     to the PR's Git branch, so Vercel serves every push there by itself;
 #   - the link between the two: `DATABASE_URL`, `PORTIER_DATABASE_URL` and
 #     `NEON_AUTH_BASE_URL`, variables scoped to that Git branch alone;
+#   - data: the household is filled with a fictional data set, dated from the
+#     day the preview is created (only while it is empty);
 #   - sign-in: the branch's Neon Auth sends its webhooks to that address, and
 #     trusts it as an origin; the sessions of the other previews are copied in
 #     (sessions-sync.yml), so one sign-in counts everywhere.
@@ -72,6 +74,15 @@ jobs:
 
       # Accounts for allow-listed addresses added since `seed` was copied.
       - uses: ./.github/actions/provision-accounts
+        with:
+          api-key: ${{ secrets.NEON_API_KEY }}
+          project: ${{ vars.NEON_PROJECT_ID }}
+          branch-id: ${{ steps.branch.outputs.id }}
+          database: housemate-previews
+          role: housemate-previews_owner
+
+      # The fictional household, dated from today (decision of 2026-10-12).
+      - uses: ./.github/actions/fill-preview
         with:
           api-key: ${{ secrets.NEON_API_KEY }}
           project: ${{ vars.NEON_PROJECT_ID }}

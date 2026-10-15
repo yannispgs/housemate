@@ -1,0 +1,36 @@
+name: Fill preview
+description: >-
+  Fills the preview's household with the fictional data set
+  (src/lib/data/jeu-fictif.ts), dated from today, so a new preview shows
+  deadlines due, in notice, overdue and done. Only an empty household is
+  filled: a preview already filled, or edited by hand, is left as is. Safe to
+  repeat.
+
+inputs:
+  api-key:
+    description: Neon API key.
+    required: true
+  project:
+    description: Neon project id.
+    required: true
+  branch-id:
+    description: The Neon branch to fill.
+    required: true
+  database:
+    description: Database name (only housemate-previews is accepted).
+    required: true
+  role:
+    description: Owner role of the database.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        NEON_API_KEY: ${{ inputs.api-key }}
+        NEON_PROJECT_ID: ${{ inputs.project }}
+        NEON_BRANCH_ID: ${{ inputs.branch-id }}
+        DATABASE_NAME: ${{ inputs.database }}
+        DATABASE_ROLE: ${{ inputs.role }}
+      run: node --import ./scripts/alias.mjs scripts/remplir-preview.ts
