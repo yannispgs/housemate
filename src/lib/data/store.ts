@@ -16,7 +16,9 @@ import type {
   NouvelleFiche,
 } from "@/lib/data/saisie";
 import type { CompletionRow, EcheanceRow, FicheRow } from "@/lib/data/views";
+import type { Consommable, Releve } from "@/lib/domain/entretien";
 import { fromISO, type PlainDate, toISO } from "@/lib/domain/plain-date";
+import type { Duration } from "@/lib/domain/recurrence";
 import type { Importance, Tenure } from "@/lib/ui/deadline";
 
 export type Tx = postgres.TransactionSql;
@@ -305,4 +307,133 @@ export async function lirePieceJointe(
   return row === undefined
     ? null
     : { cle: row.cle, typeMime: row.type_mime, nom: row.nom };
+}
+
+/* ------------------------------------------------------------------------ */
+/* Plan d'entretien (§ 5.3)                                                 */
+/* ------------------------------------------------------------------------ */
+
+export interface DureeDeVie {
+  /** Au compteur de la fiche ; `null` : purement calendaire. */
+  readonly compteur: number | null;
+  /** Au temps ; `null` : purement au compteur. */
+  readonly temps: Duration | null;
+}
+
+export async function ajouterConsommable(
+  tx: Tx,
+  ficheId: string,
+  intitule: string,
+  duree: DureeDeVie,
+): Promise<string> {
+  const [row] = await tx`
+    insert into app.consommables
+      (fiche_id, intitule, duree_compteur, duree_nombre, duree_unite)
+    values (${ficheId}, ${intitule}, ${duree.compteur},
+      ${duree.temps?.count ?? null}, ${duree.temps?.unit ?? null})
+    returning id::text`;
+
+  return row?.id as string;
+}
+
+/**
+ * Corrige la durée de vie : l'échéance, calculée, suit d'elle-même — elle
+ * peut perdre de l'importance, ou quitter l'accueil (§ 5.3). Rend faux si le
+ * consommable n'est pas visible.
+ */
+export async function modifierDureeDeVie(
+  tx: Tx,
+  consommableId: string,
+  duree: DureeDeVie,
+): Promise<boolean> {
+  const rows = await tx`
+    update app.consommables set
+      duree_compteur = ${duree.compteur},
+      duree_nombre = ${duree.temps?.count ?? null},
+      duree_unite = ${duree.temps?.unit ?? null}
+    where id = ${consommableId}
+    returning id`;
+
+  return rows.length === 1;
+}
+
+/** Un remplacement, avec le compteur du jour s'il est connu. */
+export async function noterRemplacement(
+  tx: Tx,
+  consommableId: string,
+  le: PlainDate,
+  compteur: number | null,
+): Promise<void> {
+  await tx`
+    insert into app.remplacements (consommable_id, fait_le, compteur)
+    values (${consommableId}, ${toISO(le)}, ${compteur})`;
+}
+
+/** Un relevé du compteur de la fiche. */
+export async function noterReleve(
+  tx: Tx,
+  ficheId: string,
+  le: PlainDate,
+  valeur: number,
+): Promise<void> {
+  await tx`
+    insert into app.releves (fiche_id, le, valeur)
+    values (${ficheId}, ${toISO(le)}, ${valeur})`;
+}
+
+export interface PlanEntretien {
+  readonly consommables: readonly (Consommable & {
+    readonly id: string;
+    readonly intitule: string;
+  })[];
+  readonly releves: readonly Releve[];
+}
+
+/** Le plan d'entretien d'une fiche visible ; vide sinon. */
+export async function lirePlanEntretien(
+  tx: Tx,
+  ficheId: string,
+): Promise<PlanEntretien> {
+  const consommables = await tx<
+    {
+      id: string;
+      intitule: string;
+      duree_compteur: number | null;
+      duree_nombre: number | null;
+      duree_unite: Duration["unit"] | null;
+      remplacements: { le: string; compteur: number | null }[];
+    }[]
+  >`
+    select c.id::text, c.intitule, c.duree_compteur, c.duree_nombre,
+      c.duree_unite,
+      coalesce((
+        select json_agg(json_build_object('le', r.fait_le, 'compteur', r.compteur)
+          order by r.fait_le)
+        from app.remplacements r where r.consommable_id = c.id
+      ), '[]') as remplacements
+    from app.consommables c
+    where c.fiche_id = ${ficheId}
+    order by c.intitule`;
+  const releves = await tx<{ le: string; valeur: number }[]>`
+    select to_char(le, 'YYYY-MM-DD') as le, valeur from app.releves
+    where fiche_id = ${ficheId} and attribut = 'kilometrage'
+    order by le`;
+
+  return {
+    consommables: consommables.map(c => ({
+      id: c.id,
+      intitule: c.intitule,
+      dureeKm: c.duree_compteur,
+      // Nombre et unité sont nuls ensemble (contrainte de la table).
+      dureeTemps:
+        c.duree_unite === null
+          ? null
+          : { count: c.duree_nombre as number, unit: c.duree_unite },
+      remplacements: c.remplacements.map(r => ({
+        le: fromISO(r.le),
+        compteur: r.compteur,
+      })),
+    })),
+    releves: releves.map(r => ({ le: fromISO(r.le), valeur: r.valeur })),
+  };
 }
