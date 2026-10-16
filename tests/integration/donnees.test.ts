@@ -17,6 +17,7 @@ import {
   creerFiche,
   creerGarantie,
   lireFiche,
+  lireFoyer,
   lirePieceJointe,
   lirePlanEntretien,
   listerEcheances,
@@ -655,5 +656,16 @@ describe("plan d'entretien (§ 5.3)", () => {
           values (${ficheId}, 'Filtre', 3)`,
       ),
     ).rejects.toThrow(/check constraint/);
+  });
+});
+
+describe("foyer", () => {
+  it("⚠️ chacun ne lit que le nom de son foyer", async () => {
+    expect(await commeMembre(sql(), moi.compte, lireFoyer)).toBe("Nous");
+    expect(await commeMembre(sql(), voisin.compte, lireFoyer)).toBe("Eux");
+  });
+
+  it("rien pour un compte sans foyer", async () => {
+    expect(await commeMembre(sql(), "inconnu", lireFoyer)).toBeNull();
   });
 });
