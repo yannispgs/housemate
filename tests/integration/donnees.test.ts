@@ -4,6 +4,7 @@ import {
   annulerCompletions,
   commeMembre,
   completer,
+  lireFoyer,
   listerEcheances,
   listerFiches,
 } from "@/lib/data/store";
@@ -227,5 +228,16 @@ describe("la porte unique", () => {
     );
 
     expect(role).toBe("authenticated");
+  });
+});
+
+describe("foyer", () => {
+  it("⚠️ chacun ne lit que le nom de son foyer", async () => {
+    expect(await commeMembre(sql(), moi.compte, lireFoyer)).toBe("Nous");
+    expect(await commeMembre(sql(), voisin.compte, lireFoyer)).toBe("Eux");
+  });
+
+  it("rien pour un compte sans foyer", async () => {
+    expect(await commeMembre(sql(), "inconnu", lireFoyer)).toBeNull();
   });
 });

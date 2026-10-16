@@ -513,3 +513,21 @@ export function recap(rows: readonly EcheanceRow[], today: PlainDate): Recap {
     ),
   };
 }
+
+/**
+ * Ce que l'en-tête du bureau dit du foyer : « Foyer · Dulong » pour un foyer
+ * nommé « Foyer Dulong » ou « Dulong ». Vide sans nom.
+ */
+export function libelleFoyer(nom: string | null): string {
+  const brut = (nom ?? "").trim();
+  const sansFoyer = brut.replace(/^foyer(?=\s|$)/i, "").trim();
+  // « de », « des », « du », « d' » ne tombent qu'après « Foyer ».
+  const reste =
+    sansFoyer === brut ? brut : sansFoyer.replace(/^(?:d(?:es?|u)\s+|d')/i, "");
+
+  if (reste === "") {
+    return "";
+  }
+
+  return `Foyer · ${reste.charAt(0).toUpperCase()}${reste.slice(1)}`;
+}
