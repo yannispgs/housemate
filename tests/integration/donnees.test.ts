@@ -16,6 +16,7 @@ import {
   creerFiche,
   creerGarantie,
   lireFiche,
+  lireFoyer,
   lirePieceJointe,
   listerEcheances,
   listerFiches,
@@ -483,5 +484,16 @@ describe("pièces jointes", () => {
         tx => tx`delete from app.pieces_jointes where id = ${pieceId}`,
       ),
     ).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("foyer", () => {
+  it("⚠️ chacun ne lit que le nom de son foyer", async () => {
+    expect(await commeMembre(sql(), moi.compte, lireFoyer)).toBe("Nous");
+    expect(await commeMembre(sql(), voisin.compte, lireFoyer)).toBe("Eux");
+  });
+
+  it("rien pour un compte sans foyer", async () => {
+    expect(await commeMembre(sql(), "inconnu", lireFoyer)).toBeNull();
   });
 });
