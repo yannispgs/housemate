@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { HomeScreen } from "@/components/screens/HomeScreen";
 import {
   DEMO_ASIDE,
@@ -7,24 +8,39 @@ import {
   DEMO_TODAY,
 } from "@/demo/data";
 import { demoEnabled } from "@/demo/mode";
+import { enMonNom } from "@/lib/data/server";
+import { listerEcheances } from "@/lib/data/store";
+import { aujourdhuiAParis } from "@/lib/data/today";
+import { homeDeadlines, nextUpText } from "@/lib/data/views";
+import { toISO } from "@/lib/domain/plain-date";
+import { annuler, cocher } from "./_actions/echeances";
 
 export const metadata: Metadata = { title: "Accueil" };
 
-export default function Page() {
-  // Aucune donnée n'est encore branchée : démonstration hors production,
-  // état vide en production.
-  if (!demoEnabled()) {
+export default async function Page() {
+  if (demoEnabled()) {
     return (
-      <HomeScreen deadlines={[]} fixedToday={null} nextUp={null} aside={null} />
+      <HomeScreen
+        deadlines={DEMO_DEADLINES}
+        fixedToday={DEMO_TODAY}
+        nextUp={DEMO_NEXT_UP}
+        aside={DEMO_ASIDE}
+      />
     );
   }
 
+  // Lue à chaque visite, au nom de la personne connectée.
+  await connection();
+  const today = aujourdhuiAParis();
+  const rows = await enMonNom(listerEcheances);
+
   return (
     <HomeScreen
-      deadlines={DEMO_DEADLINES}
-      fixedToday={DEMO_TODAY}
-      nextUp={DEMO_NEXT_UP}
-      aside={DEMO_ASIDE}
+      deadlines={homeDeadlines(rows, today)}
+      fixedToday={toISO(today)}
+      nextUp={nextUpText(rows, today)}
+      aside={null}
+      actions={{ cocher, annuler }}
     />
   );
 }
