@@ -3,10 +3,13 @@ import {
   type EcheanceRow,
   homeDeadlines,
   iconFor,
+  libelleFoyer,
   nextUpText,
   occurrenceACocher,
+  recap,
   recordViews,
   SANS_CATEGORIE,
+  semaineDuRecap,
   upcomingItems,
   whenText,
 } from "@/lib/data/views";
@@ -353,5 +356,153 @@ describe("textes et icônes", () => {
     [null, "generic"],
   ])("iconFor %s → %s", (categorie, icone) => {
     expect(iconFor(categorie)).toBe(icone);
+  });
+});
+
+describe("semaineDuRecap", () => {
+  it.each([
+    ["2026-10-13", "2026-10-12", "2026-10-18"],
+    ["2026-10-17", "2026-10-12", "2026-10-18"],
+    // Le dimanche soir, le récap parle de la semaine qui commence.
+    ["2026-10-18", "2026-10-19", "2026-10-25"],
+  ])("le %s : du %s au %s", (jour, lundi, dimanche) => {
+    expect(semaineDuRecap(d(jour))).toEqual({
+      lundi: d(lundi),
+      dimanche: d(dimanche),
+    });
+  });
+});
+
+describe("recap — le récap de la semaine", () => {
+  const once = (on: string) => ({ kind: "once" as const, on: d(on) });
+
+  it("garde la semaine, et ce qui traîne encore, dans l'ordre des dates", () => {
+    const { coming } = recap(
+      [
+        echeance({
+          id: "loin",
+          titre: "Plus tard",
+          recurrence: once("2026-10-25"),
+        }),
+        echeance({
+          titre: "Jeudi",
+          recurrence: once("2026-10-15"),
+          ficheTitre: "La voiture",
+        }),
+        echeance({ titre: "Lundi", recurrence: once("2026-10-12") }),
+        echeance({
+          titre: "En retard",
+          tenue: "ferme",
+          recurrence: once("2026-10-08"),
+        }),
+      ],
+      TODAY,
+    );
+
+    expect(
+      coming.map(r => [r.weekday, r.dayOfMonth, r.title, r.detail]),
+    ).toEqual([
+      ["jeu", "08", "En retard", "en retard depuis 5 jours"],
+      ["lun", "12", "Lundi", "en tolérance depuis hier"],
+      ["jeu", "15", "Jeudi", "La voiture"],
+    ]);
+  });
+
+  it("⚠️ n'y met jamais une échéance pour mémoire", () => {
+    const { coming, done } = recap(
+      [
+        echeance({
+          importance: "memoire",
+          recurrence: once("2026-10-15"),
+          completions: [
+            { occurrence: d("2026-10-10"), faiteLe: d("2026-10-10") },
+          ],
+        }),
+      ],
+      TODAY,
+    );
+
+    expect(coming).toEqual([]);
+    expect(done).toEqual([]);
+  });
+
+  it.each([
+    [0, "Aucune échéance ferme cette semaine : tout peut glisser."],
+    [1, "Une seule échéance ferme cette semaine. Le reste peut glisser."],
+    [2, "2 échéances fermes cette semaine."],
+  ])("compte %i échéance(s) ferme(s)", (fermes, note) => {
+    const rows = Array.from({ length: 2 }, (_, i) =>
+      echeance({
+        id: `e${i}`,
+        tenue: i < fermes ? "ferme" : "souple",
+        recurrence: once("2026-10-16"),
+      }),
+    );
+
+    expect(recap(rows, TODAY).comingNote).toBe(note);
+  });
+
+  it("montre ce qui a été fait ces sept derniers jours, le plus récent d'abord", () => {
+    const { done } = recap(
+      [
+        echeance({
+          titre: "Engrais",
+          ficheTitre: "Citronnier",
+          recurrence: {
+            kind: "interval",
+            anchor: d("2026-09-01"),
+            every: { count: 1, unit: "day" },
+          },
+          completions: [
+            { occurrence: d("2026-10-06"), faiteLe: d("2026-10-06") },
+            { occurrence: d("2026-10-07"), faiteLe: d("2026-10-07") },
+            { occurrence: d("2026-10-13"), faiteLe: d("2026-10-13") },
+          ],
+        }),
+      ],
+      TODAY,
+    );
+
+    expect(done.map(r => [r.weekday, r.dayOfMonth, r.title, r.detail])).toEqual(
+      [
+        ["mar", "13", "Engrais", "Citronnier"],
+        ["mer", "07", "Engrais", "Citronnier"],
+      ],
+    );
+  });
+
+  it("range sans catégorie ce qui n'en a pas", () => {
+    const { coming, done } = recap(
+      [
+        echeance({
+          categorie: null,
+          recurrence: once("2026-10-15"),
+          completions: [
+            { occurrence: d("2026-10-01"), faiteLe: d("2026-10-12") },
+          ],
+        }),
+      ],
+      TODAY,
+    );
+
+    expect(coming[0]?.category).toBe(SANS_CATEGORIE);
+    expect(done[0]).toMatchObject({ category: SANS_CATEGORIE, detail: "" });
+  });
+});
+
+describe("libelleFoyer", () => {
+  it.each([
+    ["Foyer Dulong", "Foyer · Dulong"],
+    ["Dulong", "Foyer · Dulong"],
+    ["  foyer de démonstration ", "Foyer · Démonstration"],
+    ["Foyer d'Artagnan", "Foyer · Artagnan"],
+    ["Foyer des Martin", "Foyer · Martin"],
+    // Sans « Foyer » devant, rien n'est retiré.
+    ["Des Martin", "Foyer · Des Martin"],
+    ["Foyer", ""],
+    ["   ", ""],
+    [null, ""],
+  ])("« %s » → « %s »", (nom, libelle) => {
+    expect(libelleFoyer(nom)).toBe(libelle);
   });
 });
