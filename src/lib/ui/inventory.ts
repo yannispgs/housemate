@@ -16,6 +16,8 @@ export type RecordNature =
   | "Lieu";
 
 export interface RecordView {
+  /** La fiche à ouvrir ; absent pour les données de démonstration. */
+  readonly id?: string;
   readonly title: string;
   readonly nature: RecordNature;
   readonly category: string;

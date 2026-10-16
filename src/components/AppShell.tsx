@@ -107,16 +107,17 @@ function TabBar({ pathname }: Readonly<{ pathname: string }>) {
         DEADLINE_TABS.map((entry, index) =>
           tab(entry.href, entry.label, TAB_ICONS[index] ?? CalendarIcon),
         )}
-      {/* Capture : pas encore d'écran, comme dans la maquette. */}
-      <button
-        type="button"
-        className="flex min-h-12 flex-1 cursor-pointer flex-col items-center justify-center gap-1 bg-transparent p-0"
+      {/* Ajouter : l'écran d'ajout, provisoire (pas encore dessiné). */}
+      <Link
+        href="/ajouter"
+        aria-current={pathname.startsWith("/ajouter") ? "page" : undefined}
+        className="flex min-h-12 flex-1 cursor-pointer flex-col items-center justify-center gap-1 bg-transparent p-0 no-underline"
       >
         <PlusIcon size={21} color="var(--ink-muted)" />
         <span className="font-display text-[10.5px] text-ink-muted">
-          Capture
+          Ajouter
         </span>
-      </button>
+      </Link>
       {tab(SETTINGS.href, SETTINGS.label, SlidersIcon)}
     </nav>
   );
@@ -169,13 +170,13 @@ function DesktopHeader({
         >
           <GearIcon size={17} />
         </Link>
-        <button
-          type="button"
-          className="inline-flex min-h-10 cursor-pointer items-center gap-[7px] rounded-full border border-border bg-transparent px-[15px] font-display text-[13px] text-ink hover:bg-grid"
+        <Link
+          href="/ajouter"
+          className="inline-flex min-h-10 cursor-pointer items-center gap-[7px] rounded-full border border-border bg-transparent px-[15px] font-display text-[13px] text-ink no-underline hover:bg-grid"
         >
           <PlusIcon size={15} />
-          Capture rapide
-        </button>
+          Ajouter
+        </Link>
         {household && (
           <span className="text-[12.5px] leading-none text-ink-muted">
             {household}

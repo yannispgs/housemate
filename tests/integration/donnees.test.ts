@@ -1,12 +1,26 @@
 import postgres from "postgres";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
+  echeanceSaisie,
+  garantieSaisie,
+  lire,
+  nouvelleEcheance,
+  nouvelleGarantie,
+} from "@/lib/data/saisie";
+import {
+  ajouterPieceJointe,
   annulerCompletions,
   commeMembre,
   completer,
+  creerEcheance,
+  creerFiche,
+  creerGarantie,
+  lireFiche,
   lireFoyer,
+  lirePieceJointe,
   listerEcheances,
   listerFiches,
+  volumePiecesJointes,
 } from "@/lib/data/store";
 import { fromISO } from "@/lib/domain/plain-date";
 import { DIRECT_URL } from "./env";
@@ -58,7 +72,7 @@ beforeEach(async () => {
 
 const sql = () => owner;
 
-async function creerEcheance(
+async function echeanceDe(
   m: Membre,
   champs: { titre: string; destinataire?: string | null; fiche?: string },
 ): Promise<string> {
@@ -106,7 +120,7 @@ describe("lecture au nom d'un membre", () => {
 
       return row?.id as string;
     });
-    await creerEcheance(moi, {
+    await echeanceDe(moi, {
       titre: "Entretien",
       destinataire: moi.id,
       fiche,
@@ -130,8 +144,8 @@ describe("lecture au nom d'un membre", () => {
   });
 
   it("dit « Foyer » sans destinataire, et le surnom choisi sinon", async () => {
-    await creerEcheance(moi, { titre: "Pour tous" });
-    await creerEcheance(moi, { titre: "Pour moi", destinataire: moi.id });
+    await echeanceDe(moi, { titre: "Pour tous" });
+    await echeanceDe(moi, { titre: "Pour moi", destinataire: moi.id });
     await commeMembre(
       sql(),
       conjoint.compte,
@@ -150,7 +164,7 @@ describe("lecture au nom d'un membre", () => {
 
 describe("complétions", () => {
   it("coche une occurrence, au nom de son auteur", async () => {
-    const id = await creerEcheance(moi, { titre: "À faire" });
+    const id = await echeanceDe(moi, { titre: "À faire" });
     await commeMembre(sql(), conjoint.compte, tx =>
       completer(tx, id, fromISO("2026-10-20"), fromISO("2026-10-09")),
     );
@@ -168,7 +182,7 @@ describe("complétions", () => {
   });
 
   it("ignore une complétion annulée, et une version corrigée", async () => {
-    const id = await creerEcheance(moi, { titre: "Corrigée" });
+    const id = await echeanceDe(moi, { titre: "Corrigée" });
     const [premiere] = await owner`
       insert into app.completions (foyer_id, echeance_id, occurrence, faite_le, auteur)
       values (${moi.foyer}, ${id}, '2026-10-20', '2026-10-08', ${moi.id})
@@ -190,7 +204,7 @@ describe("complétions", () => {
   });
 
   it("annule une complétion par un nouvel événement, sans rien effacer", async () => {
-    const id = await creerEcheance(moi, { titre: "Annulée" });
+    const id = await echeanceDe(moi, { titre: "Annulée" });
     const completion = await commeMembre(sql(), moi.compte, tx =>
       completer(tx, id, fromISO("2026-10-20"), fromISO("2026-10-09")),
     );
@@ -209,7 +223,7 @@ describe("complétions", () => {
   });
 
   it("⚠️ refuse de cocher l'échéance d'un autre foyer", async () => {
-    const id = await creerEcheance(moi, { titre: "Chez nous" });
+    const id = await echeanceDe(moi, { titre: "Chez nous" });
 
     await expect(
       commeMembre(sql(), voisin.compte, tx =>
@@ -228,6 +242,248 @@ describe("la porte unique", () => {
     );
 
     expect(role).toBe("authenticated");
+  });
+});
+
+describe("ajouts", () => {
+  const balance = lire(garantieSaisie, {
+    titre: "Balance",
+    marque: "Terraillon",
+    categorie: "Salle de bain",
+    dateAchat: "2026-10-01",
+    dureeNombre: "2",
+    dureeUnite: "year",
+  });
+
+  it("crée une garantie : la fiche et sa fin de garantie, liées", async () => {
+    if (!balance.ok) {
+      throw new Error("saisie invalide");
+    }
+
+    const ficheId = await commeMembre(sql(), moi.compte, tx =>
+      creerGarantie(tx, nouvelleGarantie(balance.valeur)),
+    );
+    const fiche = await commeMembre(sql(), conjoint.compte, tx =>
+      lireFiche(tx, ficheId),
+    );
+    const echeance = (
+      await commeMembre(sql(), conjoint.compte, listerEcheances)
+    ).find(e => e.titre === "Fin de garantie — Balance");
+
+    expect(fiche).toMatchObject({
+      nature: "equipement",
+      titre: "Balance",
+      categorie: "Salle de bain",
+      attributs: [
+        { libelle: "Marque", valeur: "Terraillon" },
+        { libelle: "Date d'achat", valeur: "2026-10-01" },
+        { libelle: "Durée de garantie", valeur: { count: 2, unit: "year" } },
+      ],
+      echeances: [{ titre: "Fin de garantie — Balance" }],
+      pieces: [],
+    });
+    expect(echeance).toMatchObject({
+      ficheTitre: "Balance",
+      importance: "memoire",
+      preavisJours: 30,
+      recurrence: {
+        kind: "derived",
+        sourceDate: fromISO("2026-10-01"),
+        offset: { count: 2, unit: "year" },
+      },
+    });
+  });
+
+  it("⚠️ crée une garantie entière ou pas du tout", async () => {
+    if (!balance.ok) {
+      throw new Error("saisie invalide");
+    }
+
+    const garantie = nouvelleGarantie(balance.valeur);
+    await expect(
+      commeMembre(sql(), moi.compte, tx =>
+        creerGarantie(tx, {
+          ...garantie,
+          echeance: { ...garantie.echeance, tenue: "invalide" as "souple" },
+        }),
+      ),
+    ).rejects.toThrow();
+
+    const fiches = await commeMembre(sql(), moi.compte, listerFiches);
+    expect(fiches.filter(f => f.titre === "Balance")).toHaveLength(0);
+  });
+
+  it("crée une fiche vierge", async () => {
+    const id = await commeMembre(sql(), moi.compte, tx =>
+      creerFiche(tx, {
+        nature: "lieu",
+        titre: "Le garage",
+        categorie: null,
+        attributs: [],
+      }),
+    );
+
+    expect(
+      await commeMembre(sql(), moi.compte, tx => lireFiche(tx, id)),
+    ).toMatchObject({ titre: "Le garage", categorie: null, attributs: [] });
+  });
+
+  it("crée une échéance « depuis la dernière fois » avec sa dernière fois", async () => {
+    const saisie = lire(echeanceSaisie, {
+      titre: "Changer les draps",
+      importance: "normal",
+      tenue: "souple",
+      toleranceJours: "2",
+      preavisJours: "0",
+      motif: "sinceCompletion",
+      nombre: "2",
+      unite: "week",
+      date: "2026-10-06",
+    });
+
+    if (!saisie.ok) {
+      throw new Error("saisie invalide");
+    }
+
+    const id = await commeMembre(sql(), moi.compte, tx =>
+      creerEcheance(tx, nouvelleEcheance(saisie.valeur)),
+    );
+    const [vue] = (
+      await commeMembre(sql(), moi.compte, listerEcheances)
+    ).filter(e => e.id === id);
+
+    expect(vue?.completions).toEqual([
+      { occurrence: fromISO("2026-10-06"), faiteLe: fromISO("2026-10-06") },
+    ]);
+  });
+});
+
+describe("pièces jointes", () => {
+  const piece = (ficheId: string) => ({
+    ficheId,
+    nom: "Facture",
+    typeMime: "application/pdf",
+    taille: 1234,
+    cle: `fiches/${ficheId}/${crypto.randomUUID()}.pdf`,
+  });
+
+  async function fiche(m: Membre, prive = false): Promise<string> {
+    return commeMembre(sql(), m.compte, async tx => {
+      const [row] = await tx`
+        insert into app.fiches (nature, titre, prive)
+        values ('equipement', 'Objet', ${prive}) returning id::text`;
+
+      return row?.id as string;
+    });
+  }
+
+  it("joint un fichier à une fiche, lisible par le foyer", async () => {
+    const ficheId = await fiche(moi);
+    const pieceId = await commeMembre(sql(), moi.compte, tx =>
+      ajouterPieceJointe(tx, piece(ficheId)),
+    );
+
+    expect(
+      await commeMembre(sql(), conjoint.compte, tx => lireFiche(tx, ficheId)),
+    ).toMatchObject({
+      pieces: [{ id: pieceId, nom: "Facture", typeMime: "application/pdf" }],
+    });
+    expect(
+      await commeMembre(sql(), conjoint.compte, tx =>
+        lirePieceJointe(tx, pieceId),
+      ),
+    ).toMatchObject({ typeMime: "application/pdf", nom: "Facture" });
+  });
+
+  it("⚠️ la facture d'une fiche privée reste privée", async () => {
+    const ficheId = await fiche(moi, true);
+    const pieceId = await commeMembre(sql(), moi.compte, tx =>
+      ajouterPieceJointe(tx, piece(ficheId)),
+    );
+
+    expect(
+      await commeMembre(sql(), conjoint.compte, tx =>
+        lirePieceJointe(tx, pieceId),
+      ),
+    ).toBeNull();
+    expect(
+      await commeMembre(sql(), conjoint.compte, tx => lireFiche(tx, ficheId)),
+    ).toBeNull();
+  });
+
+  it("⚠️ un autre foyer ne lit ni ne joint rien", async () => {
+    const ficheId = await fiche(moi);
+    const pieceId = await commeMembre(sql(), moi.compte, tx =>
+      ajouterPieceJointe(tx, piece(ficheId)),
+    );
+
+    expect(
+      await commeMembre(sql(), voisin.compte, tx =>
+        lirePieceJointe(tx, pieceId),
+      ),
+    ).toBeNull();
+    await expect(
+      commeMembre(sql(), voisin.compte, tx =>
+        ajouterPieceJointe(tx, piece(ficheId)),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("refuse un type de fichier non prévu et un fichier trop gros", async () => {
+    const ficheId = await fiche(moi);
+
+    await expect(
+      commeMembre(sql(), moi.compte, tx =>
+        ajouterPieceJointe(tx, { ...piece(ficheId), typeMime: "text/html" }),
+      ),
+    ).rejects.toThrow(/check constraint/);
+    await expect(
+      commeMembre(sql(), moi.compte, tx =>
+        ajouterPieceJointe(tx, { ...piece(ficheId), taille: 30_000_000 }),
+      ),
+    ).rejects.toThrow(/check constraint/);
+  });
+
+  it("accepte une facture de 25 Mo", async () => {
+    const ficheId = await fiche(moi);
+
+    await expect(
+      commeMembre(sql(), moi.compte, tx =>
+        ajouterPieceJointe(tx, { ...piece(ficheId), taille: 25 * 1024 * 1024 }),
+      ),
+    ).resolves.toBeTypeOf("string");
+  });
+
+  it("⚠️ le quota compte les fiches privées des autres, pas les autres foyers", async () => {
+    const privee = await fiche(moi, true);
+    const commune = await fiche(moi);
+    const ailleurs = await fiche(voisin);
+    await commeMembre(sql(), moi.compte, async tx => {
+      await ajouterPieceJointe(tx, piece(privee));
+      await ajouterPieceJointe(tx, piece(commune));
+    });
+    await commeMembre(sql(), voisin.compte, tx =>
+      ajouterPieceJointe(tx, piece(ailleurs)),
+    );
+
+    expect(await commeMembre(sql(), conjoint.compte, volumePiecesJointes)).toBe(
+      2 * 1234,
+    );
+  });
+
+  it("⚠️ rien ne s'efface : ni modification ni suppression", async () => {
+    const ficheId = await fiche(moi);
+    const pieceId = await commeMembre(sql(), moi.compte, tx =>
+      ajouterPieceJointe(tx, piece(ficheId)),
+    );
+
+    await expect(
+      commeMembre(
+        sql(),
+        moi.compte,
+        tx => tx`delete from app.pieces_jointes where id = ${pieceId}`,
+      ),
+    ).rejects.toThrow(/permission denied/);
   });
 });
 

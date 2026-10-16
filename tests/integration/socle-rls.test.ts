@@ -56,6 +56,7 @@ async function createFoyer(nom: string, prefix: string): Promise<Foyer> {
 beforeEach(async () => {
   await owner`delete from app.completions`;
   await owner`delete from app.echeances`;
+  await owner`delete from app.pieces_jointes`;
   await owner`delete from app.fiches`;
   await owner`delete from app.surnoms`;
   await owner`delete from app.liste_blanche`;

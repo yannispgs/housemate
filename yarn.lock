@@ -3380,6 +3380,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"aws4fetch@npm:1.0.20":
+  version: 1.0.20
+  resolution: "aws4fetch@npm:1.0.20"
+  checksum: 10c0/a4eac7bd0d1c3e611c17ed1ef41ac0b48c0a8e74a985ad968c071e74d94586d3572edc943b43fa5ca756c686ea73baa2f48e264d657bb8c2e95c8e0037d48a87
+  languageName: node
+  linkType: hard
+
 "baseline-browser-mapping@npm:^2.9.19":
   version: 2.11.23
   resolution: "baseline-browser-mapping@npm:2.11.23"
@@ -3886,6 +3893,7 @@ __metadata:
     "@types/react": "npm:^19.2.16"
     "@types/react-dom": "npm:^19.2.3"
     "@vitest/coverage-v8": "npm:^4.1.9"
+    aws4fetch: "npm:1.0.20"
     next: "npm:16.2.7"
     postgres: "npm:^3.4.9"
     react: "npm:19.2.4"

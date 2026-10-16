@@ -77,6 +77,7 @@ export const SANS_CATEGORIE = "Sans catégorie";
 
 export function recordViews(fiches: readonly FicheRow[]): RecordView[] {
   return fiches.map(fiche => ({
+    id: fiche.id,
     title: fiche.titre,
     nature: NATURE_LABELS[fiche.nature],
     category: fiche.categorie ?? SANS_CATEGORIE,

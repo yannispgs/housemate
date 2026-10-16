@@ -15,6 +15,11 @@ const quatre: readonly ScheduledRecurrence[] = [
   },
   { kind: "annual", month: 3, day: 12 },
   { kind: "sinceCompletion", after: { count: 3, unit: "month" } },
+  {
+    kind: "derived",
+    sourceDate: fromISO("2026-10-13"),
+    offset: { count: 2, unit: "year" },
+  },
 ];
 
 describe("récurrence stockée", () => {
@@ -45,18 +50,22 @@ describe("récurrence stockée", () => {
       },
     ],
     ["un mois impossible", { kind: "annual", month: 13, day: 1 }],
+    [
+      "un décalage nul",
+      {
+        kind: "derived",
+        sourceDate: "2026-10-13",
+        offset: { count: 0, unit: "year" },
+      },
+    ],
     ["rien", null],
   ])("refuse à la lecture %s", (_, value) => {
     expect(parseRecurrence(value)).toBeNull();
   });
 
   it("refuse d'écrire un motif pas encore pris en charge", () => {
-    expect(() =>
-      serializeRecurrence({
-        kind: "derived",
-        sourceDate: fromISO("2026-01-01"),
-        offset: { count: 2, unit: "year" },
-      }),
-    ).toThrow(/pas encore pris en charge/);
+    expect(() => serializeRecurrence({ kind: "dormant" } as never)).toThrow(
+      /pas encore pris en charge/,
+    );
   });
 });
