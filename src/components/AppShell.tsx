@@ -107,7 +107,7 @@ function TabBar({ pathname }: Readonly<{ pathname: string }>) {
         DEADLINE_TABS.map((entry, index) =>
           tab(entry.href, entry.label, TAB_ICONS[index] ?? CalendarIcon),
         )}
-      {/* Capture : l'écran d'ajout, provisoire (pas encore dessiné). */}
+      {/* Ajouter : l'écran d'ajout, provisoire (pas encore dessiné). */}
       <Link
         href="/ajouter"
         aria-current={pathname.startsWith("/ajouter") ? "page" : undefined}
@@ -115,7 +115,7 @@ function TabBar({ pathname }: Readonly<{ pathname: string }>) {
       >
         <PlusIcon size={21} color="var(--ink-muted)" />
         <span className="font-display text-[10.5px] text-ink-muted">
-          Capture
+          Ajouter
         </span>
       </Link>
       {tab(SETTINGS.href, SETTINGS.label, SlidersIcon)}
@@ -175,7 +175,7 @@ function DesktopHeader({
           className="inline-flex min-h-10 cursor-pointer items-center gap-[7px] rounded-full border border-border bg-transparent px-[15px] font-display text-[13px] text-ink no-underline hover:bg-grid"
         >
           <PlusIcon size={15} />
-          Capture rapide
+          Ajouter
         </Link>
         {household && (
           <span className="text-[12.5px] leading-none text-ink-muted">
