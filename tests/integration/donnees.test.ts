@@ -10,6 +10,7 @@ import {
   nouvelleGarantie,
 } from "@/lib/data/saisie";
 import {
+  ajouterConsommable,
   ajouterPieceJointe,
   annulerCompletions,
   commeMembre,
@@ -20,11 +21,16 @@ import {
   lireFiche,
   lireFoyer,
   lirePieceJointe,
+  lirePlanEntretien,
   listerEcheances,
   listerFiches,
+  modifierDureeDeVie,
+  noterReleve,
+  noterRemplacement,
   volumePiecesJointes,
 } from "@/lib/data/store";
 import { homeDeadlines, recap, upcomingItems } from "@/lib/data/views";
+import { etatConsommable } from "@/lib/domain/entretien";
 import { fromISO } from "@/lib/domain/plain-date";
 import { DIRECT_URL } from "./env";
 
@@ -487,6 +493,172 @@ describe("pièces jointes", () => {
         tx => tx`delete from app.pieces_jointes where id = ${pieceId}`,
       ),
     ).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("plan d'entretien (§ 5.3)", () => {
+  const COURROIE = {
+    compteur: 80_000,
+    temps: { count: 10, unit: "year" as const },
+  };
+
+  async function voiture(m: Membre, prive = false): Promise<string> {
+    return commeMembre(sql(), m.compte, async tx => {
+      const [row] = await tx`
+        insert into app.fiches (nature, titre, prive)
+        values ('vehicule', 'La voiture', ${prive}) returning id::text`;
+
+      return row?.id as string;
+    });
+  }
+
+  it("relit consommables, remplacements et relevés, et en calcule l'échéance", async () => {
+    const ficheId = await voiture(moi);
+    await commeMembre(sql(), moi.compte, async tx => {
+      const id = await ajouterConsommable(tx, ficheId, "Courroie", COURROIE);
+      await noterRemplacement(tx, id, fromISO("2020-10-15"), 50_000);
+      await noterReleve(tx, ficheId, fromISO("2025-10-15"), 100_000);
+      await noterReleve(tx, ficheId, fromISO("2026-10-15"), 118_250);
+      await ajouterConsommable(tx, ficheId, "Bougies", {
+        compteur: 60_000,
+        temps: null,
+      });
+    });
+
+    // Vu par l'autre membre du foyer.
+    const plan = await commeMembre(sql(), conjoint.compte, tx =>
+      lirePlanEntretien(tx, ficheId),
+    );
+
+    expect(plan.consommables.map(c => [c.intitule, c.dureeTemps])).toEqual([
+      ["Bougies", null],
+      ["Courroie", { count: 10, unit: "year" }],
+    ]);
+    expect(plan.releves).toEqual([
+      { le: fromISO("2025-10-15"), valeur: 100_000 },
+      { le: fromISO("2026-10-15"), valeur: 118_250 },
+    ]);
+    const courroie = plan.consommables.find(c => c.intitule === "Courroie");
+    expect(
+      courroie &&
+        etatConsommable(courroie, plan.releves, fromISO("2026-10-15")),
+    ).toMatchObject({
+      echeance: fromISO("2027-06-07"),
+      donneeManquante: false,
+    });
+  });
+
+  it("⚠️ la durée de vie se corrige, et rien d'autre ne s'efface", async () => {
+    const ficheId = await voiture(moi);
+    const id = await commeMembre(sql(), moi.compte, async tx => {
+      const c = await ajouterConsommable(tx, ficheId, "Courroie", COURROIE);
+      await noterRemplacement(tx, c, fromISO("2026-01-10"), null);
+
+      return c;
+    });
+
+    expect(
+      await commeMembre(sql(), conjoint.compte, tx =>
+        modifierDureeDeVie(tx, id, { ...COURROIE, compteur: 100_000 }),
+      ),
+    ).toBe(true);
+    expect(
+      (
+        await commeMembre(sql(), moi.compte, tx =>
+          lirePlanEntretien(tx, ficheId),
+        )
+      ).consommables[0],
+    ).toMatchObject({
+      dureeKm: 100_000,
+      remplacements: [{ le: fromISO("2026-01-10"), compteur: null }],
+    });
+
+    // Devenue purement kilométrique.
+    await commeMembre(sql(), moi.compte, tx =>
+      modifierDureeDeVie(tx, id, { compteur: 90_000, temps: null }),
+    );
+    expect(
+      (
+        await commeMembre(sql(), moi.compte, tx =>
+          lirePlanEntretien(tx, ficheId),
+        )
+      ).consommables[0],
+    ).toMatchObject({ dureeKm: 90_000, dureeTemps: null });
+
+    for (const table of ["remplacements", "consommables", "releves"]) {
+      await expect(
+        commeMembre(
+          sql(),
+          moi.compte,
+          tx => tx`delete from ${tx("app")}.${tx(table)}`,
+        ),
+      ).rejects.toThrow(/permission denied/);
+    }
+  });
+
+  it("⚠️ un autre foyer ne voit, ne corrige ni n'ajoute rien", async () => {
+    const ficheId = await voiture(moi);
+    const id = await commeMembre(sql(), moi.compte, tx =>
+      ajouterConsommable(tx, ficheId, "Courroie", COURROIE),
+    );
+
+    expect(
+      await commeMembre(sql(), voisin.compte, tx =>
+        lirePlanEntretien(tx, ficheId),
+      ),
+    ).toEqual({ consommables: [], releves: [] });
+    expect(
+      await commeMembre(sql(), voisin.compte, tx =>
+        modifierDureeDeVie(tx, id, COURROIE),
+      ),
+    ).toBe(false);
+    await expect(
+      commeMembre(sql(), voisin.compte, tx =>
+        noterReleve(tx, ficheId, fromISO("2026-10-15"), 1),
+      ),
+    ).rejects.toThrow();
+    await expect(
+      commeMembre(sql(), voisin.compte, tx =>
+        noterRemplacement(tx, id, fromISO("2026-10-15"), null),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("⚠️ le plan d'une fiche privée reste privé", async () => {
+    const ficheId = await voiture(moi, true);
+    await commeMembre(sql(), moi.compte, tx =>
+      ajouterConsommable(tx, ficheId, "Courroie", COURROIE),
+    );
+
+    expect(
+      (
+        await commeMembre(sql(), conjoint.compte, tx =>
+          lirePlanEntretien(tx, ficheId),
+        )
+      ).consommables,
+    ).toEqual([]);
+  });
+
+  it("refuse un consommable sans durée de vie, ou une durée sans unité", async () => {
+    const ficheId = await voiture(moi);
+
+    await expect(
+      commeMembre(sql(), moi.compte, tx =>
+        ajouterConsommable(tx, ficheId, "Rien", {
+          compteur: null,
+          temps: null,
+        }),
+      ),
+    ).rejects.toThrow(/check constraint/);
+    await expect(
+      commeMembre(
+        sql(),
+        moi.compte,
+        tx => tx`
+          insert into app.consommables (fiche_id, intitule, duree_nombre)
+          values (${ficheId}, 'Filtre', 3)`,
+      ),
+    ).rejects.toThrow(/check constraint/);
   });
 });
 

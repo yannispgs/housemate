@@ -57,6 +57,9 @@ beforeEach(async () => {
   await owner`delete from app.completions`;
   await owner`delete from app.echeances`;
   await owner`delete from app.pieces_jointes`;
+  await owner`delete from app.remplacements`;
+  await owner`delete from app.consommables`;
+  await owner`delete from app.releves`;
   await owner`delete from app.fiches`;
   await owner`delete from app.surnoms`;
   await owner`delete from app.liste_blanche`;
@@ -134,6 +137,10 @@ describe("le rôle anonymous", () => {
     "fiches",
     "echeances",
     "completions",
+    "pieces_jointes",
+    "consommables",
+    "remplacements",
+    "releves",
   ])("n'a aucun accès à app.%s", async table => {
     await expect(
       asAnonymous(tx => tx`select 1 from ${tx("app")}.${tx(table)}`),
