@@ -12,6 +12,7 @@
  * le jeu ne peut pas contenir ce que l'app refuserait.
  */
 import {
+  type Attribut,
   type EcheanceSaisie,
   echeanceSaisie,
   type GarantieSaisie,
@@ -21,6 +22,7 @@ import {
   nouvelleEcheance,
   nouvelleGarantie,
 } from "@/lib/data/saisie";
+import type { NouvellePieceJointe } from "@/lib/data/store";
 import {
   addDays,
   addMonths,
@@ -30,6 +32,24 @@ import {
 
 type Garantie = ReturnType<typeof nouvelleGarantie>;
 
+/**
+ * La facture fictive, déposée une fois pour toutes dans le stockage des
+ * previews (`housemate-previews`, 2026-10-16) : toutes les previews la
+ * référencent, aucune ne la dépose.
+ */
+export const FACTURE_FICTIVE: Omit<NouvellePieceJointe, "ficheId"> = {
+  nom: "Facture (fictive)",
+  typeMime: "application/pdf",
+  taille: 708,
+  cle: "demo/facture-fictive.pdf",
+};
+
+export interface GarantieFictive {
+  readonly garantie: Garantie;
+  /** Les pièces jointes de sa fiche (`ficheId` posé à l'insertion). */
+  readonly pieces: readonly Omit<NouvellePieceJointe, "ficheId">[];
+}
+
 export interface FicheFictive {
   readonly fiche: NouvelleFiche;
   /** Les échéances rattachées à cette fiche (`ficheId` posé à l'insertion). */
@@ -38,7 +58,7 @@ export interface FicheFictive {
 
 export interface JeuFictif {
   readonly fiches: readonly FicheFictive[];
-  readonly garanties: readonly Garantie[];
+  readonly garanties: readonly GarantieFictive[];
   /** Les échéances sans fiche : un rendez-vous, une corvée. */
   readonly echeances: readonly NouvelleEcheance[];
 }
@@ -57,41 +77,66 @@ export function jeuFictif(today: PlainDate): JeuFictif {
         ...s,
       }),
     );
-  const garantie = (s: GarantieSaisie): Garantie =>
-    nouvelleGarantie(garantieSaisie.parse(s));
+  const garantie = (
+    s: GarantieSaisie,
+    pieces: GarantieFictive["pieces"] = [],
+  ): GarantieFictive => ({
+    garantie: nouvelleGarantie(garantieSaisie.parse(s)),
+    pieces,
+  });
   const fiche = (
     nature: NouvelleFiche["nature"],
     titre: string,
     categorie: string,
     echeances: readonly NouvelleEcheance[] = [],
+    attributs: readonly Attribut[] = [],
   ): FicheFictive => ({
-    fiche: { nature, titre, categorie, attributs: [] },
+    fiche: { nature, titre, categorie, attributs },
     echeances,
+  });
+  const texte = (libelle: string, valeur: string): Attribut => ({
+    libelle,
+    type: "texte",
+    valeur,
+  });
+  const date = (libelle: string, valeur: string): Attribut => ({
+    libelle,
+    type: "date",
+    valeur,
   });
 
   return {
     fiches: [
-      fiche("vehicule", "La voiture", "Véhicule", [
-        // Ferme, en préavis : son importance monte à l'approche (§ 3.8a).
-        echeance({
-          titre: "Contrôle technique",
-          categorie: "Véhicule",
-          motif: "once",
-          date: jour(45),
-          tenue: "ferme",
-          toleranceJours: 0,
-          preavisJours: 60,
-        }),
-        echeance({
-          titre: "Révision de la voiture",
-          categorie: "Véhicule",
-          motif: "interval",
-          date: jour(120),
-          nombre: 1,
-          unite: "year",
-          preavisJours: 30,
-        }),
-      ]),
+      fiche(
+        "vehicule",
+        "La voiture",
+        "Véhicule",
+        [
+          // Ferme, en préavis : son importance monte à l'approche (§ 3.8a).
+          echeance({
+            titre: "Contrôle technique",
+            categorie: "Véhicule",
+            motif: "once",
+            date: jour(45),
+            tenue: "ferme",
+            toleranceJours: 0,
+            preavisJours: 60,
+          }),
+          echeance({
+            titre: "Révision de la voiture",
+            categorie: "Véhicule",
+            motif: "interval",
+            date: jour(120),
+            nombre: 1,
+            unite: "year",
+            preavisJours: 30,
+          }),
+        ],
+        [
+          texte("Immatriculation", "AA-000-AA"),
+          date("Mise en circulation", toISO(addMonths(today, -70))),
+        ],
+      ),
       fiche("plante", "Le citronnier en pot", "Jardin", [
         // Depuis la dernière fois (motif 4) : en préavis.
         echeance({
@@ -133,18 +178,41 @@ export function jeuFictif(today: PlainDate): JeuFictif {
           unite: "day",
         }),
       ]),
-      fiche("equipement", "La chaudière", "Maison", [
+      fiche(
+        "equipement",
+        "La chaudière",
+        "Maison",
+        [
+          echeance({
+            titre: "Entretien annuel de la chaudière",
+            categorie: "Maison",
+            motif: "interval",
+            date: jour(70),
+            nombre: 1,
+            unite: "year",
+            tenue: "ferme",
+            importance: "important",
+            toleranceJours: 0,
+            preavisJours: 30,
+          }),
+        ],
+        [
+          texte("Marque", "Marque fictive"),
+          date("Mise en service", toISO(addMonths(today, -40))),
+        ],
+      ),
+      fiche("equipement", "Le détecteur de fumée", "Maison", [
+        // Critique et à faire : rang 1 de l'accueil, en tête de tout.
         echeance({
-          titre: "Entretien annuel de la chaudière",
+          titre: "Changer la pile du détecteur de fumée",
           categorie: "Maison",
-          motif: "interval",
-          date: jour(70),
+          motif: "sinceCompletion",
+          date: toISO(addDays(addMonths(today, -12), -2)),
           nombre: 1,
           unite: "year",
           tenue: "ferme",
-          importance: "important",
-          toleranceJours: 0,
-          preavisJours: 30,
+          importance: "critique",
+          toleranceJours: 7,
         }),
       ]),
       fiche("equipement", "L'aspirateur", "Maison", [
@@ -188,19 +256,41 @@ export function jeuFictif(today: PlainDate): JeuFictif {
           preavisJours: 21,
         }),
       ]),
+      fiche(
+        "document",
+        "Le passeport",
+        "Administratif",
+        [
+          // Loin : seulement dans À venir.
+          echeance({
+            titre: "Renouveler le passeport",
+            categorie: "Administratif",
+            motif: "once",
+            date: toISO(addMonths(today, 18)),
+            tenue: "ferme",
+            importance: "important",
+            toleranceJours: 0,
+            preavisJours: 60,
+          }),
+        ],
+        [date("Date d'expiration", toISO(addMonths(today, 24)))],
+      ),
       fiche("lieu", "La véranda", "Maison"),
     ],
     garanties: [
       // Fin de garantie dans trois semaines : en préavis, pour mémoire.
-      garantie({
-        titre: "Le lave-linge",
-        marque: "Marque fictive",
-        modele: null,
-        categorie: "Maison",
-        dateAchat: toISO(addDays(addMonths(today, -24), 21)),
-        dureeNombre: 2,
-        dureeUnite: "year",
-      }),
+      garantie(
+        {
+          titre: "Le lave-linge",
+          marque: "Marque fictive",
+          modele: null,
+          categorie: "Maison",
+          dateAchat: toISO(addDays(addMonths(today, -24), 21)),
+          dureeNombre: 2,
+          dureeUnite: "year",
+        },
+        [FACTURE_FICTIVE],
+      ),
       garantie({
         titre: "La balance de cuisine",
         marque: null,

@@ -3,8 +3,13 @@
  * les mêmes fonctions que le formulaire d'ajout : sous la RLS, au nom d'un
  * membre du foyer (`commeMembre`).
  */
-import type { FicheFictive, JeuFictif } from "@/lib/data/jeu-fictif";
+import type {
+  FicheFictive,
+  GarantieFictive,
+  JeuFictif,
+} from "@/lib/data/jeu-fictif";
 import {
+  ajouterPieceJointe,
   creerEcheance,
   creerFiche,
   creerGarantie,
@@ -27,13 +32,20 @@ async function creerFicheFictive(tx: Tx, f: FicheFictive): Promise<number> {
   return f.echeances.length;
 }
 
+async function creerGarantieFictive(tx: Tx, g: GarantieFictive): Promise<void> {
+  const ficheId = await creerGarantie(tx, g.garantie);
+  await Promise.all(
+    g.pieces.map(p => ajouterPieceJointe(tx, { ...p, ficheId })),
+  );
+}
+
 export async function remplirFoyer(
   tx: Tx,
   jeu: JeuFictif,
 ): Promise<{ fiches: number; echeances: number }> {
   const [rattachees] = await Promise.all([
     Promise.all(jeu.fiches.map(f => creerFicheFictive(tx, f))),
-    Promise.all(jeu.garanties.map(g => creerGarantie(tx, g))),
+    Promise.all(jeu.garanties.map(g => creerGarantieFictive(tx, g))),
     Promise.all(jeu.echeances.map(e => creerEcheance(tx, e))),
   ]);
 

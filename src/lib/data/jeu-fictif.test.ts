@@ -15,12 +15,12 @@ describe("jeuFictif — le foyer fictif des previews", () => {
     const jeu = jeuFictif(fromISO(jour));
     const echeances = [
       ...jeu.fiches.flatMap(f => f.echeances),
-      ...jeu.garanties.map(g => g.echeance),
+      ...jeu.garanties.map(g => g.garantie.echeance),
       ...jeu.echeances,
     ];
 
-    expect(jeu.fiches.length + jeu.garanties.length).toBe(12);
-    expect(echeances).toHaveLength(18);
+    expect(jeu.fiches.length + jeu.garanties.length).toBe(14);
+    expect(echeances).toHaveLength(20);
     // Chaque récurrence se relit, comme en base.
     for (const e of echeances) {
       expect(parseRecurrence(e.recurrence)).not.toBeNull();
