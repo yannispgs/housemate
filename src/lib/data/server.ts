@@ -8,7 +8,8 @@
  */
 import postgres from "postgres";
 import { neonAuth } from "@/lib/auth/server";
-import { commeMembre, type Tx } from "@/lib/data/store";
+import { commeMembre, lireFoyer, type Tx } from "@/lib/data/store";
+import { libelleFoyer } from "@/lib/data/views";
 
 let sql: postgres.Sql | undefined;
 
@@ -43,4 +44,26 @@ export async function compteConnecte(): Promise<string> {
 /** Exécute `run` au nom de la personne connectée, sous la RLS. */
 export async function enMonNom<T>(run: (tx: Tx) => Promise<T>): Promise<T> {
   return commeMembre(baseApp(), await compteConnecte(), run);
+}
+
+/**
+ * « Foyer · … » pour l'en-tête, ou rien : sans session (page de connexion),
+ * ou si la base ne répond pas — l'en-tête n'est qu'un repère, il ne doit
+ * jamais faire tomber la page.
+ */
+export async function foyerConnecte(): Promise<string> {
+  const { data } = await neonAuth().getSession();
+  const id = (data as { user?: { id?: string } } | null)?.user?.id;
+
+  if (!id) {
+    return "";
+  }
+
+  try {
+    return libelleFoyer(await commeMembre(baseApp(), id, lireFoyer));
+  } catch (error_) {
+    console.error("[en-tête] nom du foyer illisible", error_);
+
+    return "";
+  }
 }

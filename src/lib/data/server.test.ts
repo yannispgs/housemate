@@ -9,7 +9,8 @@ vi.mock("@/lib/auth/server", () => ({
 const commeMembre = vi.fn((_sql: unknown, compte: string) =>
   Promise.resolve(`exécuté pour ${compte}`),
 );
-vi.mock("@/lib/data/store", () => ({ commeMembre }));
+const lireFoyer = vi.fn();
+vi.mock("@/lib/data/store", () => ({ commeMembre, lireFoyer }));
 
 async function load() {
   vi.resetModules();
@@ -52,5 +53,42 @@ describe("accès aux données côté serveur", () => {
     const server = await load();
 
     await expect(server.compteConnecte()).rejects.toThrow(/Aucune session/);
+  });
+});
+
+describe("foyerConnecte", () => {
+  it("ne dit rien sans session (page de connexion)", async () => {
+    getSession.mockResolvedValue({ data: null });
+    commeMembre.mockClear();
+    const server = await load();
+
+    expect(await server.foyerConnecte()).toBe("");
+    expect(commeMembre).not.toHaveBeenCalled();
+  });
+
+  it("lit le nom du foyer au nom du compte connecté", async () => {
+    vi.stubEnv("DATABASE_URL", "postgres://app@127.0.0.1:1/base");
+    getSession.mockResolvedValue({ data: { user: { id: "compte-1" } } });
+    commeMembre.mockResolvedValueOnce("Foyer Dulong");
+    const server = await load();
+
+    expect(await server.foyerConnecte()).toBe("Foyer · Dulong");
+    expect(commeMembre).toHaveBeenLastCalledWith(
+      expect.anything(),
+      "compte-1",
+      lireFoyer,
+    );
+  });
+
+  it("⚠️ ne fait jamais tomber la page si la base ne répond pas", async () => {
+    vi.stubEnv("DATABASE_URL", "postgres://app@127.0.0.1:1/base");
+    getSession.mockResolvedValue({ data: { user: { id: "compte-1" } } });
+    commeMembre.mockRejectedValueOnce(new Error("base injoignable"));
+    const signale = vi.spyOn(console, "error").mockImplementation(() => {});
+    const server = await load();
+
+    expect(await server.foyerConnecte()).toBe("");
+    expect(signale).toHaveBeenCalled();
+    signale.mockRestore();
   });
 });
