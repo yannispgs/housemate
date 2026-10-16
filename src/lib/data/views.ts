@@ -18,6 +18,7 @@ import {
   type OccurrenceState,
 } from "@/lib/domain/occurrence";
 import {
+  addDays,
   compare,
   daysBetween,
   type PlainDate,
@@ -32,7 +33,7 @@ import type {
   Tenure,
 } from "@/lib/ui/deadline";
 import type { RecordNature, RecordView } from "@/lib/ui/inventory";
-import type { UpcomingItem } from "@/lib/ui/upcoming";
+import { asRow, type UpcomingItem, type UpcomingRow } from "@/lib/ui/upcoming";
 
 /* ------------------------------------------------------------------------ */
 /* Fiches                                                                   */
@@ -398,6 +399,120 @@ export function nextUpText(
   }
 
   return `Le prochain rendez-vous est le ${longDate(next.occurrence.due)} : ${next.row.titre.toLowerCase()}. Il apparaîtra ici quand son préavis s'ouvrira.`;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Récap                                                                    */
+/* ------------------------------------------------------------------------ */
+
+export interface Recap {
+  readonly coming: UpcomingRow[];
+  readonly comingNote: string;
+  readonly done: UpcomingRow[];
+}
+
+/**
+ * La semaine du récap, du lundi au dimanche : celle de demain, comme le
+ * sous-titre de l'écran (`recapWeek`). Le dimanche, c'est donc la suivante.
+ */
+export function semaineDuRecap(today: PlainDate): {
+  lundi: PlainDate;
+  dimanche: PlainDate;
+} {
+  const demain = addDays(today, 1);
+  const jour = new Date(
+    Date.UTC(demain.year, demain.month - 1, demain.day),
+  ).getUTCDay();
+  const lundi = addDays(demain, -((jour + 6) % 7));
+
+  return { lundi, dimanche: addDays(lundi, 6) };
+}
+
+function noteDeLaSemaine(fermes: number): string {
+  if (fermes === 0) {
+    return "Aucune échéance ferme cette semaine : tout peut glisser.";
+  }
+
+  return fermes === 1
+    ? "Une seule échéance ferme cette semaine. Le reste peut glisser."
+    : `${fermes} échéances fermes cette semaine.`;
+}
+
+/**
+ * Le récap (handoff de design, § C). « Ce qui vient » : les occurrences de la
+ * semaine du récap, et celles déjà à faire qui traînent. « Fait » : les sept
+ * derniers jours. Les échéances « pour mémoire » n'y figurent jamais (§ 6).
+ */
+export function recap(rows: readonly EcheanceRow[], today: PlainDate): Recap {
+  const { lundi, dimanche } = semaineDuRecap(today);
+
+  const coming = rows
+    .map(row => situer(row, today))
+    .filter(
+      (s): s is Situee =>
+        s !== null &&
+        s.importance !== "memoire" &&
+        compare(s.occurrence.due, dimanche) <= 0 &&
+        (compare(s.occurrence.due, lundi) >= 0 ||
+          ACTIONNABLE.has(s.occurrence.state)),
+    )
+    .sort(
+      (a, b) =>
+        compare(a.occurrence.due, b.occurrence.due) ||
+        IMPORTANCE_RANK[a.importance] - IMPORTANCE_RANK[b.importance],
+    );
+
+  const done = rows
+    .filter(row => row.importance !== "memoire")
+    .flatMap(row =>
+      row.completions
+        .filter(
+          c =>
+            compare(c.faiteLe, addDays(today, -6)) >= 0 &&
+            compare(c.faiteLe, today) <= 0,
+        )
+        .map(c => ({ row, faiteLe: c.faiteLe })),
+    )
+    .sort((a, b) => compare(b.faiteLe, a.faiteLe));
+
+  return {
+    coming: coming.map(s => {
+      const enRetard =
+        ACTIONNABLE.has(s.occurrence.state) &&
+        compare(s.occurrence.due, today) < 0;
+
+      return asRow({
+        date: toISO(s.occurrence.due),
+        title: s.row.titre,
+        detail: [
+          enRetard
+            ? `${STATE_LABELS[s.occurrence.state]} ${whenText(s.occurrence.due, today)}`
+            : "",
+          s.row.ficheTitre ?? "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        category: s.row.categorie ?? SANS_CATEGORIE,
+        importance: s.importance,
+        raised: s.raised,
+        tenure: s.row.tenue,
+      });
+    }),
+    comingNote: noteDeLaSemaine(
+      coming.filter(s => s.row.tenue === "ferme").length,
+    ),
+    done: done.map(({ row, faiteLe }) =>
+      asRow({
+        date: toISO(faiteLe),
+        title: row.titre,
+        detail: row.ficheTitre ?? "",
+        category: row.categorie ?? SANS_CATEGORIE,
+        importance: row.importance,
+        raised: false,
+        tenure: row.tenue,
+      }),
+    ),
+  };
 }
 
 /**
