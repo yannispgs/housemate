@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.3.0](https://github.com/yannispgs/housemate/compare/v0.2.0...v0.3.0) (2026-10-16)
+
+
+### Features
+
+* **ajout:** ajouter une garantie, une échéance ou une fiche, et joindre la facture ([d57b28d](https://github.com/yannispgs/housemate/commit/d57b28d95077dcdaafa2a0bcd7304212d0fb7bd1))
+* **ajout:** ajouter une garantie, une échéance ou une fiche, et joindre la facture ([d714155](https://github.com/yannispgs/housemate/commit/d714155098476c966f0cc7a774aee2c6eb534e8f))
+* **ajout:** envoi direct de la pièce jointe au stockage, 25 Mo ([c658857](https://github.com/yannispgs/housemate/commit/c658857cafa0fe8e8998a0760cbb3949d823e2ca))
+* **ajout:** saisie et enregistrement des fiches, échéances et garanties ([364ee19](https://github.com/yannispgs/housemate/commit/364ee1966a8844bccc1a58c90db1cb64da4e7e71))
+* **donnees:** l'accueil, À venir et l'Inventaire lisent la base ([57de7e8](https://github.com/yannispgs/housemate/commit/57de7e8085e908f9c6b479e3ee97cc91e37f7436))
+* **donnees:** l'accueil, À venir et l'Inventaire lisent la base ([39fe3f2](https://github.com/yannispgs/housemate/commit/39fe3f2be12b3d2b1e1485bd610a7c26a76713e7))
+* **donnees:** l'état d'une occurrence, et la lecture au nom d'un membre ([e940b53](https://github.com/yannispgs/housemate/commit/e940b53ed5f45cf0365e42b1df6f6c7392d4bb5a))
+* **en-tête:** le nom du foyer dans l'en-tête du bureau ([812d4dc](https://github.com/yannispgs/housemate/commit/812d4dc3a18ff3e0224fca29e46ddf325492b9e6))
+* **en-tête:** le nom du foyer dans l'en-tête du bureau ([e8fe1a1](https://github.com/yannispgs/housemate/commit/e8fe1a186fdb239559b3c54764573835c3f87a57))
+* **entretien:** le socle du plan d'entretien ([9f986fb](https://github.com/yannispgs/housemate/commit/9f986fbf5cfb290459ef7611b65a575f93ca5838))
+* **entretien:** le socle du plan d'entretien ([21637a2](https://github.com/yannispgs/housemate/commit/21637a2fa1c16e4a14457a09aafca2d47306b09c))
+* **previews:** un foyer fictif, daté du jour de la preview ([d84fcc8](https://github.com/yannispgs/housemate/commit/d84fcc8cb4fc4a4975c0a0fdc6a9af80e898dd55))
+* **previews:** un foyer fictif, daté du jour de la preview ([63d87fa](https://github.com/yannispgs/housemate/commit/63d87fa7ca322e331878c03b4bc0d0775badd11c))
+* **previews:** une donnée dans chaque section de l'interface ([ef68138](https://github.com/yannispgs/housemate/commit/ef681382d4ad9dd8e9d5e76bb2103a5b602d3ead))
+* **recap:** le récap de la semaine lit la base ([59c6e0b](https://github.com/yannispgs/housemate/commit/59c6e0b6379c08ab9b7c6964c25c44122fc6b6f5))
+* **recap:** le récap de la semaine lit la base ([6100772](https://github.com/yannispgs/housemate/commit/610077278e3828cbaf2e948110f4b8edbd4e8724))
+
+
+### Bug Fixes
+
+* **ajout:** état d'envoi de la facture en union discriminée (SonarCloud) ([48844a7](https://github.com/yannispgs/housemate/commit/48844a742a5d43e72451179b3262c756c1b5f41c))
+* **ajout:** remarques de SonarCloud ([dbbeaec](https://github.com/yannispgs/housemate/commit/dbbeaecbfc2317c61095541a5dce3f9174c34e0d))
+* **ajout:** remarques de SonarCloud sur le stockage ([9c95e1c](https://github.com/yannispgs/housemate/commit/9c95e1c5d39032cc57c1a220df4ae137c82bba11))
+* **en-tête:** lire la session à la requête, jamais au build ([1351c7e](https://github.com/yannispgs/housemate/commit/1351c7e8586439f398236309640b4a67db9ee617))
+* **en-tête:** remarques de SonarCloud ([2189922](https://github.com/yannispgs/housemate/commit/2189922247cd6e5ce2c036b6026fad49c9b92dd3))
+* **navigation:** « Ajouter » au lieu de « Capture » ([0c4dbbd](https://github.com/yannispgs/housemate/commit/0c4dbbd5bb6a6a8f1427fc14552dd256023002b1))
+* **previews:** remarque de SonarCloud ([5b273ad](https://github.com/yannispgs/housemate/commit/5b273ad1972ece9b76afffad0761dd60c94cae8d))
+
 ## [0.2.0](https://github.com/yannispgs/housemate/compare/v0.1.0...v0.2.0) (2026-10-13)
 
 
