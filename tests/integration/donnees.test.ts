@@ -1,5 +1,7 @@
 import postgres from "postgres";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { FACTURE_FICTIVE, jeuFictif } from "@/lib/data/jeu-fictif";
+import { foyerVide, remplirFoyer } from "@/lib/data/remplissage";
 import {
   echeanceSaisie,
   garantieSaisie,
@@ -22,6 +24,7 @@ import {
   listerFiches,
   volumePiecesJointes,
 } from "@/lib/data/store";
+import { homeDeadlines, recap, upcomingItems } from "@/lib/data/views";
 import { fromISO } from "@/lib/domain/plain-date";
 import { DIRECT_URL } from "./env";
 
@@ -484,6 +487,72 @@ describe("pièces jointes", () => {
         tx => tx`delete from app.pieces_jointes where id = ${pieceId}`,
       ),
     ).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("remplissage d'une preview", () => {
+  const TODAY = fromISO("2026-10-15");
+
+  // La facture fictive n'est référencée qu'une fois par base (clé unique) :
+  // chaque test remplit un nouveau foyer de la même base locale.
+  beforeEach(async () => {
+    await owner`delete from app.pieces_jointes where cle = ${FACTURE_FICTIVE.cle}`;
+  });
+
+  it("remplit un foyer vide, sous la RLS, et rien d'autre", async () => {
+    expect(await commeMembre(sql(), moi.compte, foyerVide)).toBe(true);
+
+    expect(
+      await commeMembre(sql(), moi.compte, tx =>
+        remplirFoyer(tx, jeuFictif(TODAY)),
+      ),
+    ).toEqual({ fiches: 14, echeances: 20 });
+
+    expect(await commeMembre(sql(), conjoint.compte, foyerVide)).toBe(false);
+    // ⚠️ Le foyer voisin n'en voit rien.
+    expect(await commeMembre(sql(), voisin.compte, foyerVide)).toBe(true);
+  });
+
+  it("⚠️ remplit chaque section de l'interface", async () => {
+    await commeMembre(sql(), moi.compte, tx =>
+      remplirFoyer(tx, jeuFictif(TODAY)),
+    );
+    const echeances = await commeMembre(sql(), moi.compte, listerEcheances);
+    const fiches = await commeMembre(sql(), moi.compte, listerFiches);
+    const accueil = homeDeadlines(echeances, TODAY);
+
+    // Accueil : rang 1 (critique à faire), rang 3 (à faire), rang 4 (préavis).
+    // Une ferme en retard monte d'elle-même à critique (§ 3.8a) : le rang 1
+    // compte alors les radiateurs comme le détecteur.
+    expect(accueil[0]?.importance).toBe("critique");
+    expect(
+      accueil.filter(v => v.importance === "critique").map(v => v.title),
+    ).toContain("Changer la pile du détecteur de fumée");
+    expect(accueil.map(v => v.state)).toEqual(
+      expect.arrayContaining(["en retard", "due", "en préavis"]),
+    );
+    // À venir, Récap.
+    expect(upcomingItems(echeances, TODAY).length).toBeGreaterThan(0);
+    const { coming, done } = recap(echeances, TODAY);
+    expect(coming.length).toBeGreaterThan(0);
+    expect(done.length).toBeGreaterThan(0);
+    // Fiche : informations, pièces jointes, échéances.
+    const id = (titre: string) => fiches.find(f => f.titre === titre)?.id ?? "";
+    const laveLinge = await commeMembre(sql(), moi.compte, tx =>
+      lireFiche(tx, id("Le lave-linge")),
+    );
+    expect(laveLinge?.attributs.length).toBeGreaterThan(0);
+    expect(laveLinge?.echeances).toHaveLength(1);
+    expect(laveLinge?.pieces).toMatchObject([
+      { nom: "Facture (fictive)", typeMime: "application/pdf" },
+    ]);
+    expect(
+      (
+        await commeMembre(sql(), moi.compte, tx =>
+          lireFiche(tx, id("La voiture")),
+        )
+      )?.attributs.map(a => a.libelle),
+    ).toEqual(["Immatriculation", "Mise en circulation"]);
   });
 });
 
