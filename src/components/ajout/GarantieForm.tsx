@@ -10,7 +10,15 @@ import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { ETAT_AJOUT } from "@/lib/data/ajout-etat";
 import { ajouterGarantie } from "../../../app/_actions/ajout";
-import { BOUTON, CHAMP, Champ, LISTE } from "../forms/Champ";
+import {
+  BOUTON,
+  CHAMP,
+  Champ,
+  DATE,
+  LISTE,
+  Ligne,
+  NOMBRE,
+} from "../forms/Champ";
 import { envoyerPieceJointe } from "../forms/fichier";
 
 export function GarantieForm({ aujourdhui }: Readonly<{ aujourdhui: string }>) {
@@ -72,12 +80,14 @@ export function GarantieForm({ aujourdhui }: Readonly<{ aujourdhui: string }>) {
       <Champ libelle="Objet" erreur={erreurs.titre}>
         <input name="titre" className={CHAMP} required maxLength={120} />
       </Champ>
-      <Champ libelle="Marque" erreur={erreurs.marque}>
-        <input name="marque" className={CHAMP} maxLength={120} />
-      </Champ>
-      <Champ libelle="Modèle" erreur={erreurs.modele}>
-        <input name="modele" className={CHAMP} maxLength={120} />
-      </Champ>
+      <Ligne>
+        <Champ libelle="Marque" erreur={erreurs.marque}>
+          <input name="marque" className={CHAMP} maxLength={120} />
+        </Champ>
+        <Champ libelle="Modèle" erreur={erreurs.modele}>
+          <input name="modele" className={CHAMP} maxLength={120} />
+        </Champ>
+      </Ligne>
       <Champ
         libelle="Catégorie"
         aide="Où l'objet se range dans l'inventaire : Cuisine, Salle de bain…"
@@ -89,7 +99,7 @@ export function GarantieForm({ aujourdhui }: Readonly<{ aujourdhui: string }>) {
         <input
           name="dateAchat"
           type="date"
-          className={CHAMP}
+          className={DATE}
           defaultValue={aujourdhui}
           max={aujourdhui}
           required
@@ -108,14 +118,14 @@ export function GarantieForm({ aujourdhui }: Readonly<{ aujourdhui: string }>) {
             min={1}
             max={50}
             defaultValue={2}
-            className={`${CHAMP} w-24 flex-none`}
+            className={NOMBRE}
             required
             aria-label="Durée"
           />
           <select
             name="dureeUnite"
             defaultValue="year"
-            className={LISTE}
+            className={`${LISTE} flex-1`}
             aria-label="Unité"
           >
             <option value="year">ans</option>
