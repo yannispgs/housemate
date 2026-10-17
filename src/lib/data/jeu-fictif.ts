@@ -276,7 +276,7 @@ export function jeuFictif(today: PlainDate): JeuFictif {
           toleranceJours: 7,
         }),
       ]),
-      fiche("equipement", "L'aspirateur", "Maison", [
+      fiche("equipement", "L'aspirateur", "Nettoyage", [
         // Dû depuis quelques jours : à faire, rang 3 de l'accueil.
         echeance({
           titre: "Changer le filtre de l'aspirateur",
@@ -307,10 +307,10 @@ export function jeuFictif(today: PlainDate): JeuFictif {
           preavisJours: 30,
         }),
       ]),
-      fiche("personne", "Mamie", "Occasions", [
+      fiche("personne", "Mamie", "Fêtes", [
         echeance({
           titre: "Anniversaire de Mamie",
-          categorie: "Occasions",
+          categorie: "Fêtes",
           motif: "annual",
           date: jour(25),
           importance: "important",
@@ -345,7 +345,7 @@ export function jeuFictif(today: PlainDate): JeuFictif {
           titre: "Le lave-linge",
           marque: "Marque fictive",
           modele: null,
-          categorie: "Maison",
+          categorie: "Nettoyage",
           dateAchat: toISO(addDays(addMonths(today, -24), 21)),
           dureeNombre: 2,
           dureeUnite: "year",
@@ -356,7 +356,7 @@ export function jeuFictif(today: PlainDate): JeuFictif {
         titre: "La balance de cuisine",
         marque: null,
         modele: null,
-        categorie: "Maison",
+        categorie: "Cuisine",
         dateAchat: jour(-60),
         dureeNombre: 2,
         dureeUnite: "year",
@@ -397,7 +397,7 @@ export function jeuFictif(today: PlainDate): JeuFictif {
       }),
       echeance({
         titre: "Détartrer la cafetière",
-        categorie: "Maison",
+        categorie: "Cuisine",
         motif: "sinceCompletion",
         date: jour(-40),
         nombre: 1,
