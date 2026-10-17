@@ -531,13 +531,19 @@ describe("consommables à l'accueil et dans À venir (§ 5.3)", () => {
   const vue = (c: ConsommableRow) =>
     homeDeadlines([], TODAY, [c]).find(v => v.id === `consommable-${c.id}`);
 
-  it("entre à l'accueil en préavis, sans bouton, avec une date estimée", () => {
+  it("entre à l'accueil en préavis, avec une date estimée", () => {
     // Limite 119 000 : 750 km, 15 jours ; préavis 7,5 % = 23 jours.
     expect(vue(conso({}))).toMatchObject({
       title: "Vidange",
       state: "en préavis",
       when: "dans 15 jours",
-      verb: "",
+      verb: "Fait",
+      // « Fait » demande la date et le compteur, estimé en indication.
+      remplacement: {
+        consommableId: "c",
+        auCompteur: true,
+        estimation: 118_300,
+      },
       tenure: "ferme",
       importance: "normal",
       category: "Véhicule",
@@ -567,9 +573,12 @@ describe("consommables à l'accueil et dans À venir (§ 5.3)", () => {
           dureeTemps: { count: 1, unit: "day" },
           remplacements: [{ le: d("2026-10-12"), compteur: null }],
           categorie: null,
+          releves: [],
         }),
       ),
     ).toMatchObject({
+      // Au temps seul, et sans relevé : ni kilométrage, ni estimation.
+      remplacement: { consommableId: "c", auCompteur: false, estimation: null },
       state: "due",
       importance: "normal",
       raised: false,

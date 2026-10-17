@@ -449,6 +449,27 @@ export async function noterRemplacement(
     values (${consommableId}, ${toISO(le)}, ${compteur})`;
 }
 
+/**
+ * « Fait » sur un consommable (§ 5.3) : le remplacement, et — s'il est
+ * donné — le kilométrage du jour, qui est aussi un relevé de la série du
+ * compteur de sa fiche. Les deux ensemble, ou rien.
+ */
+export async function remplacerConsommable(
+  tx: Tx,
+  consommableId: string,
+  le: PlainDate,
+  compteur: number | null,
+): Promise<void> {
+  await noterRemplacement(tx, consommableId, le, compteur);
+
+  if (compteur !== null) {
+    await tx`
+      insert into app.releves (fiche_id, le, valeur)
+      select fiche_id, ${toISO(le)}, ${compteur}
+      from app.consommables where id = ${consommableId}`;
+  }
+}
+
 /** Un relevé du compteur de la fiche. */
 export async function noterReleve(
   tx: Tx,

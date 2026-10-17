@@ -10,7 +10,11 @@
  */
 
 import type { ConsommableRow } from "@/lib/data/store";
-import { etatConsommable, importanceConsommable } from "@/lib/domain/entretien";
+import {
+  compteurEstime,
+  etatConsommable,
+  importanceConsommable,
+} from "@/lib/domain/entretien";
 import {
   type Importance as DomainImportance,
   effectiveImportance,
@@ -376,6 +380,8 @@ interface ConsommableSitue {
   readonly raised: boolean;
   /** La date vient du compteur : c'est une estimation. */
   readonly estimee: boolean;
+  /** Le compteur estimé, arrondi à la centaine ; `null` sans relevé. */
+  readonly estimation: number | null;
 }
 
 /**
@@ -415,10 +421,15 @@ function situerConsommable(
     importance,
     raised: importance !== "normal",
     estimee: etat.terme === "compteur",
+    estimation: arrondiCentaine(compteurEstime(row.releves, today)),
   };
 }
 
 const KM = new Intl.NumberFormat("fr-FR");
+
+function arrondiCentaine(km: number | null): number | null {
+  return km === null ? null : Math.round(km / 100) * 100;
+}
 
 function consommableView(c: ConsommableSitue, today: PlainDate): DeadlineView {
   const quand = c.estimee
@@ -433,9 +444,8 @@ function consommableView(c: ConsommableSitue, today: PlainDate): DeadlineView {
     when: whenText(c.due, today),
     category: c.row.categorie ?? SANS_CATEGORIE,
     recipient: "Foyer",
-    // Pas de « Fait » : un remplacement se note avec le compteur du jour,
-    // depuis le plan d'entretien de la fiche (pas encore dessiné).
-    verb: "",
+    // « Fait » demande d'abord la date et le compteur (§ 5.3).
+    verb: "Fait",
     note: NOTES[c.importance],
     importance: c.importance,
     raised: c.raised,
@@ -456,6 +466,11 @@ function consommableView(c: ConsommableSitue, today: PlainDate): DeadlineView {
             : `Remplacé à ${KM.format(r.compteur)} km`,
       })),
     plants: null,
+    remplacement: {
+      consommableId: c.row.id,
+      auCompteur: c.row.dureeKm !== null,
+      estimation: c.estimation,
+    },
   };
 }
 
