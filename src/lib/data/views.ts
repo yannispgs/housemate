@@ -10,7 +10,7 @@
  */
 
 import type { ConsommableRow } from "@/lib/data/store";
-import { etatConsommable } from "@/lib/domain/entretien";
+import { etatConsommable, importanceConsommable } from "@/lib/domain/entretien";
 import {
   type Importance as DomainImportance,
   effectiveImportance,
@@ -361,45 +361,41 @@ interface ConsommableSitue {
 }
 
 /**
- * Un consommable comme une échéance ferme : il s'ouvre au dernier 7,5 % de
- * sa durée de vie (son préavis), monte jusqu'à critique (§ 3.8a), et reste
- * dû tant qu'aucun remplacement n'est noté. `null` sans échéance calculable.
+ * Un consommable comme une échéance « depuis la dernière fois » : il s'ouvre
+ * au seuil de son objet (7,5 % de sa durée de vie par défaut), reste dû tant
+ * qu'aucun remplacement n'est noté, et monte selon sa tenue — ferme jusqu'à
+ * critique, souple jamais (§ 5.3). `null` sans échéance calculable.
  */
 function situerConsommable(
   row: ConsommableRow,
   today: PlainDate,
 ): ConsommableSitue | null {
-  const etat = etatConsommable(row, row.releves, today);
+  const etat = etatConsommable(row, row.releves, today, row.seuil);
 
-  if (etat.echeance === null) {
+  if (etat.echeance === null || etat.reste === null) {
     return null;
   }
 
-  const reste = daysBetween(today, etat.echeance);
+  const jours = daysBetween(today, etat.echeance);
   let state: OccurrenceState = "dormante";
 
-  if (reste < 0) {
+  if (jours < 0) {
     state = "retard";
-  } else if (reste === 0) {
+  } else if (jours === 0) {
     state = "due";
-  } else if (reste <= etat.preavisJours) {
+  } else if (etat.reste <= 1) {
+    // Le préavis s'ouvre dans l'unité du terme : kilomètres ou durée.
     state = "preavis";
   }
 
-  const { importance, raised } = effectiveImportance({
-    base: "normal",
-    firm: true,
-    noticeDays: etat.preavisJours,
-    today,
-    due: etat.echeance,
-  });
+  const importance = FROM_DOMAIN[importanceConsommable(row.tenue, etat.reste)];
 
   return {
     row,
     due: etat.echeance,
     state,
-    importance: FROM_DOMAIN[importance],
-    raised,
+    importance,
+    raised: importance !== "normal",
     estimee: etat.terme === "compteur",
   };
 }
@@ -425,7 +421,7 @@ function consommableView(c: ConsommableSitue, today: PlainDate): DeadlineView {
     note: NOTES[c.importance],
     importance: c.importance,
     raised: c.raised,
-    tenure: "ferme",
+    tenure: c.row.tenue,
     tone: tone(c.state, c.importance),
     icon: iconFor(c.row.categorie),
     window: null,
@@ -546,7 +542,7 @@ export function upcomingItems(
       category: c.row.categorie ?? SANS_CATEGORIE,
       importance: c.importance,
       raised: c.raised,
-      tenure: "ferme" as const,
+      tenure: c.row.tenue,
     }));
 
   return [...echeances, ...remplacements].sort((a, b) =>

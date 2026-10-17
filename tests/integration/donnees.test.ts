@@ -26,8 +26,10 @@ import {
   listerEcheances,
   listerFiches,
   modifierDureeDeVie,
+  modifierTenueConsommable,
   noterReleve,
   noterRemplacement,
+  reglerEntretien,
   volumePiecesJointes,
 } from "@/lib/data/store";
 import { homeDeadlines, recap, upcomingItems } from "@/lib/data/views";
@@ -607,7 +609,7 @@ describe("plan d'entretien (§ 5.3)", () => {
       await commeMembre(sql(), voisin.compte, tx =>
         lirePlanEntretien(tx, ficheId),
       ),
-    ).toEqual({ consommables: [], releves: [] });
+    ).toEqual({ tenue: "souple", seuil: 0.075, consommables: [], releves: [] });
     expect(
       await commeMembre(sql(), voisin.compte, tx =>
         modifierDureeDeVie(tx, id, COURROIE),
@@ -661,6 +663,8 @@ describe("plan d'entretien (§ 5.3)", () => {
         intitule: "Courroie",
         ficheTitre: "La voiture",
         categorie: null,
+        tenue: "souple",
+        seuil: 0.075,
         dureeKm: 80_000,
         dureeTemps: { count: 10, unit: "year" },
         remplacements: [{ le: fromISO("2020-10-15"), compteur: 50_000 }],
@@ -670,6 +674,90 @@ describe("plan d'entretien (§ 5.3)", () => {
     expect(await commeMembre(sql(), voisin.compte, listerConsommables)).toEqual(
       [],
     );
+  });
+
+  it("⚠️ la tenue se règle sur l'objet, se remplace par consommable, et revient", async () => {
+    const ficheId = await voiture(moi);
+    const [courroie, balais] = await commeMembre(sql(), moi.compte, tx =>
+      Promise.all([
+        ajouterConsommable(tx, ficheId, "Courroie", COURROIE),
+        ajouterConsommable(tx, ficheId, "Balais", COURROIE, "souple"),
+      ]),
+    );
+    const tenues = async () =>
+      Object.fromEntries(
+        (await commeMembre(sql(), conjoint.compte, listerConsommables)).map(
+          c => [c.intitule, [c.tenue, c.seuil]],
+        ),
+      );
+
+    // Souple et 7,5 % par défaut.
+    expect(await tenues()).toEqual({
+      Balais: ["souple", 0.075],
+      Courroie: ["souple", 0.075],
+    });
+
+    expect(
+      await commeMembre(sql(), conjoint.compte, tx =>
+        reglerEntretien(tx, ficheId, { tenue: "ferme", seuil: 0.15 }),
+      ),
+    ).toBe(true);
+    // La courroie hérite ; les balais gardent leur tenue propre.
+    expect(await tenues()).toEqual({
+      Balais: ["souple", 0.15],
+      Courroie: ["ferme", 0.15],
+    });
+
+    await commeMembre(sql(), moi.compte, tx =>
+      Promise.all([
+        modifierTenueConsommable(tx, balais, null),
+        modifierTenueConsommable(tx, courroie, "souple"),
+      ]),
+    );
+    expect(await tenues()).toEqual({
+      Balais: ["ferme", 0.15],
+      Courroie: ["souple", 0.15],
+    });
+    expect(
+      await commeMembre(sql(), moi.compte, tx =>
+        lirePlanEntretien(tx, ficheId),
+      ),
+    ).toMatchObject({
+      tenue: "ferme",
+      seuil: 0.15,
+      consommables: [
+        { intitule: "Balais", tenue: null },
+        { intitule: "Courroie", tenue: "souple" },
+      ],
+    });
+  });
+
+  it("⚠️ borne le seuil, et un autre foyer ne règle rien", async () => {
+    const ficheId = await voiture(moi);
+    const id = await commeMembre(sql(), moi.compte, tx =>
+      ajouterConsommable(tx, ficheId, "Courroie", COURROIE),
+    );
+
+    await expect(
+      commeMembre(sql(), moi.compte, tx =>
+        reglerEntretien(tx, ficheId, { tenue: "ferme", seuil: 0.6 }),
+      ),
+    ).rejects.toThrow(/check constraint/);
+    expect(
+      await commeMembre(sql(), voisin.compte, tx =>
+        reglerEntretien(tx, ficheId, { tenue: "ferme", seuil: 0.1 }),
+      ),
+    ).toBe(false);
+    expect(
+      await commeMembre(sql(), voisin.compte, tx =>
+        modifierTenueConsommable(tx, id, "ferme"),
+      ),
+    ).toBe(false);
+    expect(
+      await commeMembre(sql(), voisin.compte, tx =>
+        lirePlanEntretien(tx, ficheId),
+      ),
+    ).toEqual({ tenue: "souple", seuil: 0.075, consommables: [], releves: [] });
   });
 
   it("refuse un consommable sans durée de vie, ou une durée sans unité", async () => {
@@ -711,7 +799,7 @@ describe("remplissage d'une preview", () => {
       await commeMembre(sql(), moi.compte, tx =>
         remplirFoyer(tx, jeuFictif(TODAY)),
       ),
-    ).toEqual({ fiches: 14, echeances: 20, consommables: 2 });
+    ).toEqual({ fiches: 14, echeances: 20, consommables: 3 });
 
     expect(await commeMembre(sql(), conjoint.compte, foyerVide)).toBe(false);
     // ⚠️ Le foyer voisin n'en voit rien.
@@ -735,6 +823,13 @@ describe("remplissage d'une preview", () => {
     expect(accueil.find(v => v.title === "Vidange")).toMatchObject({
       state: "en préavis",
       verb: "",
+      tenure: "ferme",
+    });
+    // Souple malgré la voiture ferme : en retard, sans monter.
+    expect(accueil.find(v => v.title === "Essuie-glaces")).toMatchObject({
+      state: "en retard",
+      importance: "normal",
+      tenure: "souple",
     });
     expect(
       upcomingItems(echeances, TODAY, consommables).map(i => i.title),

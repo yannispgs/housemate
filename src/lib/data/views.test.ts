@@ -519,6 +519,8 @@ describe("consommables à l'accueil et dans À venir (§ 5.3)", () => {
     intitule: "Vidange",
     ficheTitre: "La voiture",
     categorie: "Véhicule",
+    tenue: "ferme",
+    seuil: 0.075,
     dureeKm: 15_000,
     dureeTemps: null,
     remplacements: [{ le: d("2026-03-01"), compteur: 104_000 }],
@@ -555,10 +557,11 @@ describe("consommables à l'accueil et dans À venir (§ 5.3)", () => {
     ]);
   });
 
-  it("au temps, sans préavis : dû aujourd'hui, à faire, au rang 3", () => {
+  it("souple, dû aujourd'hui : à faire, au rang 3, sans monter", () => {
     expect(
       vue(
         conso({
+          tenue: "souple",
           dureeKm: null,
           dureeTemps: { count: 1, unit: "day" },
           remplacements: [{ le: d("2026-10-12"), compteur: null }],
@@ -568,10 +571,49 @@ describe("consommables à l'accueil et dans À venir (§ 5.3)", () => {
     ).toMatchObject({
       state: "due",
       importance: "normal",
+      raised: false,
+      tenure: "souple",
       detail: "13 octobre 2026 · La voiture",
       category: SANS_CATEGORIE,
       history: [{ text: "Remplacé" }],
     });
+  });
+
+  it("⚠️ souple et en retard : reste dû, normal, derrière les critiques", () => {
+    const ids = homeDeadlines(
+      [echeance({ id: "critique", importance: "critique" })],
+      TODAY,
+      [
+        conso({
+          tenue: "souple",
+          remplacements: [{ le: d("2026-01-01"), compteur: 100_000 }],
+        }),
+      ],
+    ).map(v => [v.id, v.importance, v.state]);
+
+    expect(ids).toEqual([
+      ["critique", "critique", "due"],
+      ["consommable-c", "normal", "en retard"],
+    ]);
+  });
+
+  it("ferme : important à la moitié du préavis, en kilomètres", () => {
+    // Limite 118 500 km, 118 250 au compteur : 250 km restants sur 1 125.
+    expect(
+      vue(
+        conso({ remplacements: [{ le: d("2026-03-01"), compteur: 103_500 }] }),
+      ),
+    ).toMatchObject({ importance: "important", raised: true });
+  });
+
+  it("le seuil de l'objet ouvre le préavis plus tôt", () => {
+    // 2 750 km restants : hors du préavis à 7,5 % (1 125), dedans à 20 %.
+    const loin = conso({
+      remplacements: [{ le: d("2026-03-01"), compteur: 106_000 }],
+    });
+
+    expect(vue(loin)).toBeUndefined();
+    expect(vue({ ...loin, seuil: 0.2 })).toMatchObject({ state: "en préavis" });
   });
 
   it("loin : seulement dans À venir, à sa date estimée", () => {

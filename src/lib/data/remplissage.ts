@@ -16,6 +16,7 @@ import {
   creerGarantie,
   noterReleve,
   noterRemplacement,
+  reglerEntretien,
   type Tx,
 } from "@/lib/data/store";
 
@@ -31,10 +32,19 @@ export async function foyerVide(tx: Tx): Promise<boolean> {
 async function creerFicheFictive(tx: Tx, f: FicheFictive): Promise<number> {
   const ficheId = await creerFiche(tx, f.fiche);
   await Promise.all([
+    ...(f.entretien === null
+      ? []
+      : [reglerEntretien(tx, ficheId, f.entretien)]),
     ...f.echeances.map(e => creerEcheance(tx, { ...e, ficheId })),
     ...f.releves.map(r => noterReleve(tx, ficheId, r.le, r.valeur)),
     ...f.consommables.map(async c => {
-      const id = await ajouterConsommable(tx, ficheId, c.intitule, c.duree);
+      const id = await ajouterConsommable(
+        tx,
+        ficheId,
+        c.intitule,
+        c.duree,
+        c.tenue,
+      );
       await Promise.all(
         c.remplacements.map(r => noterRemplacement(tx, id, r.le, r.compteur)),
       );
