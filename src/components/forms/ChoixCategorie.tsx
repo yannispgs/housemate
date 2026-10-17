@@ -45,8 +45,6 @@ export function ChoixCategorie({
           maxLength={120}
           placeholder="Nom de la catégorie"
           aria-label="Nouvelle catégorie"
-          // biome-ignore lint/a11y/noAutofocus: le champ n'apparaît que sur demande, juste après le choix.
-          autoFocus
           required
         />
       )}
