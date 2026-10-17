@@ -31,6 +31,7 @@ import {
   noterReleve,
   noterRemplacement,
   reglerEntretien,
+  remplacerConsommable,
   volumePiecesJointes,
 } from "@/lib/data/store";
 import { homeDeadlines, recap, upcomingItems } from "@/lib/data/views";
@@ -761,6 +762,37 @@ describe("plan d'entretien (§ 5.3)", () => {
     ).toEqual({ tenue: "souple", seuil: 0.075, consommables: [], releves: [] });
   });
 
+  it("⚠️ « Fait » note le remplacement et, s'il est donné, le relevé du jour", async () => {
+    const ficheId = await voiture(moi);
+    const id = await commeMembre(sql(), moi.compte, tx =>
+      ajouterConsommable(tx, ficheId, "Vidange", COURROIE),
+    );
+
+    await commeMembre(sql(), conjoint.compte, async tx => {
+      await remplacerConsommable(tx, id, fromISO("2026-10-17"), 90_200);
+      // Sans kilométrage : le remplacement seul, sans relevé.
+      await remplacerConsommable(tx, id, fromISO("2026-10-18"), null);
+    });
+
+    const plan = await commeMembre(sql(), moi.compte, tx =>
+      lirePlanEntretien(tx, ficheId),
+    );
+    expect(plan.consommables[0]?.remplacements).toEqual([
+      { le: fromISO("2026-10-17"), compteur: 90_200 },
+      { le: fromISO("2026-10-18"), compteur: null },
+    ]);
+    expect(plan.releves).toEqual([
+      { le: fromISO("2026-10-17"), valeur: 90_200 },
+    ]);
+
+    // Un autre foyer ne remplace rien.
+    await expect(
+      commeMembre(sql(), voisin.compte, tx =>
+        remplacerConsommable(tx, id, fromISO("2026-10-17"), 1),
+      ),
+    ).rejects.toThrow();
+  });
+
   it("refuse un consommable sans durée de vie, ou une durée sans unité", async () => {
     const ficheId = await voiture(moi);
 
@@ -823,7 +855,7 @@ describe("remplissage d'une preview", () => {
     // Un consommable en préavis à l'accueil, un autre loin dans À venir.
     expect(accueil.find(v => v.title === "Vidange")).toMatchObject({
       state: "en préavis",
-      verb: "",
+      verb: "Fait",
       tenure: "ferme",
     });
     // Souple malgré la voiture ferme : en retard, sans monter.

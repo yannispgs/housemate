@@ -12,7 +12,7 @@ import { DeadlineCard } from "../DeadlineCard";
 import { CheckIcon } from "../icons";
 import { Screen } from "../Screen";
 import { type AsideContent, DeadlinesAside } from "./Aside";
-import { shortDate, useToday } from "./useToday";
+import { isoDay, shortDate, useToday } from "./useToday";
 
 function EmptyState({ nextUp }: Readonly<{ nextUp: string | null }>) {
   return (
@@ -47,6 +47,12 @@ export interface HomeActions {
   /** Coche l'échéance ; rend l'id de la complétion, ou `null`. */
   readonly cocher: (echeanceId: string) => Promise<string | null>;
   readonly annuler: (completionIds: readonly string[]) => Promise<void>;
+  /** Un consommable remplacé, une fois la date et le compteur confirmés. */
+  readonly remplacer: (
+    consommableId: string,
+    le: string,
+    compteur: string,
+  ) => Promise<string | null>;
 }
 
 export function HomeScreen({
@@ -69,6 +75,8 @@ export function HomeScreen({
   // Les complétions enregistrées depuis l'accueil, pour « Annuler ».
   const [completions, setCompletions] = useState<readonly string[]>([]);
   const [erreur, setErreur] = useState<string | null>(null);
+  // Les consommables remplacés : enregistrés pour de bon, sans « Annuler ».
+  const [remplaces, setRemplaces] = useState<readonly string[]>([]);
 
   const faire = (id: string) => {
     setDone(ids => [...ids, id]);
@@ -97,7 +105,23 @@ export function HomeScreen({
       setErreur("L'annulation a échoué : recharge la page.");
     });
   };
-  const remaining = deadlines.filter(deadline => !done.includes(deadline.id));
+  const remaining = deadlines.filter(
+    deadline => !done.includes(deadline.id) && !remplaces.includes(deadline.id),
+  );
+  const remplacer = (deadline: DeadlineView) => {
+    const r = deadline.remplacement;
+
+    return r && actions
+      ? (le: string, compteur: string) =>
+          actions.remplacer(r.consommableId, le, compteur).then(message => {
+            if (message === null) {
+              setRemplaces(ids => [...ids, deadline.id]);
+            }
+
+            return message;
+          })
+      : undefined;
+  };
   const toggle = (id: string) =>
     setOpen(ids =>
       ids.includes(id) ? ids.filter(other => other !== id) : [...ids, id],
@@ -123,6 +147,8 @@ export function HomeScreen({
               todayLabel={shortDate(today)}
               onToggle={() => toggle(deadline.id)}
               onDone={() => faire(deadline.id)}
+              aujourdhui={isoDay(today)}
+              onReplace={remplacer(deadline)}
             />
           ))}
         </div>
