@@ -628,14 +628,18 @@ export function DeadlineCard({
           </div>
 
           <div className="flex flex-wrap items-center gap-[9px]">
-            <button
-              type="button"
-              onClick={onDone}
-              className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full bg-brand-strong px-5 font-text text-[15px] leading-none font-semibold text-white hover:brightness-[1.08] active:brightness-[.92]"
-            >
-              <CheckIcon size={17} />
-              {deadline.verb}
-            </button>
+            {/* Sans verbe, pas d'action principale : un consommable se
+                remplace depuis sa fiche, avec le compteur du jour. */}
+            {deadline.verb && (
+              <button
+                type="button"
+                onClick={onDone}
+                className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full bg-brand-strong px-5 font-text text-[15px] leading-none font-semibold text-white hover:brightness-[1.08] active:brightness-[.92]"
+              >
+                <CheckIcon size={17} />
+                {deadline.verb}
+              </button>
+            )}
             {deadline.canPostpone && !deadline.plants && (
               <button
                 type="button"
