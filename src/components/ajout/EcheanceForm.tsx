@@ -9,6 +9,7 @@ import { ETAT_AJOUT } from "@/lib/data/ajout-etat";
 import { IMPORTANCE_LABELS, IMPORTANCES } from "@/lib/ui/deadline";
 import { ajouterEcheance } from "../../../app/_actions/ajout";
 import { BOUTON, CHAMP, Champ, LISTE } from "../forms/Champ";
+import { ChoixCategorie } from "../forms/ChoixCategorie";
 
 type Motif = "once" | "interval" | "annual" | "sinceCompletion";
 
@@ -29,12 +30,16 @@ const DATE_LIBELLE: Readonly<Record<Motif, string>> = {
 export function EcheanceForm({
   fiches,
   aujourdhui,
+  categories,
 }: Readonly<{
   fiches: readonly { readonly id: string; readonly titre: string }[];
   aujourdhui: string;
+  categories: readonly string[];
 }>) {
   const [etat, agir, enCours] = useActionState(ajouterEcheance, ETAT_AJOUT);
   const [motif, setMotif] = useState<Motif>("once");
+  // Liée à une fiche, l'échéance en hérite la catégorie (§ 5.4).
+  const [ficheId, setFicheId] = useState("");
   const erreurs = etat.etape === "saisie" ? (etat.erreurs ?? {}) : {};
   const repetee = motif === "interval" || motif === "sinceCompletion";
 
@@ -143,12 +148,18 @@ export function EcheanceForm({
           className={CHAMP}
         />
       </Champ>
-      <Champ libelle="Catégorie" erreur={erreurs.categorie}>
-        <input name="categorie" className={CHAMP} maxLength={120} />
-      </Champ>
       {fiches.length > 0 && (
-        <Champ libelle="Fiche liée (facultatif)" erreur={erreurs.ficheId}>
-          <select name="ficheId" defaultValue="" className={LISTE}>
+        <Champ
+          libelle="Fiche liée (facultatif)"
+          aide={ficheId ? "Elle prend la catégorie de la fiche." : undefined}
+          erreur={erreurs.ficheId}
+        >
+          <select
+            name="ficheId"
+            value={ficheId}
+            onChange={event => setFicheId(event.target.value)}
+            className={LISTE}
+          >
             <option value="">Aucune</option>
             {fiches.map(fiche => (
               <option key={fiche.id} value={fiche.id}>
@@ -157,6 +168,9 @@ export function EcheanceForm({
             ))}
           </select>
         </Champ>
+      )}
+      {ficheId === "" && (
+        <ChoixCategorie categories={categories} erreur={erreurs.categorie} />
       )}
       <button type="submit" className={BOUTON} disabled={enCours}>
         Créer l'échéance

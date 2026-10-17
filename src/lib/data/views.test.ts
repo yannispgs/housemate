@@ -11,6 +11,7 @@ import {
   recordViews,
   SANS_CATEGORIE,
   semaineDuRecap,
+  sorteEcheance,
   upcomingItems,
   whenText,
 } from "@/lib/data/views";
@@ -680,5 +681,30 @@ describe("consommables à l'accueil et dans À venir (§ 5.3)", () => {
 
     expect(homeDeadlines([], TODAY, [sans])).toEqual([]);
     expect(upcomingItems([], TODAY, [sans])).toEqual([]);
+  });
+});
+
+describe("sorte d'une échéance et icône (§ 5.4)", () => {
+  it("reconnaît une fin de garantie à sa forme, quelle que soit sa catégorie", () => {
+    const garantie = echeance({
+      categorie: "Cuisine",
+      recurrence: {
+        kind: "derived",
+        sourceDate: d("2026-01-01"),
+        offset: { count: 2, unit: "year" },
+      },
+    });
+
+    expect(sorteEcheance(garantie)).toBe("garantie");
+    expect(sorteEcheance(echeance({}))).toBe("rappel");
+    expect(sorteEcheance(echeance({ recurrence: null }))).toBe("rappel");
+    expect(homeDeadlines([garantie], d("2027-12-28"))[0]?.icon).toBe(
+      "warranty",
+    );
+  });
+
+  it("garde l'icône de la catégorie pour un entretien", () => {
+    expect(iconFor("Véhicule", "entretien")).toBe("vehicle");
+    expect(iconFor("Cuisine", "garantie")).toBe("warranty");
   });
 });

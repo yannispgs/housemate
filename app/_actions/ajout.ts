@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import type { EtatAjout } from "@/lib/data/ajout-etat";
 import {
   achatValide,
+  categorieConnue,
+  categoriesProposees,
   echeanceSaisie,
   ficheSaisie,
   garantieSaisie,
@@ -13,13 +15,33 @@ import {
   nouvelleGarantie,
 } from "@/lib/data/saisie";
 import { enMonNom } from "@/lib/data/server";
-import { creerEcheance, creerFiche, creerGarantie } from "@/lib/data/store";
+import {
+  creerEcheance,
+  creerFiche,
+  creerGarantie,
+  listerCategories,
+  type Tx,
+} from "@/lib/data/store";
 import { aujourdhuiAParis } from "@/lib/data/today";
 
 const champs = (formulaire: FormData) =>
   Object.fromEntries(
     [...formulaire.entries()].filter(([, v]) => typeof v === "string"),
   );
+
+/**
+ * La catégorie saisie, ramenée à une catégorie connue du foyer quand elle
+ * n'en diffère que par la casse ou les espaces (§ 5.4).
+ */
+async function categorie(
+  tx: Tx,
+  saisie: string | null,
+): Promise<string | null> {
+  return categorieConnue(
+    saisie,
+    categoriesProposees(await listerCategories(tx)),
+  );
+}
 
 function rafraichir(): void {
   revalidatePath("/");
@@ -48,8 +70,14 @@ export async function ajouterGarantie(
     };
   }
 
-  const ficheId = await enMonNom(tx =>
-    creerGarantie(tx, nouvelleGarantie(saisie.valeur)),
+  const ficheId = await enMonNom(async tx =>
+    creerGarantie(
+      tx,
+      nouvelleGarantie({
+        ...saisie.valeur,
+        categorie: await categorie(tx, saisie.valeur.categorie),
+      }),
+    ),
   );
   rafraichir();
 
@@ -66,8 +94,12 @@ export async function ajouterFiche(
     return { etape: "saisie", erreurs: saisie.erreurs };
   }
 
-  const ficheId = await enMonNom(tx =>
-    creerFiche(tx, { ...saisie.valeur, attributs: [] }),
+  const ficheId = await enMonNom(async tx =>
+    creerFiche(tx, {
+      ...saisie.valeur,
+      categorie: await categorie(tx, saisie.valeur.categorie),
+      attributs: [],
+    }),
   );
   rafraichir();
 
@@ -84,7 +116,15 @@ export async function ajouterEcheance(
     return { etape: "saisie", erreurs: saisie.erreurs };
   }
 
-  await enMonNom(tx => creerEcheance(tx, nouvelleEcheance(saisie.valeur)));
+  await enMonNom(async tx =>
+    creerEcheance(
+      tx,
+      nouvelleEcheance({
+        ...saisie.valeur,
+        categorie: await categorie(tx, saisie.valeur.categorie),
+      }),
+    ),
+  );
   rafraichir();
   redirect("/a-venir");
 }

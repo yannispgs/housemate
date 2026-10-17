@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   achatValide,
+  CATEGORIES_DE_DEPART,
+  categorieConnue,
+  categoriesProposees,
   echeanceSaisie,
   ficheSaisie,
   garantieSaisie,
@@ -185,7 +188,8 @@ describe("garantie — la fiche de l'objet et sa fin de garantie", () => {
 
     expect(r.ok && nouvelleGarantie(r.valeur).echeance).toEqual({
       titre: "Fin de garantie — Balance",
-      categorie: "Garanties",
+      // Liée à l'objet : elle en hérite la catégorie (§ 5.4).
+      categorie: null,
       recurrence: {
         kind: "derived",
         sourceDate: "2026-10-13",
@@ -265,5 +269,47 @@ describe("lire", () => {
     );
 
     expect(r).toEqual({ ok: false, erreurs: { formulaire: "Refusé." } });
+  });
+});
+
+describe("catégories (§ 5.4)", () => {
+  it("propose les thèmes de départ et ceux du foyer, sans doublon de casse", () => {
+    expect(categoriesProposees(["cuisine ", "Bateau", "  "])).toEqual(
+      [...CATEGORIES_DE_DEPART, "Bateau"].sort((a, b) =>
+        a.localeCompare(b, "fr"),
+      ),
+    );
+  });
+
+  it("ramène une saisie à la catégorie connue qu'elle désigne", () => {
+    const connues = categoriesProposees([]);
+
+    expect(categorieConnue("  cuisine ", connues)).toBe("Cuisine");
+    expect(categorieConnue("SANTÉ", connues)).toBe("Santé");
+    expect(categorieConnue(" Bateau ", connues)).toBe("Bateau");
+    expect(categorieConnue(null, connues)).toBeNull();
+  });
+
+  it("⚠️ une échéance liée à une fiche ne garde pas de catégorie", () => {
+    const base = {
+      titre: "Vidange",
+      categorie: "Véhicule",
+      importance: "normal",
+      tenue: "souple",
+      toleranceJours: "3",
+      preavisJours: "7",
+      motif: "once",
+      date: "2026-11-01",
+    };
+    const liee = lire(echeanceSaisie, {
+      ...base,
+      ficheId: "6f1c2c9e-5a5b-4e3e-9d3c-2b1f0a9e8d7c",
+    });
+    const seule = lire(echeanceSaisie, base);
+
+    expect(liee.ok && nouvelleEcheance(liee.valeur).categorie).toBeNull();
+    expect(seule.ok && nouvelleEcheance(seule.valeur).categorie).toBe(
+      "Véhicule",
+    );
   });
 });

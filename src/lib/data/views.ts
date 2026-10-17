@@ -236,11 +236,29 @@ function tone(state: OccurrenceState, importance: Importance): StatusTone {
   return importance === "critique" ? "critical" : "serious";
 }
 
-/** L'icône d'une carte, devinée de la catégorie ; générique à défaut. */
-export function iconFor(categorie: string | null): CategoryIcon {
+/**
+ * La sorte d'une échéance (§ 5.4), calculée d'après sa forme, jamais saisie :
+ * une fin de garantie est dérivée d'une date d'achat (§ 5.2) ; un consommable
+ * est un entretien (§ 5.3) ; le reste, un rappel.
+ */
+export type SorteEcheance = "garantie" | "entretien" | "rappel";
+
+export function sorteEcheance(row: EcheanceRow): SorteEcheance {
+  return row.recurrence?.kind === "derived" ? "garantie" : "rappel";
+}
+
+/**
+ * L'icône d'une carte : d'abord la sorte (une fin de garantie garde son
+ * icône, même rangée sous « Cuisine »), puis la catégorie ; générique à
+ * défaut.
+ */
+export function iconFor(
+  categorie: string | null,
+  sorte: SorteEcheance = "rappel",
+): CategoryIcon {
   const c = (categorie ?? "").toLowerCase();
 
-  if (/garantie/.test(c)) {
+  if (sorte === "garantie" || /garantie/.test(c)) {
     return "warranty";
   }
 
@@ -299,7 +317,7 @@ function deadlineView(s: Situee, today: PlainDate): DeadlineView {
     raised: s.raised,
     tenure: row.tenue,
     tone: tone(occurrence.state, s.importance),
-    icon: iconFor(row.categorie),
+    icon: iconFor(row.categorie, sorteEcheance(row)),
     window: null,
     frostRange: null,
     // Reporter n'existe que pour les préparatifs d'un séjour (§ 3.6).
@@ -423,7 +441,7 @@ function consommableView(c: ConsommableSitue, today: PlainDate): DeadlineView {
     raised: c.raised,
     tenure: c.row.tenue,
     tone: tone(c.state, c.importance),
-    icon: iconFor(c.row.categorie),
+    icon: iconFor(c.row.categorie, "entretien"),
     window: null,
     frostRange: null,
     canPostpone: false,
