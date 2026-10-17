@@ -94,6 +94,7 @@ describe("etatConsommable — l'échéance d'un consommable", () => {
     expect(etatConsommable(courroie(), UN_AN, TODAY)).toEqual({
       echeance: d("2027-06-07"),
       preavisJours: 120,
+      terme: "compteur",
       donneeManquante: false,
       releveAttendu: false,
     });
@@ -135,6 +136,7 @@ describe("etatConsommable — l'échéance d'un consommable", () => {
     ).toEqual({
       echeance: d("2026-11-01"),
       preavisJours: 7,
+      terme: "temps",
       donneeManquante: false,
       releveAttendu: false,
     });
@@ -150,6 +152,7 @@ describe("etatConsommable — l'échéance d'un consommable", () => {
     ).toEqual({
       echeance: d("2030-10-15"),
       preavisJours: 274,
+      terme: "temps",
       donneeManquante: true,
       releveAttendu: false,
     });
@@ -171,6 +174,7 @@ describe("etatConsommable — l'échéance d'un consommable", () => {
     ).toEqual({
       echeance: null,
       preavisJours: 0,
+      terme: null,
       donneeManquante: true,
       releveAttendu: false,
     });

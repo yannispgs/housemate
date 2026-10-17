@@ -396,6 +396,14 @@ export interface PlanEntretien {
   readonly releves: readonly Releve[];
 }
 
+/** La durée au temps d'un consommable ; nombre et unité sont nuls ensemble. */
+function dureeTemps(
+  nombre: number | null,
+  unite: Duration["unit"] | null,
+): Duration | null {
+  return unite === null ? null : { count: nombre as number, unit: unite };
+}
+
 /** Le plan d'entretien d'une fiche visible ; vide sinon. */
 export async function lirePlanEntretien(
   tx: Tx,
@@ -431,11 +439,7 @@ export async function lirePlanEntretien(
       id: c.id,
       intitule: c.intitule,
       dureeKm: c.duree_compteur,
-      // Nombre et unité sont nuls ensemble (contrainte de la table).
-      dureeTemps:
-        c.duree_unite === null
-          ? null
-          : { count: c.duree_nombre as number, unit: c.duree_unite },
+      dureeTemps: dureeTemps(c.duree_nombre, c.duree_unite),
       remplacements: c.remplacements.map(r => ({
         le: fromISO(r.le),
         compteur: r.compteur,
@@ -443,4 +447,65 @@ export async function lirePlanEntretien(
     })),
     releves: releves.map(r => ({ le: fromISO(r.le), valeur: r.valeur })),
   };
+}
+
+/** Un consommable, avec ce que l'accueil et À venir en montrent. */
+export interface ConsommableRow extends Consommable {
+  readonly id: string;
+  readonly intitule: string;
+  readonly ficheTitre: string;
+  readonly categorie: string | null;
+  /** Les relevés du compteur de sa fiche. */
+  readonly releves: readonly Releve[];
+}
+
+/**
+ * Tous les consommables visibles, des fiches non archivées (§ 4.5 : les
+ * échéances d'une fiche archivée s'arrêtent).
+ */
+export async function listerConsommables(tx: Tx): Promise<ConsommableRow[]> {
+  const rows = await tx<
+    {
+      id: string;
+      intitule: string;
+      fiche_titre: string;
+      categorie: string | null;
+      duree_compteur: number | null;
+      duree_nombre: number | null;
+      duree_unite: Duration["unit"] | null;
+      remplacements: { le: string; compteur: number | null }[];
+      releves: { le: string; valeur: number }[];
+    }[]
+  >`
+    select c.id::text, c.intitule, f.titre as fiche_titre, f.categorie,
+      c.duree_compteur, c.duree_nombre, c.duree_unite,
+      coalesce((
+        select json_agg(json_build_object('le', r.fait_le, 'compteur', r.compteur)
+          order by r.fait_le)
+        from app.remplacements r where r.consommable_id = c.id
+      ), '[]') as remplacements,
+      coalesce((
+        select json_agg(json_build_object('le', v.le, 'valeur', v.valeur)
+          order by v.le)
+        from app.releves v
+        where v.fiche_id = c.fiche_id and v.attribut = 'kilometrage'
+      ), '[]') as releves
+    from app.consommables c
+    join app.fiches f on f.id = c.fiche_id
+    where f.archivee_le is null
+    order by f.titre, c.intitule`;
+
+  return rows.map(c => ({
+    id: c.id,
+    intitule: c.intitule,
+    ficheTitre: c.fiche_titre,
+    categorie: c.categorie,
+    dureeKm: c.duree_compteur,
+    dureeTemps: dureeTemps(c.duree_nombre, c.duree_unite),
+    remplacements: c.remplacements.map(r => ({
+      le: fromISO(r.le),
+      compteur: r.compteur,
+    })),
+    releves: c.releves.map(r => ({ le: fromISO(r.le), valeur: r.valeur })),
+  }));
 }

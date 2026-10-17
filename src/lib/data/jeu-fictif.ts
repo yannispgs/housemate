@@ -22,7 +22,7 @@ import {
   nouvelleEcheance,
   nouvelleGarantie,
 } from "@/lib/data/saisie";
-import type { NouvellePieceJointe } from "@/lib/data/store";
+import type { DureeDeVie, NouvellePieceJointe } from "@/lib/data/store";
 import {
   addDays,
   addMonths,
@@ -50,10 +50,26 @@ export interface GarantieFictive {
   readonly pieces: readonly Omit<NouvellePieceJointe, "ficheId">[];
 }
 
+export interface ConsommableFictif {
+  readonly intitule: string;
+  readonly duree: DureeDeVie;
+  readonly remplacements: readonly {
+    readonly le: PlainDate;
+    readonly compteur: number | null;
+  }[];
+}
+
 export interface FicheFictive {
   readonly fiche: NouvelleFiche;
   /** Les échéances rattachées à cette fiche (`ficheId` posé à l'insertion). */
   readonly echeances: readonly NouvelleEcheance[];
+  /** Le plan d'entretien (§ 5.3), vide le plus souvent. */
+  readonly consommables: readonly ConsommableFictif[];
+  /** Les relevés du compteur de la fiche. */
+  readonly releves: readonly {
+    readonly le: PlainDate;
+    readonly valeur: number;
+  }[];
 }
 
 export interface JeuFictif {
@@ -93,6 +109,8 @@ export function jeuFictif(today: PlainDate): JeuFictif {
   ): FicheFictive => ({
     fiche: { nature, titre, categorie, attributs },
     echeances,
+    consommables: [],
+    releves: [],
   });
   const texte = (libelle: string, valeur: string): Attribut => ({
     libelle,
@@ -107,36 +125,59 @@ export function jeuFictif(today: PlainDate): JeuFictif {
 
   return {
     fiches: [
-      fiche(
-        "vehicule",
-        "La voiture",
-        "Véhicule",
-        [
-          // Ferme, en préavis : son importance monte à l'approche (§ 3.8a).
-          echeance({
-            titre: "Contrôle technique",
-            categorie: "Véhicule",
-            motif: "once",
-            date: jour(45),
-            tenue: "ferme",
-            toleranceJours: 0,
-            preavisJours: 60,
-          }),
-          echeance({
-            titre: "Révision de la voiture",
-            categorie: "Véhicule",
-            motif: "interval",
-            date: jour(120),
-            nombre: 1,
-            unite: "year",
-            preavisJours: 30,
-          }),
+      {
+        ...fiche(
+          "vehicule",
+          "La voiture",
+          "Véhicule",
+          [
+            // Ferme, en préavis : son importance monte à l'approche (§ 3.8a).
+            echeance({
+              titre: "Contrôle technique",
+              categorie: "Véhicule",
+              motif: "once",
+              date: jour(45),
+              tenue: "ferme",
+              toleranceJours: 0,
+              preavisJours: 60,
+            }),
+            echeance({
+              titre: "Révision de la voiture",
+              categorie: "Véhicule",
+              motif: "interval",
+              date: jour(120),
+              nombre: 1,
+              unite: "year",
+              preavisJours: 30,
+            }),
+          ],
+          [
+            texte("Immatriculation", "AA-000-AA"),
+            date("Mise en circulation", toISO(addMonths(today, -70))),
+          ],
+        ),
+        // Environ 40 km par jour (§ 5.3, rythme).
+        releves: [
+          { le: addDays(today, -730), valeur: 61_000 },
+          { le: addDays(today, -365), valeur: 75_600 },
+          { le: addDays(today, -150), valeur: 84_200 },
+          { le: addDays(today, -20), valeur: 89_400 },
         ],
-        [
-          texte("Immatriculation", "AA-000-AA"),
-          date("Mise en circulation", toISO(addMonths(today, -70))),
+        consommables: [
+          // Limite à 91 000 km, 90 200 estimés : en préavis, à l'accueil.
+          {
+            intitule: "Vidange",
+            duree: { compteur: 15_000, temps: { count: 1, unit: "year" } },
+            remplacements: [{ le: addDays(today, -200), compteur: 76_000 }],
+          },
+          // Loin : seulement dans À venir, à une date estimée.
+          {
+            intitule: "Courroie de distribution",
+            duree: { compteur: 120_000, temps: { count: 10, unit: "year" } },
+            remplacements: [{ le: addMonths(today, -70), compteur: 0 }],
+          },
         ],
-      ),
+      },
       fiche("plante", "Le citronnier en pot", "Jardin", [
         // Depuis la dernière fois (motif 4) : en préavis.
         echeance({

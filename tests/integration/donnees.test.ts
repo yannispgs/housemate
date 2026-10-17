@@ -22,6 +22,7 @@ import {
   lireFoyer,
   lirePieceJointe,
   lirePlanEntretien,
+  listerConsommables,
   listerEcheances,
   listerFiches,
   modifierDureeDeVie,
@@ -639,6 +640,38 @@ describe("plan d'entretien (§ 5.3)", () => {
     ).toEqual([]);
   });
 
+  it("⚠️ liste les consommables visibles, hors fiches archivées", async () => {
+    const active = await voiture(moi);
+    const archivee = await voiture(moi);
+    const privee = await voiture(moi, true);
+    await commeMembre(sql(), moi.compte, async tx => {
+      const c = await ajouterConsommable(tx, active, "Courroie", COURROIE);
+      await noterRemplacement(tx, c, fromISO("2020-10-15"), 50_000);
+      await noterReleve(tx, active, fromISO("2026-10-15"), 118_250);
+      await ajouterConsommable(tx, archivee, "Pneus", COURROIE);
+      await ajouterConsommable(tx, privee, "Secret", COURROIE);
+    });
+    await owner`update app.fiches set archivee_le = now() where id = ${archivee}`;
+
+    expect(
+      await commeMembre(sql(), conjoint.compte, listerConsommables),
+    ).toEqual([
+      {
+        id: expect.any(String),
+        intitule: "Courroie",
+        ficheTitre: "La voiture",
+        categorie: null,
+        dureeKm: 80_000,
+        dureeTemps: { count: 10, unit: "year" },
+        remplacements: [{ le: fromISO("2020-10-15"), compteur: 50_000 }],
+        releves: [{ le: fromISO("2026-10-15"), valeur: 118_250 }],
+      },
+    ]);
+    expect(await commeMembre(sql(), voisin.compte, listerConsommables)).toEqual(
+      [],
+    );
+  });
+
   it("refuse un consommable sans durée de vie, ou une durée sans unité", async () => {
     const ficheId = await voiture(moi);
 
@@ -678,7 +711,7 @@ describe("remplissage d'une preview", () => {
       await commeMembre(sql(), moi.compte, tx =>
         remplirFoyer(tx, jeuFictif(TODAY)),
       ),
-    ).toEqual({ fiches: 14, echeances: 20 });
+    ).toEqual({ fiches: 14, echeances: 20, consommables: 2 });
 
     expect(await commeMembre(sql(), conjoint.compte, foyerVide)).toBe(false);
     // ⚠️ Le foyer voisin n'en voit rien.
@@ -690,8 +723,22 @@ describe("remplissage d'une preview", () => {
       remplirFoyer(tx, jeuFictif(TODAY)),
     );
     const echeances = await commeMembre(sql(), moi.compte, listerEcheances);
+    const consommables = await commeMembre(
+      sql(),
+      moi.compte,
+      listerConsommables,
+    );
     const fiches = await commeMembre(sql(), moi.compte, listerFiches);
-    const accueil = homeDeadlines(echeances, TODAY);
+    const accueil = homeDeadlines(echeances, TODAY, consommables);
+
+    // Un consommable en préavis à l'accueil, un autre loin dans À venir.
+    expect(accueil.find(v => v.title === "Vidange")).toMatchObject({
+      state: "en préavis",
+      verb: "",
+    });
+    expect(
+      upcomingItems(echeances, TODAY, consommables).map(i => i.title),
+    ).toContain("Courroie de distribution");
 
     // Accueil : rang 1 (critique à faire), rang 3 (à faire), rang 4 (préavis).
     // Une ferme en retard monte d'elle-même à critique (§ 3.8a) : le rang 1

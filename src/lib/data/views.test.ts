@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ConsommableRow } from "@/lib/data/store";
 import {
   type EcheanceRow,
   homeDeadlines,
@@ -504,5 +505,138 @@ describe("libelleFoyer", () => {
     [null, ""],
   ])("« %s » → « %s »", (nom, libelle) => {
     expect(libelleFoyer(nom)).toBe(libelle);
+  });
+});
+
+describe("consommables à l'accueil et dans À venir (§ 5.3)", () => {
+  // 50 km par jour ; 118 250 km au 13 octobre.
+  const RELEVES = [
+    { le: d("2025-10-13"), valeur: 100_000 },
+    { le: d("2026-10-13"), valeur: 118_250 },
+  ];
+  const conso = (champs: Partial<ConsommableRow>): ConsommableRow => ({
+    id: "c",
+    intitule: "Vidange",
+    ficheTitre: "La voiture",
+    categorie: "Véhicule",
+    dureeKm: 15_000,
+    dureeTemps: null,
+    remplacements: [{ le: d("2026-03-01"), compteur: 104_000 }],
+    releves: RELEVES,
+    ...champs,
+  });
+  const vue = (c: ConsommableRow) =>
+    homeDeadlines([], TODAY, [c]).find(v => v.id === `consommable-${c.id}`);
+
+  it("entre à l'accueil en préavis, sans bouton, avec une date estimée", () => {
+    // Limite 119 000 : 750 km, 15 jours ; préavis 7,5 % = 23 jours.
+    expect(vue(conso({}))).toMatchObject({
+      title: "Vidange",
+      state: "en préavis",
+      when: "dans 15 jours",
+      verb: "",
+      tenure: "ferme",
+      importance: "normal",
+      category: "Véhicule",
+      icon: "vehicle",
+      detail: "vers le 28 octobre 2026, estimé au compteur · La voiture",
+      history: [{ text: expect.stringMatching(/^Remplacé à 104.000 km$/) }],
+    });
+  });
+
+  it("⚠️ en retard, il monte à critique et passe au rang 1", () => {
+    const ids = homeDeadlines([echeance({ id: "due" })], TODAY, [
+      conso({ remplacements: [{ le: d("2026-01-01"), compteur: 100_000 }] }),
+    ]).map(v => [v.id, v.importance, v.state]);
+
+    expect(ids).toEqual([
+      ["consommable-c", "critique", "en retard"],
+      ["due", "normal", "due"],
+    ]);
+  });
+
+  it("au temps, sans préavis : dû aujourd'hui, à faire, au rang 3", () => {
+    expect(
+      vue(
+        conso({
+          dureeKm: null,
+          dureeTemps: { count: 1, unit: "day" },
+          remplacements: [{ le: d("2026-10-12"), compteur: null }],
+          categorie: null,
+        }),
+      ),
+    ).toMatchObject({
+      state: "due",
+      importance: "normal",
+      detail: "13 octobre 2026 · La voiture",
+      category: SANS_CATEGORIE,
+      history: [{ text: "Remplacé" }],
+    });
+  });
+
+  it("loin : seulement dans À venir, à sa date estimée", () => {
+    const courroie = conso({
+      intitule: "Courroie",
+      dureeKm: 120_000,
+      remplacements: [{ le: d("2020-01-01"), compteur: 50_000 }],
+    });
+
+    expect(vue(courroie)).toBeUndefined();
+    expect(upcomingItems([], TODAY, [courroie])).toEqual([
+      {
+        date: "2029-08-13",
+        title: "Courroie",
+        detail: "La voiture · date estimée au compteur",
+        category: "Véhicule",
+        importance: "normal",
+        raised: false,
+        tenure: "ferme",
+      },
+    ]);
+  });
+
+  it("À venir range consommables et échéances par date", () => {
+    const items = upcomingItems(
+      [
+        echeance({
+          titre: "Plus tard",
+          recurrence: { kind: "once", on: d("2026-12-01") },
+        }),
+      ],
+      TODAY,
+      [
+        conso({
+          dureeKm: null,
+          dureeTemps: { count: 1, unit: "month" },
+          remplacements: [{ le: d("2026-10-01"), compteur: null }],
+          categorie: null,
+        }),
+      ],
+    );
+
+    expect(items.map(i => [i.date, i.title, i.detail, i.category])).toEqual([
+      ["2026-11-01", "Vidange", "La voiture", SANS_CATEGORIE],
+      ["2026-12-01", "Plus tard", "", "Maison"],
+    ]);
+  });
+
+  it("montre les derniers remplacements, le plus récent d'abord", () => {
+    expect(
+      vue(
+        conso({
+          remplacements: [
+            { le: d("2025-09-01"), compteur: null },
+            { le: d("2026-03-01"), compteur: 104_000 },
+          ],
+        }),
+      )?.history.map(h => h.text),
+    ).toEqual([expect.stringMatching(/^Remplacé à /), "Remplacé"]);
+  });
+
+  it("rien pour un consommable sans remplacement noté", () => {
+    const sans = conso({ remplacements: [] });
+
+    expect(homeDeadlines([], TODAY, [sans])).toEqual([]);
+    expect(upcomingItems([], TODAY, [sans])).toEqual([]);
   });
 });

@@ -148,6 +148,11 @@ export interface EtatConsommable {
   readonly echeance: PlainDate | null;
   /** Le préavis : 7,5 % de la durée de vie du terme retenu, en jours. */
   readonly preavisJours: number;
+  /**
+   * Le terme retenu : au compteur, la date est une estimation (par le
+   * rythme) ; au temps, elle est exacte. `null` sans échéance.
+   */
+  readonly terme: "compteur" | "temps" | null;
   /** Il manque de quoi calculer le terme kilométrique (§ 5.3). */
   readonly donneeManquante: boolean;
   /** Le dernier relevé est trop vieux, et la limite approche. */
@@ -157,6 +162,7 @@ export interface EtatConsommable {
 interface Terme {
   readonly echeance: PlainDate;
   readonly preavisJours: number;
+  readonly terme: "compteur" | "temps";
 }
 
 function dernierRemplacement(c: Consommable): Remplacement | undefined {
@@ -171,6 +177,7 @@ function termeTemps(dernier: Remplacement, duree: Duration): Terme {
     preavisJours: Math.round(
       PART_DU_PREAVIS * daysBetween(dernier.le, echeance),
     ),
+    terme: "temps",
   };
 }
 
@@ -190,6 +197,7 @@ function termeKm(
   return {
     echeance: addDays(today, Math.ceil((limite - estime) / r)),
     preavisJours: Math.ceil((PART_DU_PREAVIS * duree) / r),
+    terme: "compteur",
   };
 }
 
@@ -204,6 +212,7 @@ export function etatConsommable(
     return {
       echeance: null,
       preavisJours: 0,
+      terme: null,
       donneeManquante: true,
       releveAttendu: false,
     };
@@ -238,6 +247,7 @@ export function etatConsommable(
   return {
     echeance: retenu?.echeance ?? null,
     preavisJours: retenu?.preavisJours ?? 0,
+    terme: retenu?.terme ?? null,
     donneeManquante: c.dureeKm !== null && km === null,
     releveAttendu,
   };

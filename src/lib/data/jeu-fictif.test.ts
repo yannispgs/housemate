@@ -40,8 +40,19 @@ describe("jeuFictif — le foyer fictif des previews", () => {
   });
 
   it("⚠️ ne contient aucune vraie donnée : que des titres neutres", () => {
-    const titres = JSON.stringify(jeuFictif(fromISO("2026-10-15")));
+    const textes = (v: unknown): string[] => {
+      if (typeof v === "string") {
+        return [v];
+      }
 
-    expect(titres).not.toMatch(/@|\b\d{5}\b/);
+      return typeof v === "object" && v !== null
+        ? Object.values(v).flatMap(textes)
+        : [];
+    };
+
+    // Ni adresse e-mail, ni code postal dans un texte du jeu.
+    for (const texte of textes(jeuFictif(fromISO("2026-10-15")))) {
+      expect(texte).not.toMatch(/@|\b\d{5}\b/);
+    }
   });
 });
