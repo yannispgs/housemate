@@ -10,6 +10,8 @@ import {
   lire,
   nouvelleEcheance,
   nouvelleGarantie,
+  remplacementSaisie,
+  remplacementValide,
 } from "@/lib/data/saisie";
 import { fromISO } from "@/lib/domain/plain-date";
 
@@ -311,5 +313,62 @@ describe("catégories (§ 5.4)", () => {
     expect(seule.ok && nouvelleEcheance(seule.valeur).categorie).toBe(
       "Véhicule",
     );
+  });
+});
+
+describe("remplacement d'un consommable (§ 5.3)", () => {
+  const ID = "6f1c2c9e-5a5b-4e3e-9d3c-2b1f0a9e8d7c";
+
+  it("accepte un kilométrage, ou son absence", () => {
+    expect(
+      lire(remplacementSaisie, {
+        consommableId: ID,
+        le: "2026-10-17",
+        compteur: "90200",
+      }),
+    ).toEqual({
+      ok: true,
+      valeur: { consommableId: ID, le: "2026-10-17", compteur: 90_200 },
+    });
+    expect(
+      lire(remplacementSaisie, {
+        consommableId: ID,
+        le: "2026-10-17",
+        compteur: "",
+      }),
+    ).toMatchObject({ ok: true, valeur: { compteur: null } });
+    expect(
+      lire(remplacementSaisie, { consommableId: ID, le: "2026-10-17" }),
+    ).toMatchObject({ ok: true, valeur: { compteur: null } });
+  });
+
+  it("refuse un kilométrage négatif ou décimal, et un consommable inconnu", () => {
+    for (const compteur of ["-1", "12.5"]) {
+      expect(
+        lire(remplacementSaisie, {
+          consommableId: ID,
+          le: "2026-10-17",
+          compteur,
+        }),
+      ).toMatchObject({ ok: false, erreurs: { compteur: expect.any(String) } });
+    }
+    expect(
+      lire(remplacementSaisie, { consommableId: "x", le: "2026-10-17" }),
+    ).toMatchObject({
+      ok: false,
+      erreurs: { consommableId: "Consommable inconnu." },
+    });
+  });
+
+  it("⚠️ refuse une date dans le futur", () => {
+    const saisie = { consommableId: ID, le: "2026-10-18", compteur: null };
+
+    expect(remplacementValide(saisie, fromISO("2026-10-17"))).toBe(false);
+    expect(
+      remplacementValide(
+        { ...saisie, le: "2026-10-17" },
+        fromISO("2026-10-17"),
+      ),
+    ).toBe(true);
   });
 });

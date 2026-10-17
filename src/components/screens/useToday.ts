@@ -31,3 +31,14 @@ const SHORT = new Intl.DateTimeFormat("fr-FR", {
 export function shortDate(day: Date | null): string {
   return day === null ? "" : SHORT.format(day);
 }
+
+/** « 2026-10-17 », au jour local ; vide tant que le jour n'est pas connu. */
+export function isoDay(day: Date | null): string {
+  if (day === null) {
+    return "";
+  }
+
+  const deux = (n: number) => String(n).padStart(2, "0");
+
+  return `${day.getFullYear()}-${deux(day.getMonth() + 1)}-${deux(day.getDate())}`;
+}

@@ -240,6 +240,31 @@ export function nouvelleEcheance(s: EcheanceSaisie): NouvelleEcheance {
 }
 
 /* ------------------------------------------------------------------------ */
+/* Remplacement d'un consommable (§ 5.3)                                    */
+/* ------------------------------------------------------------------------ */
+
+export const remplacementSaisie = z.object({
+  consommableId: z.uuid({ error: "Consommable inconnu." }),
+  le: dateIso,
+  // Facultatif : sans lui, la donnée manquante est signalée (§ 5.3). ⚠️ Le
+  // vide se lit AVANT la conversion en nombre, qui en ferait 0 km.
+  compteur: z.preprocess(
+    v => (v === "" || v === undefined ? null : v),
+    entier(0, 10_000_000).nullable(),
+  ),
+});
+
+export type RemplacementSaisie = z.infer<typeof remplacementSaisie>;
+
+/** Un remplacement ne peut pas être daté du futur. */
+export function remplacementValide(
+  saisie: RemplacementSaisie,
+  today: PlainDate,
+): boolean {
+  return compare(fromISO(saisie.le), today) <= 0;
+}
+
+/* ------------------------------------------------------------------------ */
 /* Garantie : la fiche de l'objet et sa fin de garantie                     */
 /* ------------------------------------------------------------------------ */
 
