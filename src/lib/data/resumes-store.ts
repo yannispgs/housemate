@@ -14,7 +14,7 @@ import {
   type SorteResume,
 } from "./resumes";
 
-interface ReglagesSql {
+export interface ReglagesSql {
   hebdo: boolean;
   hebdo_jour: number;
   hebdo_heure: number;
@@ -27,9 +27,13 @@ interface ReglagesSql {
   email_important: boolean;
   email_normal: boolean;
   email_memoire: boolean;
+  push_critique: boolean;
+  push_important: boolean;
+  push_normal: boolean;
+  push_memoire: boolean;
 }
 
-function reglagesDe(row: ReglagesSql | undefined): ReglagesResumes {
+export function reglagesDe(row: ReglagesSql | undefined): ReglagesResumes {
   if (row === undefined) {
     return REGLAGES_PAR_DEFAUT;
   }
@@ -39,6 +43,12 @@ function reglagesDe(row: ReglagesSql | undefined): ReglagesResumes {
     important: row.email_important,
     normal: row.email_normal,
     memoire: row.email_memoire,
+  };
+  const push: Record<Importance, boolean> = {
+    critique: row.push_critique,
+    important: row.push_important,
+    normal: row.push_normal,
+    memoire: row.push_memoire,
   };
 
   return {
@@ -51,13 +61,15 @@ function reglagesDe(row: ReglagesSql | undefined): ReglagesResumes {
     retards: row.retards,
     perimetre: row.perimetre,
     email,
+    push,
   };
 }
 
-const COLONNES = `
+export const COLONNES = `
   r.hebdo, r.hebdo_jour, r.hebdo_heure, r.quotidien, r.quotidien_heure,
   r.horizon_jours, r.retards, r.perimetre, r.email_critique,
-  r.email_important, r.email_normal, r.email_memoire`;
+  r.email_important, r.email_normal, r.email_memoire, r.push_critique,
+  r.push_important, r.push_normal, r.push_memoire`;
 
 /** Mes réglages, ou ceux par défaut si je n'ai rien changé. */
 export async function lireReglagesResumes(tx: Tx): Promise<ReglagesResumes> {
@@ -86,6 +98,10 @@ export async function enregistrerReglagesResumes(
     email_important: r.email.important,
     email_normal: r.email.normal,
     email_memoire: r.email.memoire,
+    push_critique: r.push.critique,
+    push_important: r.push.important,
+    push_normal: r.push.normal,
+    push_memoire: r.push.memoire,
   };
   await tx`
     insert into app.reglages_resumes ${tx(valeurs)}

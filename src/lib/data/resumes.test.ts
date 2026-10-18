@@ -32,6 +32,7 @@ const echeance = (overrides: Partial<EcheanceRow>): EcheanceRow => ({
   creeLe: d("2026-10-01"),
   completions: [],
   rappels: [],
+  notifier: null,
   ...overrides,
 });
 
@@ -270,6 +271,7 @@ describe("reglagesSaisis", () => {
       { hebdoJour: 0 },
       { quotidienHeure: 24 },
       { perimetre: "voisins" },
+      { push: { critique: true } },
     ]) {
       expect(
         reglagesSaisis.safeParse({ ...REGLAGES_PAR_DEFAUT, ...faux }).success,
