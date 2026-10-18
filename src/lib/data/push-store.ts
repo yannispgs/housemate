@@ -51,7 +51,7 @@ export async function listerAbonnes(sql: postgres.Sql): Promise<Abonne[]> {
       json_agg(json_build_object(
         'endpoint', p.endpoint,
         'keys', json_build_object('p256dh', p.p256dh, 'auth', p.auth))
-        order by p.cree_le) as abonnements
+        order by p.endpoint) as abonnements
     from app.membres m
     join app.abonnements_push p on p.membre_id = m.id
     left join app.reglages_resumes r on r.membre_id = m.id
