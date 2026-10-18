@@ -88,10 +88,23 @@ describe("rattachement d'un nouveau compte", () => {
       // Un webhook réessayé : rien de plus.
       await rattacher(sql, "compte-1", "parent@exemple.fr");
 
-      return sql`select foyer_id from app.membres where auth_user_id = 'compte-1'`;
+      return sql`
+        select m.foyer_id, a.email from app.membres m
+        join app.adresses a on a.membre_id = m.id
+        where m.auth_user_id = 'compte-1'`;
     });
 
-    expect(membres).toEqual([{ foyer_id: foyer }]);
+    expect(membres).toEqual([{ foyer_id: foyer, email: "parent@exemple.fr" }]);
+  });
+
+  it("⚠️ un membre ne lit pas les adresses", async () => {
+    await expect(
+      owner.begin(async tx => {
+        await tx`set local role authenticated`;
+
+        return tx`select * from app.adresses`;
+      }),
+    ).rejects.toThrow(/permission denied/);
   });
 
   it("ne crée rien pour une adresse hors liste", async () => {

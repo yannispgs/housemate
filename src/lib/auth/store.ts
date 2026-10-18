@@ -23,6 +23,8 @@ export async function estAutorisee(sql: Sql, email: string): Promise<boolean> {
 /**
  * Crée le membre du foyer auquel la liste blanche rattache cette adresse.
  * Rejouable : Neon Auth réessaie un webhook dont la réponse s'est perdue.
+ * L'adresse est notée avec le membre, d'un seul geste : c'est celle où
+ * partent ses résumés (§ 6).
  */
 export async function rattacher(
   sql: Sql,
@@ -30,9 +32,14 @@ export async function rattacher(
   email: string,
 ): Promise<void> {
   await sql`
-    insert into app.membres (foyer_id, auth_user_id)
-    select foyer_id, ${authUserId} from app.liste_blanche where email = ${email}
-    on conflict (auth_user_id) do nothing`;
+    with membre as (
+      insert into app.membres (foyer_id, auth_user_id)
+      select foyer_id, ${authUserId} from app.liste_blanche
+      where email = ${email}
+      on conflict (auth_user_id) do nothing
+      returning id)
+    insert into app.adresses (membre_id, email)
+    select id, ${email} from membre`;
 }
 
 /**
