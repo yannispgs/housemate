@@ -195,7 +195,7 @@ export function EcheanceForm({
             defaultChecked
             className="size-5 accent-[var(--brand-strong)]"
           />
-          Par e-mail
+          <span>Par e-mail</span>
         </label>
         <label className="flex min-h-11 items-center gap-2">
           <input
@@ -203,7 +203,7 @@ export function EcheanceForm({
             name="rappelPush"
             className="size-5 accent-[var(--brand-strong)]"
           />
-          Par notification
+          <span>Par notification</span>
         </label>
       </fieldset>
       {fiches.length > 0 && (
