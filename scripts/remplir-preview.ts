@@ -10,6 +10,10 @@
  * dans `seed` (`scripts/enrichir-seed.ts`). Une preview où elles sont déjà
  * notées n'est plus touchée. Rejouable.
  *
+ * Au même moment, ce que la preview tient de `seed` avance du temps écoulé
+ * depuis le jour de référence de `seed` : les dates saisies suivent le
+ * calendrier (src/lib/db/seed-dates.ts).
+ *
  * Tout passe par la RLS, au nom d'un membre du foyer : le jeu est écrit
  * comme le formulaire d'ajout l'écrirait.
  *
@@ -21,7 +25,16 @@ import { jeuFictif } from "../src/lib/data/jeu-fictif.ts";
 import { foyerVide, remplirFoyer } from "../src/lib/data/remplissage.ts";
 import { commeMembre, type Tx } from "../src/lib/data/store.ts";
 import { aujourdhuiAParis } from "../src/lib/data/today.ts";
+import { decaler } from "../src/lib/db/seed-dates.ts";
 import { type IdsByTable, newIds } from "../src/lib/db/seed-merge.ts";
+import { daysBetween, fromISO } from "../src/lib/domain/plain-date.ts";
+import {
+  colonnesDatees,
+  creerMarquage,
+  DATES_PASSEES,
+  existe,
+  lireLignes,
+} from "./seed-lignes.ts";
 
 const {
   NEON_API_KEY: key,
@@ -76,6 +89,63 @@ async function lireIdentifiants(db: postgres.Sql | Tx): Promise<IdsByTable> {
   return ids;
 }
 
+/**
+ * Avance les dates de ce que la preview tient de `seed`, du temps écoulé
+ * depuis le jour de référence de `seed` (src/lib/db/seed-dates.ts), et note
+ * de combien : la fusion les fera reculer d'autant.
+ */
+async function avancerHeritage(tx: Tx, herite: IdsByTable): Promise<void> {
+  const [reference] = await tx<{ le: string }[]>`
+    select le::text from preview_meta.reference limit 1`;
+  const aujourdhui = aujourdhuiAParis();
+
+  // Sans jour de référence, `seed` n'a encore rien reçu : rien à avancer, et
+  // la fusion saura que la preview est restée à l'heure réelle.
+  if (reference === undefined) {
+    return;
+  }
+
+  const jours = daysBetween(fromISO(reference.le), aujourdhui);
+  await tx`insert into preview_meta.decalage ${tx({ jours })}`;
+
+  if (jours === 0) {
+    return;
+  }
+
+  const maintenant = new Date();
+
+  await Promise.all(
+    [...(await colonnesDatees(tx))].map(async ([table, colonnes]) => {
+      const ids = herite.get(table) ?? new Set<string>();
+      const lignes = (await lireLignes(tx, table))
+        .filter(ligne => typeof ligne.id === "string" && ids.has(ligne.id))
+        .map(ligne =>
+          decaler(ligne, colonnes, jours, {
+            aujourdhui,
+            maintenant,
+            passees: DATES_PASSEES[table] ?? [],
+          }),
+        );
+
+      if (lignes.length === 0) {
+        return;
+      }
+
+      const cible = tx(`app.${table}`);
+      const noms = tx(colonnes.map(c => c.name));
+      const json = tx.json(lignes as postgres.JSONValue);
+      await tx`
+        update ${cible} as t
+        set (${noms}) = (
+          select ${noms}
+          from json_populate_record(null::${cible}, s.ligne)
+        )
+        from json_array_elements(${json}::json) as s(ligne)
+        where t.id::text = s.ligne->>'id'`;
+    }),
+  );
+}
+
 try {
   // Un seul foyer dans une preview : celui de démonstration, où sont
   // rattachés les comptes de la liste blanche.
@@ -92,8 +162,7 @@ try {
   }
 
   const compte = (membres[0] as { compte: string }).compte;
-  const [{ table } = { table: false }] = await sql<{ table: boolean }[]>`
-    select to_regclass('preview_meta.jeu_fictif') is not null as table`;
+  const table = await existe(sql, "jeu_fictif");
   // Deux requêtes : une table absente est refusée dès l'analyse, même
   // derrière un `and` qui ne l'atteindrait pas.
   const [{ pose } = { pose: false }] = table
@@ -112,20 +181,15 @@ try {
         }
 
         const rempli = await remplirFoyer(tx, jeuFictif(aujourdhuiAParis()));
-        // Redevenu propriétaire, dans la même transaction : le jeu et sa
-        // marque s'écrivent ensemble ou pas du tout.
+        // Redevenu propriétaire, dans la même transaction : le jeu, sa marque
+        // et le décalage des dates s'écrivent ensemble ou pas du tout.
         await tx`reset role`;
-        await tx`create schema if not exists preview_meta`;
-        await tx`
-          create table if not exists preview_meta.jeu_fictif (
-            table_name text not null,
-            id text not null,
-            primary key (table_name, id)
-          )`;
+        await creerMarquage(tx);
         const lignes = [...newIds(avant, await lireIdentifiants(tx))].flatMap(
           ([table, ids]) => [...ids].map(id => ({ table_name: table, id })),
         );
         await tx`insert into preview_meta.jeu_fictif ${tx(lignes)}`;
+        await avancerHeritage(tx, avant);
 
         return rempli;
       });

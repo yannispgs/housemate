@@ -24,4 +24,4 @@ runs:
         NEON_API_KEY: ${{ inputs.api-key }}
         NEON_PROJECT_ID: ${{ inputs.project }}
         PREVIEW_BRANCH: preview/pr-${{ inputs.pr-number }}
-      run: node scripts/enrichir-seed.ts
+      run: node --import ./scripts/alias.mjs scripts/enrichir-seed.ts

@@ -3,7 +3,7 @@
  * (src/lib/db/seed-merge.ts) : ajouts seulement, jeu fictif écarté.
  *
  *   NEON_API_KEY=… NEON_PROJECT_ID=… PREVIEW_BRANCH=preview/pr-42 \
- *   node scripts/enrichir-seed.ts
+ *   node --import ./scripts/alias.mjs scripts/enrichir-seed.ts
  *
  * À lancer APRÈS les migrations de `seed` : les lignes de la preview ont le
  * schéma de la PR, que `seed` doit déjà avoir.
@@ -13,16 +13,27 @@
  * fichiers des pièces jointes n'ont rien à suivre : toutes les previews
  * partagent le même bucket, que la fermeture d'une PR ne vide pas.
  *
+ * Les dates de la saisie reculent du décalage de la preview, pour rejoindre
+ * le repère de `seed` (src/lib/db/seed-dates.ts).
+ *
  * Rejouable : chaque insertion ignore une ligne déjà présente.
  */
 import postgres from "postgres";
+import { aujourdhuiAParis } from "../src/lib/data/today.ts";
+import { decaler } from "../src/lib/db/seed-dates.ts";
 import {
   type IdsByTable,
   planSeedMerge,
   type Reference,
-  type Row,
   type TableSnapshot,
 } from "../src/lib/db/seed-merge.ts";
+import { daysBetween, fromISO, toISO } from "../src/lib/domain/plain-date.ts";
+import {
+  colonnesDatees,
+  creerMarquage,
+  existe,
+  lireLignes,
+} from "./seed-lignes.ts";
 
 const key = process.env.NEON_API_KEY;
 const project = process.env.NEON_PROJECT_ID;
@@ -76,12 +87,9 @@ const source = await connect(preview.id);
 const seed = await connect(seedBranch.id);
 
 try {
-  const [marquage] = await source<{ table: boolean }[]>`
-    select to_regclass('preview_meta.jeu_fictif') is not null as table`;
-
   // Une preview d'avant le marquage : impossible d'y distinguer le jeu fictif
   // de la saisie, donc rien n'est recopié plutôt que d'encombrer `seed`.
-  if (!marquage?.table) {
+  if (!(await existe(source, "jeu_fictif"))) {
     console.log(
       `::warning::${previewName} n'a pas de jeu fictif marqué : rien n'est recopié dans seed.`,
     );
@@ -111,9 +119,6 @@ try {
     order by tablename`;
   const snapshots = await Promise.all(
     tables.map(async ({ name }): Promise<TableSnapshot> => {
-      const cible = source(`app.${name}`);
-      const [lu] = await source<{ rows: Row[] }[]>`
-        select coalesce(json_agg(t), '[]'::json) as rows from ${cible} t`;
       const qualifie = `app.${name}`;
 
       return {
@@ -126,22 +131,39 @@ try {
               table: r.target.replace(/^app\./, ""),
             }),
           ),
-        rows: lu?.rows ?? [],
+        rows: await lireLignes(source, name),
       };
     }),
   );
+  const [decalage] = (await existe(source, "decalage"))
+    ? await source<{ jours: number }[]>`
+        select jours from preview_meta.decalage limit 1`
+    : [];
+  const datees = await colonnesDatees(source);
 
   const plan = planSeedMerge(snapshots, fictifs as IdsByTable);
   const bilan = await seed.begin(async tx => {
-    // `seed` porte la table de marquage, vide : les previews qui en naissent
-    // savent ainsi qu'elles ont à poser, et à noter, leur jeu fictif.
-    await tx`create schema if not exists preview_meta`;
-    await tx`
-      create table if not exists preview_meta.jeu_fictif (
-        table_name text not null,
-        id text not null,
-        primary key (table_name, id)
-      )`;
+    // `seed` porte les tables de marquage, vides : les previews qui en
+    // naissent savent ainsi qu'elles ont à poser, et à noter, leur jeu fictif.
+    await creerMarquage(tx);
+    const aujourdhui = aujourdhuiAParis();
+    const [reference] = await tx<{ le: string }[]>`
+      select le::text from preview_meta.reference limit 1`;
+
+    if (reference === undefined) {
+      // La première recopie fixe le jour de référence : aujourd'hui, la
+      // saisie étant restée à l'heure réelle.
+      await tx`insert into preview_meta.reference ${tx({ le: toISO(aujourdhui) })}`;
+    }
+
+    // Ce que la preview a avancé, recule d'autant pour rejoindre le repère de
+    // `seed`. Sans décalage noté, la preview est restée à l'heure réelle.
+    const jours =
+      decalage?.jours ??
+      (reference === undefined
+        ? 0
+        : daysBetween(fromISO(reference.le), aujourdhui));
+
     const colonnes = new Map<string, string[]>();
 
     for (const c of await tx<{ table: string; name: string }[]>`
@@ -160,7 +182,11 @@ try {
         const liste = await precedents;
         const noms = colonnes.get(table.name) ?? [];
         const cible = tx(`app.${table.name}`);
-        const lignes = tx.json(table.rows as postgres.JSONValue);
+        const lignes = tx.json(
+          table.rows.map(ligne =>
+            decaler(ligne, datees.get(table.name) ?? [], -jours),
+          ) as postgres.JSONValue,
+        );
         const inserees = await tx`
           insert into ${cible} (${tx(noms)})
           select ${tx(noms)}
