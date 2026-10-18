@@ -155,7 +155,8 @@ describe("abonnés et journal", () => {
             memoire: true,
           },
         },
-        abonnements: [telephone, ordinateur],
+        // Dans l'ordre de leurs adresses : « ordi » avant « tel ».
+        abonnements: [ordinateur, telephone],
       },
     ]);
 
