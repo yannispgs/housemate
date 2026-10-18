@@ -15,6 +15,7 @@ import {
   marquesConnues,
   nouvelleEcheance,
   nouvelleGarantie,
+  rappelDejaPasse,
 } from "@/lib/data/saisie";
 import { enMonNom } from "@/lib/data/server";
 import {
@@ -121,6 +122,16 @@ export async function ajouterEcheance(
 
   if (!saisie.ok) {
     return { etape: "saisie", erreurs: saisie.erreurs };
+  }
+
+  if (rappelDejaPasse(saisie.valeur, aujourdhuiAParis())) {
+    return {
+      etape: "saisie",
+      erreurs: {
+        rappelNombre:
+          "Ce rappel tomberait aujourd'hui ou avant : choisis un délai plus court.",
+      },
+    };
   }
 
   await enMonNom(async tx =>

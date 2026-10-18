@@ -7,6 +7,7 @@ import {
   reglagesSaisis,
   resumesDus,
 } from "@/lib/data/resumes";
+import type { ConsommableRow } from "@/lib/data/store";
 import type { EcheanceRow } from "@/lib/data/views";
 import { fromISO } from "@/lib/domain/plain-date";
 
@@ -30,6 +31,7 @@ const echeance = (overrides: Partial<EcheanceRow>): EcheanceRow => ({
   pourMoi: true,
   creeLe: d("2026-10-01"),
   completions: [],
+  rappels: [],
   ...overrides,
 });
 
@@ -56,16 +58,17 @@ describe("resumesDus", () => {
     // Un appel manqué : rattrapé plus tard le même jour.
     expect(resumesDus(REGLAGES_PAR_DEFAUT, { jour: LUNDI, heure: 9 })).toEqual([
       "hebdo",
+      "quotidien",
     ]);
   });
 
-  it("ne part pas un autre jour que le sien", () => {
+  it("l'hebdomadaire ne part pas un autre jour que le sien", () => {
     expect(
       resumesDus(REGLAGES_PAR_DEFAUT, { jour: d("2026-10-20"), heure: 9 }),
-    ).toEqual([]);
+    ).toEqual(["quotidien"]);
   });
 
-  it("ajoute le quotidien chaque jour à son heure, s'il est voulu", () => {
+  it("compose le quotidien chaque jour à son heure, pour ses rappels", () => {
     const deux = reglages({ quotidien: true, quotidienHeure: 8 });
 
     expect(resumesDus(deux, { jour: LUNDI, heure: 7 })).toEqual(["hebdo"]);
@@ -73,11 +76,9 @@ describe("resumesDus", () => {
       "hebdo",
       "quotidien",
     ]);
+    // Même non voulu : un rappel par e-mail du jour le fait partir.
     expect(
-      resumesDus(reglages({ hebdo: false, quotidien: true }), {
-        jour: LUNDI,
-        heure: 7,
-      }),
+      resumesDus(reglages({ hebdo: false }), { jour: LUNDI, heure: 7 }),
     ).toEqual(["quotidien"]);
   });
 });
@@ -114,7 +115,13 @@ describe("composerResume", () => {
 
   it("regroupe tout en un seul message, section par section", () => {
     expect(
-      composerResume(rows, LUNDI, "hebdo", REGLAGES_PAR_DEFAUT, LIEN),
+      composerResume(
+        { echeances: rows, consommables: [] },
+        LUNDI,
+        "hebdo",
+        REGLAGES_PAR_DEFAUT,
+        LIEN,
+      ),
     ).toEqual({
       subject: "Votre semaine : 3 échéances",
       text: [
@@ -138,10 +145,11 @@ describe("composerResume", () => {
 
   it("suit l'horizon, les retards, le périmètre et les niveaux choisis", () => {
     const texte = composerResume(
-      rows,
+      { echeances: rows, consommables: [] },
       LUNDI,
       "quotidien",
       reglages({
+        quotidien: true,
         horizonJours: 30,
         retards: false,
         perimetre: "foyer",
@@ -181,7 +189,13 @@ describe("composerResume", () => {
     });
 
     expect(
-      composerResume([faite, seule], LUNDI, "hebdo", REGLAGES_PAR_DEFAUT, LIEN),
+      composerResume(
+        { echeances: [faite, seule], consommables: [] },
+        LUNDI,
+        "hebdo",
+        REGLAGES_PAR_DEFAUT,
+        LIEN,
+      ),
     ).toEqual({
       subject: "Votre semaine : 0 échéances",
       text: [
@@ -198,14 +212,20 @@ describe("composerResume", () => {
     });
     // Le quotidien ne parle que de ce qui vient : rien à dire ici.
     expect(
-      composerResume([faite], LUNDI, "quotidien", REGLAGES_PAR_DEFAUT, LIEN),
+      composerResume(
+        { echeances: [faite], consommables: [] },
+        LUNDI,
+        "quotidien",
+        reglages({ quotidien: true }),
+        LIEN,
+      ),
     ).toBeNull();
   });
 
   it("dit « 1 échéance » au singulier", () => {
     expect(
       composerResume(
-        [rows[0] as EcheanceRow],
+        { echeances: [rows[0] as EcheanceRow], consommables: [] },
         LUNDI,
         "quotidien",
         REGLAGES_PAR_DEFAUT,
@@ -216,12 +236,18 @@ describe("composerResume", () => {
 
   it("ne part pas vide", () => {
     expect(
-      composerResume([], LUNDI, "hebdo", REGLAGES_PAR_DEFAUT, LIEN),
+      composerResume(
+        { echeances: [], consommables: [] },
+        LUNDI,
+        "hebdo",
+        REGLAGES_PAR_DEFAUT,
+        LIEN,
+      ),
     ).toBeNull();
     // Une récurrence illisible ne compte pas.
     expect(
       composerResume(
-        [echeance({ recurrence: null })],
+        { echeances: [echeance({ recurrence: null })], consommables: [] },
         LUNDI,
         "hebdo",
         REGLAGES_PAR_DEFAUT,
@@ -249,5 +275,188 @@ describe("reglagesSaisis", () => {
         reglagesSaisis.safeParse({ ...REGLAGES_PAR_DEFAUT, ...faux }).success,
       ).toBe(false);
     }
+  });
+});
+
+const consommable = (
+  overrides: Partial<ConsommableRow> = {},
+): ConsommableRow => ({
+  id: "c",
+  intitule: "Filtre à air",
+  ficheTitre: "La voiture",
+  categorie: "Véhicule",
+  tenue: "souple",
+  seuil: 0.075,
+  dureeKm: null,
+  dureeTemps: { count: 1, unit: "year" },
+  remplacements: [{ le: d("2025-10-22"), compteur: null }],
+  releves: [],
+  ...overrides,
+});
+
+describe("composerResume, avec le plan d'entretien", () => {
+  it("parle des consommables comme des échéances, et de leurs remplacements", () => {
+    const texte = composerResume(
+      {
+        echeances: [],
+        consommables: [
+          consommable(),
+          consommable({
+            id: "c2",
+            intitule: "Bougies",
+            remplacements: [{ le: d("2026-10-16"), compteur: null }],
+          }),
+        ],
+      },
+      LUNDI,
+      "hebdo",
+      REGLAGES_PAR_DEFAUT,
+      LIEN,
+    );
+
+    expect(texte?.subject).toBe("Votre semaine : 1 échéance");
+    expect(texte?.text).toContain("- 22 oct. · Filtre à air · La voiture");
+    expect(texte?.text).toContain(
+      "Fait ces sept derniers jours\n- 16 oct. · Bougies · La voiture",
+    );
+  });
+
+  it("dit qu'une date tirée du compteur est une estimation", () => {
+    const texte = composerResume(
+      {
+        echeances: [],
+        consommables: [
+          consommable({
+            dureeKm: 10000,
+            dureeTemps: null,
+            remplacements: [{ le: d("2026-01-01"), compteur: 0 }],
+            releves: [
+              { le: d("2026-01-01"), valeur: 0 },
+              { le: d("2026-10-01"), valeur: 9500 },
+            ],
+          }),
+        ],
+      },
+      LUNDI,
+      "hebdo",
+      REGLAGES_PAR_DEFAUT,
+      LIEN,
+    );
+
+    expect(texte?.text).toContain("estimé au compteur");
+  });
+});
+
+describe("composerResume, rappels par e-mail (§ 6)", () => {
+  const rappelee = echeance({
+    id: "r",
+    titre: "Contrôle technique",
+    recurrence: { kind: "once", on: d("2026-11-19") },
+    rappels: [{ amount: 1, unit: "month", channels: ["email"] }],
+  });
+
+  it("met au quotidien du jour une échéance rappelée, même hors horizon", () => {
+    const texte = composerResume(
+      { echeances: [rappelee], consommables: [] },
+      LUNDI,
+      "quotidien",
+      reglages({ quotidien: true }),
+      LIEN,
+    );
+
+    expect(texte?.text).toContain(
+      "Rappels du jour\n- dans 31 jours · Contrôle technique",
+    );
+  });
+
+  it("fait partir un quotidien non voulu, avec ses seuls rappels", () => {
+    const texte = composerResume(
+      {
+        echeances: [rappelee, echeance({ id: "autre", titre: "Autre chose" })],
+        consommables: [consommable()],
+      },
+      LUNDI,
+      "quotidien",
+      REGLAGES_PAR_DEFAUT,
+      LIEN,
+    );
+
+    expect(texte?.subject).toBe("Aujourd'hui : 1 échéance");
+    expect(texte?.text).not.toContain("Autre chose");
+    expect(texte?.text).not.toContain("Filtre");
+  });
+
+  it("donne d'office à une critique un rappel le jour même, sans doublon", () => {
+    const texte = composerResume(
+      {
+        echeances: [echeance({ titre: "Vidange", importance: "critique" })],
+        consommables: [],
+      },
+      LUNDI,
+      "quotidien",
+      reglages({ quotidien: true }),
+      LIEN,
+    );
+
+    expect(texte?.text).toContain("Rappels du jour\n- aujourd'hui · Vidange");
+    expect(texte?.text).not.toContain("À faire");
+  });
+
+  it("ignore un rappel push seul, un autre jour, l'hebdo, et ce qui ne me concerne pas", () => {
+    const sans = (rows: EcheanceRow[], sorte: "hebdo" | "quotidien") =>
+      composerResume(
+        { echeances: rows, consommables: [] },
+        LUNDI,
+        sorte,
+        reglages({ hebdo: false }),
+        LIEN,
+      );
+
+    expect(
+      sans(
+        [
+          echeance({
+            ...rappelee,
+            rappels: [{ amount: 1, unit: "month", channels: ["push"] }],
+          }),
+        ],
+        "quotidien",
+      ),
+    ).toBeNull();
+    expect(
+      sans(
+        [
+          echeance({
+            ...rappelee,
+            rappels: [{ amount: 2, unit: "week", channels: ["email"] }],
+          }),
+        ],
+        "quotidien",
+      ),
+    ).toBeNull();
+    expect(
+      sans([echeance({ ...rappelee, pourMoi: false })], "quotidien"),
+    ).toBeNull();
+    expect(
+      sans(
+        [
+          echeance({
+            importance: "critique",
+            tenue: "ferme",
+            recurrence: { kind: "once", on: d("2026-10-10") },
+          }),
+        ],
+        "quotidien",
+      ),
+    ).toBeNull();
+    expect(
+      composerResume(
+        { echeances: [rappelee], consommables: [] },
+        LUNDI,
+        "hebdo",
+        reglages({ horizonJours: 7 }),
+        LIEN,
+      ),
+    ).toBeNull();
   });
 });

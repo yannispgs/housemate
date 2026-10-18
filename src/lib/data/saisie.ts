@@ -17,6 +17,7 @@ import { NATURES } from "@/lib/data/views";
 import type { Month } from "@/lib/domain/month";
 import { compare, fromISO, type PlainDate } from "@/lib/domain/plain-date";
 import type { Duration, ScheduledRecurrence } from "@/lib/domain/recurrence";
+import { type Reminder, reminderDate } from "@/lib/domain/reminders";
 import { IMPORTANCES } from "@/lib/ui/deadline";
 
 /* ------------------------------------------------------------------------ */
@@ -230,8 +231,30 @@ export const echeanceSaisie = z
       .transform(v => v || null),
     nombre: entier(1, 1000).optional(),
     unite: unite.optional(),
+    // Un rappel à la main, facultatif (§ 6) : « X unités avant », et ses
+    // canaux. Vide : aucun.
+    rappelNombre: z
+      // Le vide d'abord : `entier` lirait "" comme 0, « le jour même ».
+      .union([z.literal(""), entier(0, 1000)])
+      .optional()
+      .transform(v => (v === "" ? undefined : v)),
+    rappelUnite: z.enum(["day", "week", "month"]).optional(),
+    rappelEmail: z.literal("on").optional(),
+    rappelPush: z.literal("on").optional(),
   })
   .superRefine((s, ctx) => {
+    if (
+      s.rappelNombre !== undefined &&
+      s.rappelEmail === undefined &&
+      s.rappelPush === undefined
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["rappelNombre"],
+        message: "Choisis au moins un canal : e-mail ou notification.",
+      });
+    }
+
     if (s.motif !== "sinceCompletion" && s.date === null) {
       ctx.addIssue({
         code: "custom",
@@ -265,6 +288,25 @@ export interface NouvelleEcheance {
   readonly ficheId: string | null;
   /** « N après la dernière fois » : la dernière fois, à enregistrer comme fait. */
   readonly derniereFois: string | null;
+  /** Les rappels ajoutés à la main. */
+  readonly rappels: readonly Reminder[];
+}
+
+function rappelsDe(s: EcheanceSaisie): Reminder[] {
+  if (s.rappelNombre === undefined) {
+    return [];
+  }
+
+  return [
+    {
+      amount: s.rappelNombre,
+      unit: s.rappelUnite ?? "day",
+      channels: [
+        ...(s.rappelEmail ? (["email"] as const) : []),
+        ...(s.rappelPush ? (["push"] as const) : []),
+      ],
+    },
+  ];
 }
 
 function recurrenceDe(s: EcheanceSaisie): ScheduledRecurrence {
@@ -285,6 +327,21 @@ function recurrenceDe(s: EcheanceSaisie): ScheduledRecurrence {
   }
 }
 
+/**
+ * Vrai si le rappel d'une échéance « une seule fois » tomberait aujourd'hui
+ * ou avant : il ne préviendrait de rien, la saisie le refuse (§ 6). Pour une
+ * échéance qui revient, un rappel passé vaudra pour les suivantes.
+ */
+export function rappelDejaPasse(s: EcheanceSaisie, today: PlainDate): boolean {
+  const [rappel] = rappelsDe(s);
+
+  if (rappel === undefined || s.motif !== "once" || s.date === null) {
+    return false;
+  }
+
+  return compare(reminderDate(fromISO(s.date), rappel), today) <= 0;
+}
+
 export function nouvelleEcheance(s: EcheanceSaisie): NouvelleEcheance {
   return {
     titre: s.titre,
@@ -297,6 +354,7 @@ export function nouvelleEcheance(s: EcheanceSaisie): NouvelleEcheance {
     importance: s.importance,
     ficheId: s.ficheId,
     derniereFois: s.motif === "sinceCompletion" ? s.date : null,
+    rappels: rappelsDe(s),
   };
 }
 
@@ -351,7 +409,10 @@ export function achatValide(saisie: GarantieSaisie, today: PlainDate): boolean {
 
 export function nouvelleGarantie(s: GarantieSaisie): {
   readonly fiche: NouvelleFiche;
-  readonly echeance: Omit<NouvelleEcheance, "ficheId" | "derniereFois">;
+  readonly echeance: Omit<
+    NouvelleEcheance,
+    "ficheId" | "derniereFois" | "rappels"
+  >;
 } {
   const duree = { count: s.dureeNombre, unit: s.dureeUnite } as const;
   const attributs: Attribut[] = [

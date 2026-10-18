@@ -24,6 +24,7 @@ import {
 } from "@/lib/domain/entretien";
 import { fromISO, type PlainDate, toISO } from "@/lib/domain/plain-date";
 import type { Duration } from "@/lib/domain/recurrence";
+import type { Reminder, ReminderUnit } from "@/lib/domain/reminders";
 import type { Importance, Tenure } from "@/lib/ui/deadline";
 
 export type Tx = postgres.TransactionSql;
@@ -97,6 +98,12 @@ interface EcheanceSql {
   pour_moi: boolean;
   cree_le: string;
   completions: { occurrence: string; faite_le: string }[];
+  rappels: {
+    nombre: number;
+    unite: ReminderUnit;
+    email: boolean;
+    push: boolean;
+  }[];
 }
 
 export async function listerEcheances(tx: Tx): Promise<EcheanceRow[]> {
@@ -142,7 +149,13 @@ export async function listerEcheances(tx: Tx): Promise<EcheanceRow[]> {
           and not c.annulee
           and not exists (
             select from app.completions v where v.corrige = c.id)
-      ), '[]') as completions
+      ), '[]') as completions,
+      coalesce((
+        select json_agg(json_build_object(
+          'nombre', r.nombre, 'unite', r.unite, 'email', r.email,
+          'push', r.push) order by r.nombre, r.unite)
+        from app.rappels r where r.echeance_id = e.id
+      ), '[]') as rappels
     from app.echeances e
     left join app.fiches f on f.id = e.fiche_id
     where e.archivee_le is null`) as unknown as EcheanceSql[];
@@ -167,6 +180,14 @@ export async function listerEcheances(tx: Tx): Promise<EcheanceRow[]> {
         faiteLe: fromISO(c.faite_le),
       }),
     ),
+    rappels: row.rappels.map(r => ({
+      amount: r.nombre,
+      unit: r.unite,
+      channels: [
+        ...(r.email ? (["email"] as const) : []),
+        ...(r.push ? (["push"] as const) : []),
+      ],
+    })),
   }));
 }
 
@@ -239,7 +260,21 @@ export async function creerEcheance(
     await completer(tx, id, jour, jour);
   }
 
+  await Promise.all(echeance.rappels.map(r => ajouterRappel(tx, id, r)));
+
   return id;
+}
+
+/** Ajoute un rappel à la main sur une échéance (§ 6). */
+export async function ajouterRappel(
+  tx: Tx,
+  echeanceId: string,
+  rappel: Reminder,
+): Promise<void> {
+  await tx`
+    insert into app.rappels (echeance_id, nombre, unite, email, push)
+    values (${echeanceId}, ${rappel.amount}, ${rappel.unit},
+      ${rappel.channels.includes("email")}, ${rappel.channels.includes("push")})`;
 }
 
 /** La fiche de l'objet et sa fin de garantie, ensemble ou pas du tout. */
@@ -247,7 +282,10 @@ export async function creerGarantie(
   tx: Tx,
   garantie: {
     readonly fiche: NouvelleFiche;
-    readonly echeance: Omit<NouvelleEcheance, "ficheId" | "derniereFois">;
+    readonly echeance: Omit<
+      NouvelleEcheance,
+      "ficheId" | "derniereFois" | "rappels"
+    >;
   },
 ): Promise<string> {
   const ficheId = await creerFiche(tx, garantie.fiche);
@@ -255,6 +293,7 @@ export async function creerGarantie(
     ...garantie.echeance,
     ficheId,
     derniereFois: null,
+    rappels: [],
   });
 
   return ficheId;

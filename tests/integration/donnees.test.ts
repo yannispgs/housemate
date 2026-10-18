@@ -13,6 +13,7 @@ import {
 import {
   ajouterConsommable,
   ajouterPieceJointe,
+  ajouterRappel,
   annulerCompletions,
   commeMembre,
   completer,
@@ -411,6 +412,100 @@ describe("ajouts", () => {
     expect(vue?.completions).toEqual([
       { occurrence: fromISO("2026-10-06"), faiteLe: fromISO("2026-10-06") },
     ]);
+  });
+});
+
+describe("rappels (§ 6)", () => {
+  it("s'enregistrent avec l'échéance et se relisent avec elle", async () => {
+    const saisie = lire(echeanceSaisie, {
+      titre: "Contrôle technique",
+      importance: "normal",
+      tenue: "ferme",
+      toleranceJours: "0",
+      preavisJours: "30",
+      motif: "once",
+      date: "2026-12-01",
+      rappelNombre: "1",
+      rappelUnite: "month",
+      rappelEmail: "on",
+      rappelPush: "on",
+    });
+
+    if (!saisie.ok) {
+      throw new Error("saisie invalide");
+    }
+
+    const id = await commeMembre(sql(), moi.compte, tx =>
+      creerEcheance(tx, nouvelleEcheance(saisie.valeur)),
+    );
+    await commeMembre(sql(), conjoint.compte, tx =>
+      ajouterRappel(tx, id, { amount: 3, unit: "day", channels: ["push"] }),
+    );
+    await commeMembre(sql(), moi.compte, tx =>
+      ajouterRappel(tx, id, { amount: 2, unit: "week", channels: ["email"] }),
+    );
+    const vue = (await commeMembre(sql(), moi.compte, listerEcheances)).find(
+      e => e.id === id,
+    );
+
+    expect(vue?.rappels).toEqual([
+      { amount: 1, unit: "month", channels: ["email", "push"] },
+      { amount: 2, unit: "week", channels: ["email"] },
+      { amount: 3, unit: "day", channels: ["push"] },
+    ]);
+  });
+
+  it("⚠️ suivent la visibilité de leur échéance", async () => {
+    const id = await commeMembre(sql(), moi.compte, async tx => {
+      const [row] = await tx`
+        insert into app.echeances (titre, recurrence, tenue, prive)
+        values ('Secret', ${tx.json({ kind: "once", on: "2026-12-01" })},
+          'souple', true)
+        returning id::text`;
+
+      return row?.id as string;
+    });
+    await commeMembre(sql(), moi.compte, tx =>
+      ajouterRappel(tx, id, { amount: 1, unit: "day", channels: ["push"] }),
+    );
+
+    await expect(
+      commeMembre(sql(), conjoint.compte, tx =>
+        ajouterRappel(tx, id, { amount: 2, unit: "day", channels: ["push"] }),
+      ),
+    ).rejects.toThrow(/row-level security/);
+    expect(
+      await commeMembre(
+        sql(),
+        conjoint.compte,
+        tx => tx`select 1 from app.rappels where echeance_id = ${id}`,
+      ),
+    ).toHaveLength(0);
+    expect(
+      await commeMembre(
+        sql(),
+        voisin.compte,
+        tx => tx`delete from app.rappels where echeance_id = ${id} returning 1`,
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("⚠️ refusent un rappel sans canal, ou deux au même délai", async () => {
+    const id = await echeanceDe(moi, { titre: "Doublon" });
+
+    await expect(
+      commeMembre(sql(), moi.compte, tx =>
+        ajouterRappel(tx, id, { amount: 1, unit: "day", channels: [] }),
+      ),
+    ).rejects.toThrow(/check constraint/);
+    await commeMembre(sql(), moi.compte, tx =>
+      ajouterRappel(tx, id, { amount: 1, unit: "day", channels: ["email"] }),
+    );
+    await expect(
+      commeMembre(sql(), moi.compte, tx =>
+        ajouterRappel(tx, id, { amount: 1, unit: "day", channels: ["push"] }),
+      ),
+    ).rejects.toThrow(/duplicate key/);
   });
 });
 
@@ -968,6 +1063,7 @@ describe("catégories (§ 5.4)", () => {
     importance: "normal" as const,
     ficheId,
     derniereFois: null,
+    rappels: [],
   });
 
   it("⚠️ une échéance liée tient sa catégorie de sa fiche, et la suit", async () => {

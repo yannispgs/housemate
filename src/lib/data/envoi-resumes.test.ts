@@ -24,6 +24,7 @@ const aFaire: EcheanceRow = {
   pourMoi: true,
   creeLe: fromISO("2026-10-01"),
   completions: [],
+  rappels: [],
 };
 
 const moi: Destinataire = {
@@ -54,7 +55,10 @@ function doublures(overrides: Partial<EnvoiDeps> = {}) {
     liberer: async (membre, sorte, jour) => {
       journal.delete(`${membre}/${sorte}/${jour}`);
     },
-    echeances: async compte => (compte === "c1" ? [aFaire] : []),
+    contenu: async compte => ({
+      echeances: compte === "c1" ? [aFaire] : [],
+      consommables: [],
+    }),
     envoyer: async (to, content) => {
       envoyes.push({ to, content });
     },
@@ -78,20 +82,25 @@ describe("envoyerResumes", () => {
     // Le résumé vide de « toi » est noté : il n'est pas recomposé.
     expect(journal).toContain("m2/hebdo/2026-10-19");
 
+    // À 7 h, le quotidien de « toi » se compose (pour d'éventuels rappels),
+    // vide : rien ne part.
     expect(await envoyerResumes(deps, { jour: LUNDI, heure: 7 }, LIEN)).toEqual(
-      { envoyes: 0, vides: 0, echecs: 0 },
+      { envoyes: 0, vides: 1, echecs: 0 },
     );
     expect(envoyes).toHaveLength(2);
   });
 
   it("ne lit rien avant l'heure", async () => {
-    const echeances = vi.fn(async () => [aFaire]);
-    const { deps } = doublures({ echeances });
+    const contenu = vi.fn(async () => ({
+      echeances: [aFaire],
+      consommables: [],
+    }));
+    const { deps } = doublures({ contenu });
 
     expect(await envoyerResumes(deps, { jour: LUNDI, heure: 5 }, LIEN)).toEqual(
       { envoyes: 0, vides: 0, echecs: 0 },
     );
-    expect(echeances).not.toHaveBeenCalled();
+    expect(contenu).not.toHaveBeenCalled();
   });
 
   it("rend un envoi échoué, pour le retenter à l'appel suivant", async () => {

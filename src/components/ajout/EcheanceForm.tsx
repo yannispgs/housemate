@@ -159,6 +159,53 @@ export function EcheanceForm({
           />
         </Champ>
       </Ligne>
+      <Champ
+        libelle="Rappel (facultatif)"
+        aide="Combien de temps avant la date. Par e-mail, il figure dans le résumé du jour."
+        erreur={erreurs.rappelNombre}
+      >
+        <span className="flex gap-2.5">
+          <input
+            name="rappelNombre"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            placeholder="—"
+            className={`${CHAMP} w-24 flex-none`}
+            aria-label="Délai du rappel"
+          />
+          <select
+            name="rappelUnite"
+            defaultValue="day"
+            className={LISTE}
+            aria-label="Unité du rappel"
+          >
+            <option value="day">jours avant</option>
+            <option value="week">semaines avant</option>
+            <option value="month">mois avant</option>
+          </select>
+        </span>
+      </Champ>
+      <fieldset className="-mt-2 flex gap-5 border-0 p-0 text-[15px] text-ink">
+        <legend className="sr-only">Canaux du rappel</legend>
+        <label className="flex min-h-11 items-center gap-2">
+          <input
+            type="checkbox"
+            name="rappelEmail"
+            defaultChecked
+            className="size-5 accent-[var(--brand-strong)]"
+          />
+          Par e-mail
+        </label>
+        <label className="flex min-h-11 items-center gap-2">
+          <input
+            type="checkbox"
+            name="rappelPush"
+            className="size-5 accent-[var(--brand-strong)]"
+          />
+          Par notification
+        </label>
+      </fieldset>
       {fiches.length > 0 && (
         <Champ
           libelle="Fiche liée (facultatif)"

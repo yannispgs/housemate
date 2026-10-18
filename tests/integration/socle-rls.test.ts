@@ -54,6 +54,7 @@ async function createFoyer(nom: string, prefix: string): Promise<Foyer> {
 }
 
 beforeEach(async () => {
+  await owner`delete from app.rappels`;
   await owner`delete from app.completions`;
   await owner`delete from app.echeances`;
   await owner`delete from app.pieces_jointes`;
@@ -147,6 +148,7 @@ describe("le rôle anonymous", () => {
     "adresses",
     "reglages_resumes",
     "resumes_envoyes",
+    "rappels",
   ])("n'a aucun accès à app.%s", async table => {
     await expect(
       asAnonymous(tx => tx`select 1 from ${tx("app")}.${tx(table)}`),
