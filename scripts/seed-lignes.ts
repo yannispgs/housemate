@@ -76,8 +76,9 @@ export async function creerMarquage(db: Db): Promise<void> {
 
 /** Une table de `preview_meta`, si elle existe. */
 export async function existe(db: Db, table: string): Promise<boolean> {
+  const nom = `preview_meta.${table}`;
   const [lu] = await db<{ existe: boolean }[]>`
-    select to_regclass(${`preview_meta.${table}`}) is not null as existe`;
+    select to_regclass(${nom}) is not null as existe`;
 
   return lu?.existe ?? false;
 }
