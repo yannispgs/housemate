@@ -2,6 +2,9 @@ name: Preview — close
 
 # Removes a PR's preview when it closes, merged or not: its address, its
 # variable, then its Neon branch. Each removal treats "already gone" as done.
+# Merged, its preview first enriches `seed` with what was entered on it
+# (decision of 2026-09-27); a failure there is reported but never keeps the
+# preview from being removed.
 # Creation: preview-open.yml.
 
 on:
@@ -17,9 +20,47 @@ permissions:
   contents: read
 
 jobs:
+  enrich:
+    name: Enrich seed
+    if: >-
+      github.event.pull_request.merged &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      # The merge commit: `seed` gets the migrations the preview rows need.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup
+
+      - id: seed
+        uses: ./.github/actions/neon-preview-branch
+        with:
+          operation: create
+          name: seed
+          api-key: ${{ secrets.NEON_API_KEY }}
+          project: ${{ vars.NEON_PROJECT_ID }}
+
+      # Also run by seed-update.yml on the same push: the migration lock
+      # makes the second one find nothing left to do.
+      - uses: ./.github/actions/preview-migrate
+        with:
+          branch-id: ${{ steps.seed.outputs.id }}
+          api-key: ${{ secrets.NEON_API_KEY }}
+          project: ${{ vars.NEON_PROJECT_ID }}
+
+      - uses: ./.github/actions/seed-enrich
+        with:
+          pr-number: ${{ github.event.pull_request.number }}
+          api-key: ${{ secrets.NEON_API_KEY }}
+          project: ${{ vars.NEON_PROJECT_ID }}
+
   close:
     name: Remove the preview
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    needs: enrich
+    # After the copy, whatever its outcome (skipped for a PR closed unmerged).
+    if: >-
+      always() &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     steps:
       # Checked out only to reach the local actions.
