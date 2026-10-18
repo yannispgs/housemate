@@ -241,6 +241,11 @@ export const echeanceSaisie = z
     rappelUnite: z.enum(["day", "week", "month"]).optional(),
     rappelEmail: z.literal("on").optional(),
     rappelPush: z.literal("on").optional(),
+    // L'exception push (§ 6) : vide, le tableau des réglages décide.
+    notifier: z
+      .enum(["", "oui", "non"], { error: "Choix inconnu." })
+      .optional()
+      .transform(v => (v === "oui" || v === "non" ? v === "oui" : null)),
   })
   .superRefine((s, ctx) => {
     if (
@@ -290,6 +295,8 @@ export interface NouvelleEcheance {
   readonly derniereFois: string | null;
   /** Les rappels ajoutés à la main. */
   readonly rappels: readonly Reminder[];
+  /** Mon exception push : notifier toujours, jamais, ou selon le tableau. */
+  readonly notifier: boolean | null;
 }
 
 function rappelsDe(s: EcheanceSaisie): Reminder[] {
@@ -355,6 +362,7 @@ export function nouvelleEcheance(s: EcheanceSaisie): NouvelleEcheance {
     ficheId: s.ficheId,
     derniereFois: s.motif === "sinceCompletion" ? s.date : null,
     rappels: rappelsDe(s),
+    notifier: s.notifier,
   };
 }
 
@@ -386,7 +394,7 @@ export function nouvelleGarantie(s: GarantieSaisie): {
   readonly fiche: NouvelleFiche;
   readonly echeance: Omit<
     NouvelleEcheance,
-    "ficheId" | "derniereFois" | "rappels"
+    "ficheId" | "derniereFois" | "rappels" | "notifier"
   >;
 } {
   const duree = { count: s.dureeNombre, unit: s.dureeUnite } as const;

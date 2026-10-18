@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
+import { AppareilPush } from "@/components/AppareilPush";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { SettingsScreen } from "@/components/screens/SettingsScreen";
 import { demoEnabled } from "@/demo/mode";
 import { REGLAGES_PAR_DEFAUT } from "@/lib/data/resumes";
 import { lireReglagesResumes } from "@/lib/data/resumes-store";
 import { enMonNom } from "@/lib/data/server";
-import { enregistrerResumes } from "../_actions/reglages";
+import { clePubliqueVapid } from "@/lib/data/web-push";
+import {
+  abonnerAppareil,
+  desabonnerAppareil,
+  enregistrerResumes,
+} from "../_actions/reglages";
 import { deconnexion } from "../connexion/actions";
 
 export const metadata: Metadata = { title: "Réglages" };
@@ -30,6 +36,13 @@ export default async function Page() {
         <NotificationsPanel
           initial={reglages}
           enregistrer={demo ? null : enregistrerResumes}
+          appareil={
+            <AppareilPush
+              clePublique={clePubliqueVapid()}
+              abonner={demo ? null : abonnerAppareil}
+              desabonner={demo ? null : desabonnerAppareil}
+            />
+          }
         />
       }
       rows={[

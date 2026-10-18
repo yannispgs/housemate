@@ -151,6 +151,16 @@ test.describe("tenue technique", () => {
     });
   });
 
+  test("le service worker des notifications est servi, sans cache", async ({
+    request,
+  }) => {
+    const response = await request.get("/sw.js");
+
+    expect(response.ok()).toBe(true);
+    expect(response.headers()["cache-control"]).toContain("no-cache");
+    expect(await response.text()).toContain("showNotification");
+  });
+
   test("les polices viennent de l'app, jamais d'un tiers", async ({ page }) => {
     const external: string[] = [];
 
