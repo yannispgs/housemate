@@ -16,6 +16,23 @@ self.addEventListener("push", event => {
   );
 });
 
+/** Ramène l'app au premier plan sur la page voulue, ou l'ouvre. */
+async function ouvrir(url) {
+  const fenetres = await self.clients.matchAll({
+    type: "window",
+    includeUncontrolled: true,
+  });
+  const ouverte = fenetres.find(f => f.url.startsWith(self.location.origin));
+
+  if (!ouverte) {
+    return self.clients.openWindow(url);
+  }
+
+  const active = await ouverte.focus();
+
+  return active.navigate(url);
+}
+
 self.addEventListener("notificationclick", event => {
   event.notification.close();
   const url = new URL(
@@ -23,19 +40,5 @@ self.addEventListener("notificationclick", event => {
     self.location.origin,
   );
 
-  event.waitUntil(
-    self.clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then(fenetres => {
-        const ouverte = fenetres.find(f =>
-          f.url.startsWith(self.location.origin),
-        );
-
-        if (ouverte) {
-          return ouverte.focus().then(f => f.navigate(url.href));
-        }
-
-        return self.clients.openWindow(url.href);
-      }),
-  );
+  event.waitUntil(ouvrir(url.href));
 });
