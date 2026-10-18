@@ -11,9 +11,13 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { ETAT_AJOUT } from "@/lib/data/ajout-etat";
 import { ajouterGarantie } from "../../../app/_actions/ajout";
 import { BOUTON, CHAMP, Champ, LISTE } from "../forms/Champ";
+import { ChoixCategorie } from "../forms/ChoixCategorie";
 import { envoyerPieceJointe } from "../forms/fichier";
 
-export function GarantieForm({ aujourdhui }: Readonly<{ aujourdhui: string }>) {
+export function GarantieForm({
+  aujourdhui,
+  categories,
+}: Readonly<{ aujourdhui: string; categories: readonly string[] }>) {
   const [etat, agir, enCours] = useActionState(ajouterGarantie, ETAT_AJOUT);
   const facture = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -78,13 +82,7 @@ export function GarantieForm({ aujourdhui }: Readonly<{ aujourdhui: string }>) {
       <Champ libelle="Modèle" erreur={erreurs.modele}>
         <input name="modele" className={CHAMP} maxLength={120} />
       </Champ>
-      <Champ
-        libelle="Catégorie"
-        aide="Où l'objet se range dans l'inventaire : Cuisine, Salle de bain…"
-        erreur={erreurs.categorie}
-      >
-        <input name="categorie" className={CHAMP} maxLength={120} />
-      </Champ>
+      <ChoixCategorie categories={categories} erreur={erreurs.categorie} />
       <Champ libelle="Date d'achat" erreur={erreurs.dateAchat}>
         <input
           name="dateAchat"

@@ -50,6 +50,20 @@ export async function lireFoyer(tx: Tx): Promise<string | null> {
   return (row?.nom as string | undefined) ?? null;
 }
 
+/**
+ * Les catégories déjà employées par le foyer : celles des fiches et des
+ * échéances seules (une échéance liée tient la sienne de sa fiche, § 5.4).
+ */
+export async function listerCategories(tx: Tx): Promise<string[]> {
+  const rows = await tx<{ categorie: string }[]>`
+    select categorie from app.fiches where categorie is not null
+    union
+    select categorie from app.echeances
+    where fiche_id is null and categorie is not null`;
+
+  return rows.map(r => r.categorie);
+}
+
 export async function listerFiches(tx: Tx): Promise<FicheRow[]> {
   return (await tx`
     select id::text, nature, titre, categorie
@@ -78,7 +92,11 @@ export async function listerEcheances(tx: Tx): Promise<EcheanceRow[]> {
   // compte pas : seule la dernière version de chaque geste vaut (§ 3.3).
   const rows = (await tx`
     select
-      e.id::text, e.titre, e.categorie, e.recurrence, e.tolerance_jours,
+      e.id::text, e.titre,
+      -- Liée à une fiche, l'échéance en tient sa catégorie (§ 5.4).
+      case when e.fiche_id is null then e.categorie else f.categorie end
+        as categorie,
+      e.recurrence, e.tolerance_jours,
       e.preavis_jours, e.tenue, e.importance, f.titre as fiche_titre,
       case
         when e.destinataire_membre is null and e.destinataire_groupe is null
@@ -183,7 +201,8 @@ export async function creerEcheance(
     insert into app.echeances (
       titre, categorie, recurrence, tolerance_jours, preavis_jours, tenue,
       importance, fiche_id)
-    values (${echeance.titre}, ${echeance.categorie},
+    values (${echeance.titre},
+      ${echeance.ficheId === null ? echeance.categorie : null},
       ${tx.json(echeance.recurrence as postgres.JSONValue)},
       ${echeance.toleranceJours}, ${echeance.preavisJours}, ${echeance.tenue},
       ${echeance.importance}, ${echeance.ficheId})

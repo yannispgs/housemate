@@ -6,8 +6,9 @@ import { FicheForm } from "@/components/ajout/FicheForm";
 import { GarantieForm } from "@/components/ajout/GarantieForm";
 import { Panel, Screen } from "@/components/Screen";
 import { demoEnabled } from "@/demo/mode";
+import { categoriesProposees } from "@/lib/data/saisie";
 import { enMonNom } from "@/lib/data/server";
-import { listerFiches } from "@/lib/data/store";
+import { listerCategories, listerFiches } from "@/lib/data/store";
 import { aujourdhuiAParis } from "@/lib/data/today";
 import { toISO } from "@/lib/domain/plain-date";
 
@@ -81,19 +82,26 @@ export default async function Page({
     );
   }
 
-  const fiches =
-    choix.type === "echeance"
-      ? (await enMonNom(listerFiches)).map(f => ({ id: f.id, titre: f.titre }))
-      : [];
+  const [lues, employees] = await enMonNom(tx =>
+    Promise.all([listerFiches(tx), listerCategories(tx)]),
+  );
+  const fiches = lues.map(f => ({ id: f.id, titre: f.titre }));
+  const categories = categoriesProposees(employees);
 
   return (
     <Screen title={choix.titre} subtitle={choix.texte}>
       <Panel className="p-[18px]">
-        {choix.type === "garantie" && <GarantieForm aujourdhui={aujourdhui} />}
-        {choix.type === "echeance" && (
-          <EcheanceForm fiches={fiches} aujourdhui={aujourdhui} />
+        {choix.type === "garantie" && (
+          <GarantieForm aujourdhui={aujourdhui} categories={categories} />
         )}
-        {choix.type === "fiche" && <FicheForm />}
+        {choix.type === "echeance" && (
+          <EcheanceForm
+            fiches={fiches}
+            aujourdhui={aujourdhui}
+            categories={categories}
+          />
+        )}
+        {choix.type === "fiche" && <FicheForm categories={categories} />}
       </Panel>
       <Link
         href="/ajouter"

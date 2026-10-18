@@ -22,6 +22,7 @@ import {
   lireFoyer,
   lirePieceJointe,
   lirePlanEntretien,
+  listerCategories,
   listerConsommables,
   listerEcheances,
   listerFiches,
@@ -878,5 +879,73 @@ describe("foyer", () => {
 
   it("rien pour un compte sans foyer", async () => {
     expect(await commeMembre(sql(), "inconnu", lireFoyer)).toBeNull();
+  });
+});
+
+describe("catégories (§ 5.4)", () => {
+  const echeanceDe = (ficheId: string | null, categorie: string | null) => ({
+    titre: "Échéance",
+    categorie,
+    recurrence: { kind: "once", on: "2026-11-01" } as const,
+    toleranceJours: 0,
+    preavisJours: 7,
+    tenue: "souple" as const,
+    importance: "normal" as const,
+    ficheId,
+    derniereFois: null,
+  });
+
+  it("⚠️ une échéance liée tient sa catégorie de sa fiche, et la suit", async () => {
+    const ficheId = await commeMembre(sql(), moi.compte, tx =>
+      creerFiche(tx, {
+        nature: "equipement",
+        titre: "Le four",
+        categorie: "Cuisine",
+        attributs: [],
+      }),
+    );
+    const id = await commeMembre(sql(), moi.compte, tx =>
+      // Une catégorie passée pour une échéance liée n'est pas gardée.
+      creerEcheance(tx, echeanceDe(ficheId, "Ignorée")),
+    );
+    const categorieDe = async () =>
+      (await commeMembre(sql(), conjoint.compte, listerEcheances)).find(
+        e => e.id === id,
+      )?.categorie;
+
+    expect(await categorieDe()).toBe("Cuisine");
+    await owner`update app.fiches set categorie = 'Nettoyage' where id = ${ficheId}`;
+    expect(await categorieDe()).toBe("Nettoyage");
+    expect(
+      (await owner`select categorie from app.echeances where id = ${id}`)[0]
+        ?.categorie,
+    ).toBeNull();
+  });
+
+  it("liste les catégories du foyer : fiches et échéances seules", async () => {
+    const ficheId = await commeMembre(sql(), moi.compte, tx =>
+      creerFiche(tx, {
+        nature: "equipement",
+        titre: "Le four",
+        categorie: "Cuisine",
+        attributs: [],
+      }),
+    );
+    await commeMembre(sql(), moi.compte, async tx => {
+      await creerEcheance(tx, echeanceDe(null, "Santé"));
+      await creerEcheance(tx, echeanceDe(ficheId, "Ignorée"));
+    });
+    await commeMembre(sql(), voisin.compte, tx =>
+      creerFiche(tx, {
+        nature: "equipement",
+        titre: "Le bateau",
+        categorie: "Bateau",
+        attributs: [],
+      }),
+    );
+
+    expect(
+      (await commeMembre(sql(), conjoint.compte, listerCategories)).sort(),
+    ).toEqual(["Cuisine", "Santé"]);
   });
 });
