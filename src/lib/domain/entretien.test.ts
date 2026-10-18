@@ -3,6 +3,7 @@ import {
   type Consommable,
   compteurEstime,
   etatConsommable,
+  importanceConsommable,
   type Releve,
   rythme,
 } from "@/lib/domain/entretien";
@@ -94,6 +95,9 @@ describe("etatConsommable — l'échéance d'un consommable", () => {
     expect(etatConsommable(courroie(), UN_AN, TODAY)).toEqual({
       echeance: d("2027-06-07"),
       preavisJours: 120,
+      // 11 750 km restants sur un préavis de 6 000 km.
+      reste: expect.closeTo(11_750 / 6000, 5),
+      terme: "compteur",
       donneeManquante: false,
       releveAttendu: false,
     });
@@ -135,6 +139,8 @@ describe("etatConsommable — l'échéance d'un consommable", () => {
     ).toEqual({
       echeance: d("2026-11-01"),
       preavisJours: 7,
+      reste: expect.closeTo(17 / 7, 5),
+      terme: "temps",
       donneeManquante: false,
       releveAttendu: false,
     });
@@ -150,6 +156,8 @@ describe("etatConsommable — l'échéance d'un consommable", () => {
     ).toEqual({
       echeance: d("2030-10-15"),
       preavisJours: 274,
+      reste: expect.closeTo(1461 / 274, 5),
+      terme: "temps",
       donneeManquante: true,
       releveAttendu: false,
     });
@@ -171,6 +179,8 @@ describe("etatConsommable — l'échéance d'un consommable", () => {
     ).toEqual({
       echeance: null,
       preavisJours: 0,
+      reste: null,
+      terme: null,
       donneeManquante: true,
       releveAttendu: false,
     });
@@ -203,5 +213,57 @@ describe("etatConsommable — l'échéance d'un consommable", () => {
         etatConsommable(filtre(18_000), perimes, d("2026-07-15")).releveAttendu,
       ).toBe(false);
     });
+  });
+});
+
+describe("seuil réglé par l'objet", () => {
+  const vidange: Consommable = {
+    dureeKm: 15_000,
+    dureeTemps: null,
+    remplacements: [{ le: d("2026-01-01"), compteur: 104_000 }],
+  };
+
+  it("élargit le préavis, et la part restante avec lui", () => {
+    // 750 km restants : préavis de 1 125 km à 7,5 %, de 2 250 km à 15 %.
+    expect(etatConsommable(vidange, UN_AN, TODAY)).toMatchObject({
+      preavisJours: 23,
+      reste: expect.closeTo(750 / 1125, 5),
+    });
+    expect(etatConsommable(vidange, UN_AN, TODAY, 0.15)).toMatchObject({
+      preavisJours: 45,
+      reste: expect.closeTo(750 / 2250, 5),
+    });
+  });
+
+  it("garde un préavis d'au moins un jour", () => {
+    expect(
+      etatConsommable(
+        {
+          dureeKm: null,
+          dureeTemps: { count: 1, unit: "day" },
+          remplacements: [{ le: d("2026-10-14"), compteur: null }],
+        },
+        [],
+        TODAY,
+      ),
+    ).toMatchObject({ preavisJours: 1, reste: 0 });
+  });
+});
+
+describe("importanceConsommable — la montée, en proportion seulement", () => {
+  it.each([
+    [1, "normal"],
+    [0.51, "normal"],
+    [0.5, "important"],
+    [0.11, "important"],
+    [0.1, "critical"],
+    [0, "critical"],
+    [-0.3, "critical"],
+  ] as const)("ferme, reste %f du préavis → %s", (reste, importance) => {
+    expect(importanceConsommable("ferme", reste)).toBe(importance);
+  });
+
+  it("⚠️ souple : ne monte jamais, même au-delà de la limite", () => {
+    expect(importanceConsommable("souple", -2)).toBe("normal");
   });
 });

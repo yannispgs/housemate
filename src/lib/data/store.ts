@@ -16,7 +16,12 @@ import type {
   NouvelleFiche,
 } from "@/lib/data/saisie";
 import type { CompletionRow, EcheanceRow, FicheRow } from "@/lib/data/views";
-import type { Consommable, Releve } from "@/lib/domain/entretien";
+import {
+  type Consommable,
+  PART_DU_PREAVIS,
+  type Releve,
+  type TenueConsommable,
+} from "@/lib/domain/entretien";
 import { fromISO, type PlainDate, toISO } from "@/lib/domain/plain-date";
 import type { Duration } from "@/lib/domain/recurrence";
 import type { Importance, Tenure } from "@/lib/ui/deadline";
@@ -332,12 +337,14 @@ export async function ajouterConsommable(
   ficheId: string,
   intitule: string,
   duree: DureeDeVie,
+  /** Sa tenue propre ; `null` : celle de l'objet. */
+  tenue: TenueConsommable | null = null,
 ): Promise<string> {
   const [row] = await tx`
     insert into app.consommables
-      (fiche_id, intitule, duree_compteur, duree_nombre, duree_unite)
+      (fiche_id, intitule, duree_compteur, duree_nombre, duree_unite, tenue)
     values (${ficheId}, ${intitule}, ${duree.compteur},
-      ${duree.temps?.count ?? null}, ${duree.temps?.unit ?? null})
+      ${duree.temps?.count ?? null}, ${duree.temps?.unit ?? null}, ${tenue})
     returning id::text`;
 
   return row?.id as string;
@@ -358,6 +365,43 @@ export async function modifierDureeDeVie(
       duree_compteur = ${duree.compteur},
       duree_nombre = ${duree.temps?.count ?? null},
       duree_unite = ${duree.temps?.unit ?? null}
+    where id = ${consommableId}
+    returning id`;
+
+  return rows.length === 1;
+}
+
+/**
+ * Les réglages d'entretien d'un objet : la tenue de ses consommables et le
+ * seuil d'alerte (part de la durée de vie, de 1 % à 50 %). Rend faux si la
+ * fiche n'est pas visible.
+ */
+export async function reglerEntretien(
+  tx: Tx,
+  ficheId: string,
+  reglages: { readonly tenue: TenueConsommable; readonly seuil: number },
+): Promise<boolean> {
+  const rows = await tx`
+    update app.fiches set
+      tenue_entretien = ${reglages.tenue},
+      seuil_entretien = ${reglages.seuil}
+    where id = ${ficheId}
+    returning id`;
+
+  return rows.length === 1;
+}
+
+/**
+ * La tenue propre d'un consommable, ou `null` pour revenir à celle de son
+ * objet. Rend faux si le consommable n'est pas visible.
+ */
+export async function modifierTenueConsommable(
+  tx: Tx,
+  consommableId: string,
+  tenue: TenueConsommable | null,
+): Promise<boolean> {
+  const rows = await tx`
+    update app.consommables set tenue = ${tenue}
     where id = ${consommableId}
     returning id`;
 
@@ -389,11 +433,25 @@ export async function noterReleve(
 }
 
 export interface PlanEntretien {
+  /** La tenue de l'objet, héritée par ses consommables. */
+  readonly tenue: TenueConsommable;
+  /** Le seuil d'alerte de l'objet, en part de la durée de vie. */
+  readonly seuil: number;
   readonly consommables: readonly (Consommable & {
     readonly id: string;
     readonly intitule: string;
+    /** Sa tenue propre ; `null` : il hérite de l'objet. */
+    readonly tenue: TenueConsommable | null;
   })[];
   readonly releves: readonly Releve[];
+}
+
+/** La durée au temps d'un consommable ; nombre et unité sont nuls ensemble. */
+function dureeTemps(
+  nombre: number | null,
+  unite: Duration["unit"] | null,
+): Duration | null {
+  return unite === null ? null : { count: nombre as number, unit: unite };
 }
 
 /** Le plan d'entretien d'une fiche visible ; vide sinon. */
@@ -408,11 +466,12 @@ export async function lirePlanEntretien(
       duree_compteur: number | null;
       duree_nombre: number | null;
       duree_unite: Duration["unit"] | null;
+      tenue: TenueConsommable | null;
       remplacements: { le: string; compteur: number | null }[];
     }[]
   >`
     select c.id::text, c.intitule, c.duree_compteur, c.duree_nombre,
-      c.duree_unite,
+      c.duree_unite, c.tenue,
       coalesce((
         select json_agg(json_build_object('le', r.fait_le, 'compteur', r.compteur)
           order by r.fait_le)
@@ -421,21 +480,24 @@ export async function lirePlanEntretien(
     from app.consommables c
     where c.fiche_id = ${ficheId}
     order by c.intitule`;
+  const [fiche] = await tx<{ tenue: TenueConsommable; seuil: number }[]>`
+    select tenue_entretien as tenue, seuil_entretien::float8 as seuil
+    from app.fiches where id = ${ficheId}`;
   const releves = await tx<{ le: string; valeur: number }[]>`
     select to_char(le, 'YYYY-MM-DD') as le, valeur from app.releves
     where fiche_id = ${ficheId} and attribut = 'kilometrage'
     order by le`;
 
   return {
+    // Une fiche invisible n'a pas de plan : les réglages par défaut.
+    tenue: fiche?.tenue ?? "souple",
+    seuil: fiche?.seuil ?? PART_DU_PREAVIS,
     consommables: consommables.map(c => ({
       id: c.id,
       intitule: c.intitule,
+      tenue: c.tenue,
       dureeKm: c.duree_compteur,
-      // Nombre et unité sont nuls ensemble (contrainte de la table).
-      dureeTemps:
-        c.duree_unite === null
-          ? null
-          : { count: c.duree_nombre as number, unit: c.duree_unite },
+      dureeTemps: dureeTemps(c.duree_nombre, c.duree_unite),
       remplacements: c.remplacements.map(r => ({
         le: fromISO(r.le),
         compteur: r.compteur,
@@ -443,4 +505,75 @@ export async function lirePlanEntretien(
     })),
     releves: releves.map(r => ({ le: fromISO(r.le), valeur: r.valeur })),
   };
+}
+
+/** Un consommable, avec ce que l'accueil et À venir en montrent. */
+export interface ConsommableRow extends Consommable {
+  readonly id: string;
+  readonly intitule: string;
+  readonly ficheTitre: string;
+  readonly categorie: string | null;
+  /** Sa tenue effective : la sienne, sinon celle de son objet. */
+  readonly tenue: TenueConsommable;
+  /** Le seuil d'alerte de son objet. */
+  readonly seuil: number;
+  /** Les relevés du compteur de sa fiche. */
+  readonly releves: readonly Releve[];
+}
+
+/**
+ * Tous les consommables visibles, des fiches non archivées (§ 4.5 : les
+ * échéances d'une fiche archivée s'arrêtent).
+ */
+export async function listerConsommables(tx: Tx): Promise<ConsommableRow[]> {
+  const rows = await tx<
+    {
+      id: string;
+      intitule: string;
+      fiche_titre: string;
+      categorie: string | null;
+      tenue: TenueConsommable;
+      seuil: number;
+      duree_compteur: number | null;
+      duree_nombre: number | null;
+      duree_unite: Duration["unit"] | null;
+      remplacements: { le: string; compteur: number | null }[];
+      releves: { le: string; valeur: number }[];
+    }[]
+  >`
+    select c.id::text, c.intitule, f.titre as fiche_titre, f.categorie,
+      coalesce(c.tenue, f.tenue_entretien) as tenue,
+      f.seuil_entretien::float8 as seuil,
+      c.duree_compteur, c.duree_nombre, c.duree_unite,
+      coalesce((
+        select json_agg(json_build_object('le', r.fait_le, 'compteur', r.compteur)
+          order by r.fait_le)
+        from app.remplacements r where r.consommable_id = c.id
+      ), '[]') as remplacements,
+      coalesce((
+        select json_agg(json_build_object('le', v.le, 'valeur', v.valeur)
+          order by v.le)
+        from app.releves v
+        where v.fiche_id = c.fiche_id and v.attribut = 'kilometrage'
+      ), '[]') as releves
+    from app.consommables c
+    join app.fiches f on f.id = c.fiche_id
+    where f.archivee_le is null
+    order by f.titre, c.intitule`;
+
+  return rows.map(c => ({
+    id: c.id,
+    intitule: c.intitule,
+    ficheTitre: c.fiche_titre,
+    categorie: c.categorie,
+    tenue: c.tenue,
+    seuil: c.seuil,
+    dureeKm: c.duree_compteur,
+    dureeTemps: dureeTemps(c.duree_nombre, c.duree_unite),
+    remplacements: c.remplacements.map(r => ({
+      le: fromISO(r.le),
+      compteur: r.compteur,
+    })),
+    releves: c.releves.map(r => ({ le: fromISO(r.le), valeur: r.valeur })),
+  }));
 }

@@ -17,6 +17,8 @@
  * - un relevé de plus de 3 mois est redemandé, mais seulement quand un
  *   consommable kilométrique approche de sa limite (moins de 20 % restants).
  */
+
+import type { Importance } from "@/lib/domain/importance";
 import {
   addDays,
   addMonths,
@@ -47,8 +49,14 @@ export interface Consommable {
   readonly remplacements: readonly Remplacement[];
 }
 
-/** Part de la durée de vie où l'échéance s'ouvre (décision du 2026-10-15). */
+/**
+ * Part de la durée de vie où l'échéance s'ouvre (décision du 2026-10-15),
+ * par défaut : chaque objet règle la sienne (2026-10-17).
+ */
 export const PART_DU_PREAVIS = 0.075;
+
+/** Ferme : à remplacer à temps, l'importance monte. Souple : indicatif. */
+export type TenueConsommable = "ferme" | "souple";
 
 /** Au-delà, un relevé est trop vieux pour qu'on s'y fie sans demander. */
 export const RELEVE_PERIME_MOIS = 3;
@@ -146,8 +154,19 @@ export function compteurEstime(
 export interface EtatConsommable {
   /** La date du prochain remplacement, estimée au besoin ; `null` : inconnue. */
   readonly echeance: PlainDate | null;
-  /** Le préavis : 7,5 % de la durée de vie du terme retenu, en jours. */
+  /** Le préavis du terme retenu, converti en jours (au moins un). */
   readonly preavisJours: number;
+  /**
+   * Ce qui reste avant la limite, en part du préavis, mesuré dans l'unité du
+   * terme retenu (kilomètres ou durée) : 1 à l'ouverture, 0 à la limite,
+   * négatif au-delà. `null` sans échéance.
+   */
+  readonly reste: number | null;
+  /**
+   * Le terme retenu : au compteur, la date est une estimation (par le
+   * rythme) ; au temps, elle est exacte. `null` sans échéance.
+   */
+  readonly terme: "compteur" | "temps" | null;
   /** Il manque de quoi calculer le terme kilométrique (§ 5.3). */
   readonly donneeManquante: boolean;
   /** Le dernier relevé est trop vieux, et la limite approche. */
@@ -157,26 +176,38 @@ export interface EtatConsommable {
 interface Terme {
   readonly echeance: PlainDate;
   readonly preavisJours: number;
+  readonly reste: number;
+  readonly terme: "compteur" | "temps";
 }
 
 function dernierRemplacement(c: Consommable): Remplacement | undefined {
   return [...c.remplacements].sort((a, b) => compare(a.le, b.le)).at(-1);
 }
 
-function termeTemps(dernier: Remplacement, duree: Duration): Terme {
+function termeTemps(
+  dernier: Remplacement,
+  duree: Duration,
+  part: number,
+  today: PlainDate,
+): Terme {
   const echeance = addDuration(dernier.le, duree, 1);
+  const preavisJours = Math.max(
+    1,
+    Math.round(part * daysBetween(dernier.le, echeance)),
+  );
 
   return {
     echeance,
-    preavisJours: Math.round(
-      PART_DU_PREAVIS * daysBetween(dernier.le, echeance),
-    ),
+    preavisJours,
+    reste: daysBetween(today, echeance) / preavisJours,
+    terme: "temps",
   };
 }
 
 function termeKm(
   limite: number,
   duree: number,
+  part: number,
   releves: readonly Releve[],
   today: PlainDate,
 ): Terme | null {
@@ -187,9 +218,13 @@ function termeKm(
     return null;
   }
 
+  const preavisKm = part * duree;
+
   return {
     echeance: addDays(today, Math.ceil((limite - estime) / r)),
-    preavisJours: Math.ceil((PART_DU_PREAVIS * duree) / r),
+    preavisJours: Math.max(1, Math.ceil(preavisKm / r)),
+    reste: (limite - estime) / preavisKm,
+    terme: "compteur",
   };
 }
 
@@ -197,6 +232,7 @@ export function etatConsommable(
   c: Consommable,
   releves: readonly Releve[],
   today: PlainDate,
+  part: number = PART_DU_PREAVIS,
 ): EtatConsommable {
   const dernier = dernierRemplacement(c);
 
@@ -204,13 +240,17 @@ export function etatConsommable(
     return {
       echeance: null,
       preavisJours: 0,
+      reste: null,
+      terme: null,
       donneeManquante: true,
       releveAttendu: false,
     };
   }
 
   const temps =
-    c.dureeTemps === null ? null : termeTemps(dernier, c.dureeTemps);
+    c.dureeTemps === null
+      ? null
+      : termeTemps(dernier, c.dureeTemps, part, today);
   const limite =
     c.dureeKm === null || dernier.compteur === null
       ? null
@@ -218,7 +258,7 @@ export function etatConsommable(
   const km =
     limite === null || c.dureeKm === null
       ? null
-      : termeKm(limite, c.dureeKm, releves, today);
+      : termeKm(limite, c.dureeKm, part, releves, today);
 
   // « Au premier des deux termes échus » : le plus proche l'emporte.
   const retenu = [temps, km]
@@ -238,7 +278,27 @@ export function etatConsommable(
   return {
     echeance: retenu?.echeance ?? null,
     preavisJours: retenu?.preavisJours ?? 0,
+    reste: retenu?.reste ?? null,
+    terme: retenu?.terme ?? null,
     donneeManquante: c.dureeKm !== null && km === null,
     releveAttendu,
   };
+}
+
+/**
+ * L'importance d'un consommable (décision du foyer, 2026-10-17). Souple :
+ * toujours `normal`. Ferme : `important` à la moitié du préavis, `critical`
+ * au dernier dixième et au-delà de la limite — en proportion seulement,
+ * sans le seuil fixe de sept jours des échéances datées (§ 3.8a), qui ferait
+ * entrer un consommable à courte durée de vie directement en critique.
+ */
+export function importanceConsommable(
+  tenue: TenueConsommable,
+  reste: number,
+): Importance {
+  if (tenue === "souple" || reste > 0.5) {
+    return "normal";
+  }
+
+  return reste <= 0.1 ? "critical" : "important";
 }
