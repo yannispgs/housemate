@@ -16,8 +16,11 @@ import {
   type PlainDate,
 } from "@/lib/domain/plain-date";
 import { defaultReminders, reminderDate } from "@/lib/domain/reminders";
-import type { Tenure } from "@/lib/ui/deadline";
-import { IMPORTANCE_LABELS, type Importance } from "@/lib/ui/deadline";
+import {
+  IMPORTANCE_LABELS,
+  type Importance,
+  type Tenure,
+} from "@/lib/ui/deadline";
 import type { ConsommableRow } from "./store";
 import {
   ACTIONNABLE,
