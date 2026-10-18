@@ -6,7 +6,14 @@
  */
 import { useActionState, useState } from "react";
 import { ETAT_AJOUT } from "@/lib/data/ajout-etat";
-import { IMPORTANCE_LABELS, IMPORTANCES } from "@/lib/ui/deadline";
+import { type Precision, SAISONS } from "@/lib/data/saisie";
+import { type Month, monthName } from "@/lib/domain/month";
+import {
+  IMPORTANCE_LABELS,
+  IMPORTANCES,
+  type Importance,
+  type Tenure,
+} from "@/lib/ui/deadline";
 import { ajouterEcheance } from "../../../app/_actions/ajout";
 import {
   BOUTON,
@@ -35,6 +42,45 @@ const DATE_LIBELLE: Readonly<Record<Motif, string>> = {
   sinceCompletion: "Dernière fois (facultatif)",
 };
 
+/**
+ * L'importance choisie se voit sur la liste même : contour et texte de sa
+ * couleur, et jamais la couleur seule (§ 5) — le libellé reste écrit, et
+ * « pour mémoire » passe en italique.
+ */
+const STYLE_IMPORTANCE: Readonly<Record<Importance, React.CSSProperties>> = {
+  critique: {
+    border: "2px solid var(--ink-critical)",
+    color: "var(--ink-critical)",
+    fontWeight: 700,
+  },
+  important: {
+    border: "2px solid var(--ink-serious)",
+    // L'orange seul se lit mal sur le fond clair : foncé vers l'encre.
+    color: "color-mix(in srgb, var(--ink-serious) 65%, var(--ink-primary))",
+    fontWeight: 600,
+  },
+  normal: { border: "1.5px solid var(--baseline)" },
+  memoire: {
+    border: "1px solid var(--border)",
+    color: "var(--ink-secondary)",
+    fontStyle: "italic",
+  },
+};
+
+/** Ferme : gras et contour épais. Souple : police normale, contour en pointillés. */
+const STYLE_TENUE: Readonly<Record<Tenure, React.CSSProperties>> = {
+  ferme: { border: "2.5px solid var(--ink-primary)", fontWeight: 700 },
+  souple: { border: "1.5px dashed var(--baseline)", fontWeight: 400 },
+};
+
+const PRECISION_LIBELLE: Readonly<Record<Precision, string>> = {
+  jour: "Un jour précis",
+  mois: "Un mois",
+  saison: "Une saison",
+};
+
+const MOIS = Array.from({ length: 12 }, (_, i) => i + 1);
+
 export function EcheanceForm({
   fiches,
   aujourdhui,
@@ -48,8 +94,15 @@ export function EcheanceForm({
   const [motif, setMotif] = useState<Motif>("once");
   // Liée à une fiche, l'échéance en hérite la catégorie (§ 5.4).
   const [ficheId, setFicheId] = useState("");
+  const [importance, setImportance] = useState<Importance>("normal");
+  const [tenue, setTenue] = useState<Tenure>("souple");
+  const [precision, setPrecision] = useState<Precision>("jour");
   const erreurs = etat.etape === "saisie" ? (etat.erreurs ?? {}) : {};
   const repetee = motif === "interval" || motif === "sinceCompletion";
+  // Une seule fois ou chaque année : un jour, un mois ou une saison.
+  const periodique = motif === "once" || motif === "annual";
+  const parPeriode = periodique && precision !== "jour";
+  const anneeCourante = Number(aujourdhui.slice(0, 4));
 
   return (
     <form action={agir} className="flex flex-col gap-4">
@@ -99,19 +152,95 @@ export function EcheanceForm({
           </span>
         </Champ>
       )}
-      <Champ libelle={DATE_LIBELLE[motif]} erreur={erreurs.date}>
-        <input
-          name="date"
-          type="date"
-          className={DATE}
-          defaultValue={motif === "sinceCompletion" ? "" : aujourdhui}
-          max={motif === "sinceCompletion" ? aujourdhui : undefined}
-          required={motif !== "sinceCompletion"}
-        />
-      </Champ>
+      {periodique && (
+        <Champ libelle="Précision" erreur={erreurs.precision}>
+          <select
+            name="precision"
+            value={precision}
+            onChange={event => setPrecision(event.target.value as Precision)}
+            className={LISTE}
+          >
+            {(["jour", "mois", "saison"] as const).map(valeur => (
+              <option key={valeur} value={valeur}>
+                {PRECISION_LIBELLE[valeur]}
+              </option>
+            ))}
+          </select>
+        </Champ>
+      )}
+      {!parPeriode && (
+        <Champ libelle={DATE_LIBELLE[motif]} erreur={erreurs.date}>
+          <input
+            name="date"
+            type="date"
+            className={DATE}
+            defaultValue={motif === "sinceCompletion" ? "" : aujourdhui}
+            max={motif === "sinceCompletion" ? aujourdhui : undefined}
+            required={motif !== "sinceCompletion"}
+          />
+        </Champ>
+      )}
+      {parPeriode && (
+        <Champ
+          libelle={precision === "mois" ? "Mois" : "Saison"}
+          aide="On a toute la période pour le faire : en retard après sa fin."
+          erreur={erreurs.mois ?? erreurs.saison ?? erreurs.annee}
+        >
+          <span className="flex gap-2.5">
+            {precision === "mois" ? (
+              <select
+                key="mois"
+                name="mois"
+                defaultValue={Number(aujourdhui.slice(5, 7))}
+                className={LISTE}
+                aria-label="Mois"
+              >
+                {MOIS.map(m => (
+                  <option key={m} value={m}>
+                    {monthName(m as Month)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select
+                key="saison"
+                name="saison"
+                defaultValue="printemps"
+                className={LISTE}
+                aria-label="Saison"
+              >
+                {Object.entries(SAISONS).map(([valeur, { libelle }]) => (
+                  <option key={valeur} value={valeur}>
+                    {libelle}
+                  </option>
+                ))}
+              </select>
+            )}
+            {motif === "once" && (
+              <input
+                name="annee"
+                type="number"
+                inputMode="numeric"
+                min={anneeCourante}
+                defaultValue={anneeCourante}
+                className={CHAMP}
+                style={{ width: "6.5rem", flex: "none" }}
+                aria-label="Année"
+                required
+              />
+            )}
+          </span>
+        </Champ>
+      )}
       <Ligne>
         <Champ libelle="Importance" erreur={erreurs.importance}>
-          <select name="importance" defaultValue="normal" className={LISTE}>
+          <select
+            name="importance"
+            value={importance}
+            onChange={event => setImportance(event.target.value as Importance)}
+            className={LISTE}
+            style={STYLE_IMPORTANCE[importance]}
+          >
             {IMPORTANCES.map(niveau => (
               <option key={niveau} value={niveau}>
                 {IMPORTANCE_LABELS[niveau]}
@@ -120,14 +249,21 @@ export function EcheanceForm({
           </select>
         </Champ>
         <Champ libelle="Tenue" erreur={erreurs.tenue}>
-          <select name="tenue" defaultValue="souple" className={LISTE}>
+          <select
+            name="tenue"
+            value={tenue}
+            onChange={event => setTenue(event.target.value as Tenure)}
+            className={LISTE}
+            style={STYLE_TENUE[tenue]}
+          >
             <option value="souple">Souple</option>
             <option value="ferme">Ferme</option>
           </select>
         </Champ>
       </Ligne>
       <p className="-mt-1.5 m-0 text-[12.5px] leading-normal text-ink-secondary">
-        Ferme : à ne pas rater, reste en retard. Souple : on vise la suivante.
+        Ferme : à ne pas rater, en retard dès le lendemain. Souple : on vise la
+        suivante.
       </p>
       <Ligne>
         <Champ
@@ -144,20 +280,23 @@ export function EcheanceForm({
             className={CHAMP}
           />
         </Champ>
-        <Champ
-          libelle="Tolérance"
-          aide="Jours après : avant d'être en retard."
-          erreur={erreurs.toleranceJours}
-        >
-          <input
-            name="toleranceJours"
-            type="number"
-            inputMode="numeric"
-            min={0}
-            defaultValue={3}
-            className={CHAMP}
-          />
-        </Champ>
+        {/* Ferme : pas de tolérance. Un mois ou une saison : toute la période. */}
+        {tenue === "souple" && !parPeriode && (
+          <Champ
+            libelle="Tolérance"
+            aide="Jours après : avant d'être en retard."
+            erreur={erreurs.toleranceJours}
+          >
+            <input
+              name="toleranceJours"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              defaultValue={3}
+              className={CHAMP}
+            />
+          </Champ>
+        )}
       </Ligne>
       <Champ
         libelle="Rappel (facultatif)"
@@ -171,7 +310,8 @@ export function EcheanceForm({
             inputMode="numeric"
             min={0}
             placeholder="—"
-            className={`${CHAMP} w-24 flex-none`}
+            className={CHAMP}
+            style={{ width: "6rem", flex: "none" }}
             aria-label="Délai du rappel"
           />
           <select
