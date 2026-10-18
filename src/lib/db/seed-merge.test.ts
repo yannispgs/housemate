@@ -120,6 +120,25 @@ describe("planSeedMerge", () => {
     expect(names(plan?.rows ?? [])).toEqual(["f"]);
   });
 
+  it("reconnaît un identifiant qui n'est pas une chaîne", () => {
+    const [, plan] = planSeedMerge(
+      [
+        { name: "lots", references: [], rows: [{ id: 1 }, { id: 2 }] },
+        {
+          name: "items",
+          references: [{ column: "lot", table: "lots" }],
+          rows: [
+            { id: 10, lot: 1 },
+            { id: 20, lot: 2 },
+          ],
+        },
+      ],
+      ids({ lots: ["1"] }),
+    );
+
+    expect(names(plan?.rows ?? [])).toEqual([20]);
+  });
+
   it("refuse des références circulaires entre tables", () => {
     const a: TableSnapshot = {
       name: "a",

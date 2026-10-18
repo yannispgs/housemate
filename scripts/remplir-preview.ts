@@ -63,13 +63,15 @@ async function lireIdentifiants(db: postgres.Sql | Tx): Promise<IdsByTable> {
     select table_name as table from information_schema.columns
     where table_schema = 'app' and column_name = 'id'
     order by table_name`;
-  const ids = new Map<string, Set<string>>();
+  const lus = await Promise.all(
+    tables.map(async ({ table }) => {
+      const cible = db(`app.${table}`);
+      const rows = await db<{ id: string }[]>`select id::text from ${cible}`;
 
-  for (const { table } of tables) {
-    const rows = await db<{ id: string }[]>`
-      select id::text from ${db(`app.${table}`)}`;
-    ids.set(table, new Set(rows.map(r => r.id)));
-  }
+      return [table, new Set(rows.map(r => r.id))] as const;
+    }),
+  );
+  const ids = new Map(lus);
 
   return ids;
 }

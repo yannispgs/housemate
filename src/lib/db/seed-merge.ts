@@ -36,6 +36,10 @@ export interface TableWrites {
 /** Les identifiants par table, ex. les lignes du jeu fictif. */
 export type IdsByTable = ReadonlyMap<string, ReadonlySet<string>>;
 
+/** La clé d'un identifiant : une chaîne telle quelle, le reste en JSON. */
+const cle = (value: unknown): string =>
+  typeof value === "string" ? value : JSON.stringify(value);
+
 /** Ce qui est apparu entre deux relevés d'identifiants. */
 export function newIds(before: IdsByTable, after: IdsByTable): IdsByTable {
   const added = new Map<string, Set<string>>();
@@ -94,7 +98,7 @@ function selfOrder(rows: readonly Row[], selfRefs: readonly Reference[]) {
     return rows;
   }
 
-  const byId = new Map(rows.map(r => [String(r.id), r]));
+  const byId = new Map(rows.map(r => [cle(r.id), r]));
   const placed = new Set<Row>();
   const ordered: Row[] = [];
 
@@ -106,7 +110,7 @@ function selfOrder(rows: readonly Row[], selfRefs: readonly Reference[]) {
     placed.add(row);
 
     for (const ref of selfRefs) {
-      const target = byId.get(String(row[ref.column]));
+      const target = byId.get(cle(row[ref.column]));
 
       if (target !== undefined) {
         place(target);
@@ -131,7 +135,7 @@ export function planSeedMerge(
   const isExcluded = (table: string, value: unknown) =>
     value !== null &&
     value !== undefined &&
-    (excluded.get(table)?.has(String(value)) ?? false);
+    (excluded.get(table)?.has(cle(value)) ?? false);
 
   return insertionOrder(tables).map(table => {
     const own = excluded.get(table.name) ?? new Set<string>();
@@ -149,7 +153,7 @@ export function planSeedMerge(
           table.references.some(ref => isExcluded(ref.table, row[ref.column]));
 
         if (out && row.id !== undefined) {
-          own.add(String(row.id));
+          own.add(cle(row.id));
         }
 
         return !out;

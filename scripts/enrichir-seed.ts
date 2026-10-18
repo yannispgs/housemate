@@ -109,25 +109,27 @@ try {
   const tables = await source<{ name: string }[]>`
     select tablename as name from pg_tables where schemaname = 'app'
     order by tablename`;
-  const snapshots: TableSnapshot[] = [];
+  const snapshots = await Promise.all(
+    tables.map(async ({ name }): Promise<TableSnapshot> => {
+      const cible = source(`app.${name}`);
+      const [lu] = await source<{ rows: Row[] }[]>`
+        select coalesce(json_agg(t), '[]'::json) as rows from ${cible} t`;
+      const qualifie = `app.${name}`;
 
-  for (const { name } of tables) {
-    const [{ rows }] = (await source`
-      select coalesce(json_agg(t), '[]'::json) as rows
-      from ${source(`app.${name}`)} t`) as unknown as [{ rows: Row[] }];
-    snapshots.push({
-      name,
-      references: references
-        .filter(r => r.table === `app.${name}`)
-        .map(
-          (r): Reference => ({
-            column: r.column,
-            table: r.target.replace(/^app\./, ""),
-          }),
-        ),
-      rows,
-    });
-  }
+      return {
+        name,
+        references: references
+          .filter(r => r.table === qualifie)
+          .map(
+            (r): Reference => ({
+              column: r.column,
+              table: r.target.replace(/^app\./, ""),
+            }),
+          ),
+        rows: lu?.rows ?? [],
+      };
+    }),
+  );
 
   const plan = planSeedMerge(snapshots, fictifs as IdsByTable);
   const bilan = await seed.begin(async tx => {
@@ -140,31 +142,35 @@ try {
         id text not null,
         primary key (table_name, id)
       )`;
-    const ajouts: string[] = [];
+    const colonnes = new Map<string, string[]>();
 
-    for (const table of plan) {
-      if (table.rows.length === 0) {
-        continue;
-      }
-
-      const colonnes = (
-        await tx<{ name: string }[]>`
-          select column_name as name from information_schema.columns
-          where table_schema = 'app' and table_name = ${table.name}
-            and is_generated = 'NEVER'
-          order by ordinal_position`
-      ).map(c => c.name);
-      const cible = tx(`app.${table.name}`);
-      const inserees = await tx`
-        insert into ${cible} (${tx(colonnes)})
-        select ${tx(colonnes)}
-        from json_populate_recordset(null::${cible}, ${tx.json(table.rows as postgres.JSONValue)}::json)
-        on conflict do nothing`;
-
-      if (inserees.count > 0) {
-        ajouts.push(`${table.name} ${inserees.count}`);
-      }
+    for (const c of await tx<{ table: string; name: string }[]>`
+      select table_name as table, column_name as name
+      from information_schema.columns
+      where table_schema = 'app' and is_generated = 'NEVER'
+      order by ordinal_position`) {
+      colonnes.set(c.table, [...(colonnes.get(c.table) ?? []), c.name]);
     }
+
+    // Une table après l'autre, dans l'ordre du plan : une ligne ne s'insère
+    // qu'une fois là celle qu'elle vise.
+    const ajouts = await plan
+      .filter(table => table.rows.length > 0)
+      .reduce(async (precedents, table) => {
+        const liste = await precedents;
+        const noms = colonnes.get(table.name) ?? [];
+        const cible = tx(`app.${table.name}`);
+        const lignes = tx.json(table.rows as postgres.JSONValue);
+        const inserees = await tx`
+          insert into ${cible} (${tx(noms)})
+          select ${tx(noms)}
+          from json_populate_recordset(null::${cible}, ${lignes}::json)
+          on conflict do nothing`;
+
+        return inserees.count > 0
+          ? [...liste, `${table.name} ${inserees.count}`]
+          : liste;
+      }, Promise.resolve<string[]>([]));
 
     return ajouts;
   });
