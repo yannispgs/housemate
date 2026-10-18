@@ -58,4 +58,25 @@ test.describe("réglages", () => {
       page.getByRole("button", { name: "30 jours" }),
     ).toHaveAttribute("aria-pressed", "true");
   });
+
+  test("règle les notifications push, niveau par niveau", async ({ page }) => {
+    await page.goto("/reglages");
+
+    // Par défaut : critique et important.
+    await expect(
+      page.getByRole("switch", { name: "Push · Critique" }),
+    ).toHaveAttribute("aria-checked", "true");
+    const normal = page.getByRole("switch", { name: "Push · Normal" });
+    await expect(normal).toHaveAttribute("aria-checked", "false");
+    await normal.click();
+    await expect(normal).toHaveAttribute("aria-checked", "true");
+
+    // Sans clés VAPID, l'appareil ne peut pas s'abonner.
+    await expect(
+      page.getByText("Les notifications ne sont pas encore en service."),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Activer ici" }),
+    ).toBeDisabled();
+  });
 });

@@ -63,6 +63,25 @@ describe("fiche vierge", () => {
   });
 });
 
+describe("échéance, exception push", () => {
+  it("toujours, jamais, ou selon le tableau", () => {
+    const exception = (notifier?: string) => {
+      const r = echeance(notifier === undefined ? {} : { notifier });
+
+      return r.ok && nouvelleEcheance(r.valeur).notifier;
+    };
+
+    expect(exception("oui")).toBe(true);
+    expect(exception("non")).toBe(false);
+    expect(exception("")).toBeNull();
+    expect(exception()).toBeNull();
+    expect(echeance({ notifier: "peut-être" })).toEqual({
+      ok: false,
+      erreurs: { notifier: "Choix inconnu." },
+    });
+  });
+});
+
 describe("échéance, rappels à la main", () => {
   it("lit plusieurs rappels et leurs canaux, dans l'ordre", () => {
     const r = echeance({
@@ -218,6 +237,7 @@ describe("échéance", () => {
       ficheId: null,
       derniereFois: null,
       rappels: [],
+      notifier: null,
     });
   });
 

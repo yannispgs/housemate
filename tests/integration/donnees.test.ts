@@ -1065,6 +1065,7 @@ describe("catégories (§ 5.4)", () => {
     ficheId,
     derniereFois: null,
     rappels: [],
+    notifier: null,
   });
 
   it("⚠️ une échéance liée tient sa catégorie de sa fiche, et la suit", async () => {

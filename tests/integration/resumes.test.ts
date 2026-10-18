@@ -65,6 +65,7 @@ const QUOTIDIEN: ReglagesResumes = {
   retards: false,
   perimetre: "foyer",
   email: { critique: true, important: false, normal: false, memoire: true },
+  push: { critique: false, important: true, normal: true, memoire: false },
 };
 
 describe("réglages des résumés", () => {

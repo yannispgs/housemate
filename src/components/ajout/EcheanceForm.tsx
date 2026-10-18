@@ -194,6 +194,17 @@ export function EcheanceForm({
         </Champ>
       </Ligne>
       <RappelsSaisie erreurs={direct ?? erreurs} onLignes={recalculer} />
+      <Champ
+        libelle="Notifications push"
+        aide="Pour toi seulement : selon le tableau de Réglages, ou une exception pour cette échéance."
+        erreur={erreurs.notifier}
+      >
+        <select name="notifier" defaultValue="" className={LISTE}>
+          <option value="">Selon mes réglages</option>
+          <option value="oui">Toujours me notifier</option>
+          <option value="non">Ne jamais me notifier</option>
+        </select>
+      </Champ>
       {fiches.length > 0 && (
         <Champ
           libelle="Fiche liée (facultatif)"
