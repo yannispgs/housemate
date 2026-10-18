@@ -117,6 +117,8 @@ export interface EcheanceRow {
   readonly ficheTitre: string | null;
   /** Déjà traduit pour la personne qui regarde : « Foyer », « Moi »… */
   readonly destinataire: string;
+  /** À moi, à l'un de mes groupes, ou à tout le foyer (§ 6). */
+  readonly pourMoi: boolean;
   /** Jour de création : aucune occurrence n'est cherchée avant. */
   readonly creeLe: PlainDate;
   readonly completions: readonly CompletionRow[];
@@ -140,14 +142,14 @@ const FROM_DOMAIN: Readonly<Record<DomainImportance, Importance>> = {
 /** Préavis par défaut d'une tâche dont personne n'a réglé le préavis. */
 export const PREAVIS_PAR_DEFAUT = 7;
 
-interface Situee {
+export interface Situee {
   readonly row: EcheanceRow;
   readonly occurrence: CurrentOccurrence;
   readonly importance: Importance;
   readonly raised: boolean;
 }
 
-function situer(row: EcheanceRow, today: PlainDate): Situee | null {
+export function situer(row: EcheanceRow, today: PlainDate): Situee | null {
   if (row.recurrence === null) {
     return null;
   }
@@ -283,7 +285,7 @@ const SHORT = new Intl.DateTimeFormat("fr-FR", {
   timeZone: "UTC",
 });
 
-function shortDate(day: PlainDate): string {
+export function shortDate(day: PlainDate): string {
   return SHORT.format(new Date(Date.UTC(day.year, day.month - 1, day.day)));
 }
 
@@ -334,13 +336,13 @@ function deadlineView(s: Situee, today: PlainDate): DeadlineView {
   };
 }
 
-const ACTIONNABLE: ReadonlySet<OccurrenceState> = new Set([
+export const ACTIONNABLE: ReadonlySet<OccurrenceState> = new Set([
   "due",
   "tolerance",
   "retard",
 ]);
 
-const IMPORTANCE_RANK: Readonly<Record<Importance, number>> = {
+export const IMPORTANCE_RANK: Readonly<Record<Importance, number>> = {
   critique: 0,
   important: 1,
   normal: 2,

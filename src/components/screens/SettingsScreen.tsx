@@ -4,7 +4,7 @@
  * Réglages (handoff de design, § G) : l'apparence, les notifications, et les
  * réglages du foyer, dont les écrans de détail ne sont pas encore conçus.
  */
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import {
   dataThemeFor,
   parseThemeMode,
@@ -116,14 +116,16 @@ export interface SettingsRow {
 
 export function SettingsScreen({
   rows,
+  notifications,
   signOut,
 }: Readonly<{
   rows: readonly SettingsRow[];
+  /** La section Notifications (`NotificationsPanel`). */
+  notifications: ReactNode;
   /** Server action de déconnexion. */
   signOut: () => Promise<void>;
 }>) {
   const { mode, systemDark, choose } = useAppearance();
-  const [critical, setCritical] = useState(true);
   const current = systemDark ? "sombre" : "clair";
 
   return (
@@ -166,35 +168,7 @@ export function SettingsScreen({
           </span>
         </Panel>
 
-        <Panel className="gap-3 p-[18px]">
-          <span className={PANEL_LABEL}>Notifications</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={critical}
-            onClick={() => setCritical(value => !value)}
-            className="flex min-h-11 cursor-pointer items-center justify-between gap-3 bg-transparent p-0 text-left"
-          >
-            <span className="text-[15px] leading-[1.3] text-ink">
-              Échéances critiques
-            </span>
-            <span
-              className="flex h-7 w-[46px] flex-none rounded-full p-[3px]"
-              style={{
-                background: critical
-                  ? "var(--brand-strong)"
-                  : "var(--baseline)",
-                justifyContent: critical ? "flex-end" : "flex-start",
-              }}
-            >
-              <span className="size-[22px] rounded-full bg-white shadow-[var(--shadow-sm)]" />
-            </span>
-          </button>
-          <span className="text-[12.5px] leading-normal text-pretty text-ink-secondary">
-            Seules les critiques envoient une notification. Les autres passent
-            par le récap ou restent à l'écran.
-          </span>
-        </Panel>
+        {notifications}
 
         <Panel className="px-[18px] py-1.5">
           {rows.map((row, index) => (
