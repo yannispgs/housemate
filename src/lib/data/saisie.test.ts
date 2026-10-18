@@ -23,17 +23,23 @@ import {
 } from "@/lib/data/saisie";
 import { fromISO } from "@/lib/domain/plain-date";
 
-const echeance = (champs: Record<string, string>) =>
-  lire(echeanceSaisie, {
-    titre: "Purger les radiateurs",
-    importance: "normal",
-    tenue: "souple",
-    toleranceJours: "3",
-    preavisJours: "7",
-    motif: "once",
-    date: "2026-11-01",
-    ...champs,
-  });
+/** Un champ à `undefined` est absent du formulaire. */
+const echeance = (champs: Record<string, string | undefined>) =>
+  lire(
+    echeanceSaisie,
+    Object.fromEntries(
+      Object.entries({
+        titre: "Purger les radiateurs",
+        importance: "normal",
+        tenue: "souple",
+        toleranceJours: "3",
+        preavisJours: "7",
+        motif: "once",
+        date: "2026-11-01",
+        ...champs,
+      }).filter(([, v]) => v !== undefined),
+    ),
+  );
 
 describe("fiche vierge", () => {
   it("accepte une nature, un nom et une catégorie facultative", () => {
@@ -60,6 +66,116 @@ describe("fiche vierge", () => {
     const r = lire(ficheSaisie, { nature: "lieu", titre: "x".repeat(121) });
 
     expect(r).toMatchObject({ ok: false, erreurs: { titre: /120/ } });
+  });
+});
+
+describe("échéance, tenue ferme", () => {
+  it("n'a pas de tolérance, même si le champ en porte une", () => {
+    const ferme = echeance({ tenue: "ferme", toleranceJours: "5" });
+    const sansChamp = echeance({ tenue: "ferme", toleranceJours: undefined });
+    const souple = echeance({ toleranceJours: undefined });
+
+    expect(ferme.ok && nouvelleEcheance(ferme.valeur).toleranceJours).toBe(0);
+    expect(
+      sansChamp.ok && nouvelleEcheance(sansChamp.valeur).toleranceJours,
+    ).toBe(0);
+    expect(souple.ok && nouvelleEcheance(souple.valeur).toleranceJours).toBe(0);
+  });
+});
+
+describe("échéance, un mois ou une saison au lieu d'une date", () => {
+  const valeur = (champs: Record<string, string | undefined>) => {
+    const r = echeance({ date: undefined, ...champs });
+
+    if (!r.ok) {
+      throw new Error(JSON.stringify(r.erreurs));
+    }
+
+    return nouvelleEcheance(r.valeur);
+  };
+
+  it("une seule fois en mars : du 1er au 31, ferme ou non", () => {
+    expect(
+      valeur({ precision: "mois", mois: "3", annee: "2027", tenue: "ferme" }),
+    ).toMatchObject({
+      recurrence: { kind: "once", on: "2027-03-01" },
+      toleranceJours: 30,
+    });
+  });
+
+  it("un hiver va de décembre à février de l'année suivante", () => {
+    expect(
+      valeur({ precision: "saison", saison: "hiver", annee: "2027" }),
+    ).toMatchObject({
+      recurrence: { kind: "once", on: "2027-12-01" },
+      // 31 + 31 + 29 jours (2028 est bissextile), moins le premier.
+      toleranceJours: 90,
+    });
+  });
+
+  it("chaque année : le début de la période, sur une année ordinaire", () => {
+    expect(
+      valeur({ motif: "annual", precision: "mois", mois: "2" }),
+    ).toMatchObject({
+      recurrence: { kind: "annual", month: 2, day: 1 },
+      toleranceJours: 27,
+    });
+    expect(
+      valeur({ motif: "annual", precision: "saison", saison: "automne" }),
+    ).toMatchObject({
+      recurrence: { kind: "annual", month: 9, day: 1 },
+      toleranceJours: 90,
+    });
+  });
+
+  it("une période ne vaut que pour une seule fois et chaque année", () => {
+    expect(
+      valeur({
+        motif: "interval",
+        precision: "mois",
+        date: "2026-11-01",
+        nombre: "2",
+        unite: "month",
+      }),
+    ).toMatchObject({
+      recurrence: { kind: "interval", anchor: "2026-11-01" },
+      toleranceJours: 3,
+    });
+  });
+
+  it("⚠️ demande le mois, la saison ou l'année qui manque", () => {
+    expect(
+      echeance({ date: undefined, precision: "mois", annee: "2027" }),
+    ).toEqual({
+      ok: false,
+      erreurs: { mois: "Indique le mois." },
+    });
+    expect(echeance({ date: undefined, precision: "saison" })).toEqual({
+      ok: false,
+      erreurs: { saison: "Indique la saison.", annee: "Indique l'année." },
+    });
+    expect(
+      echeance({ motif: "annual", precision: "saison", saison: "mousson" }),
+    ).toMatchObject({ ok: false, erreurs: { saison: "Saison inconnue." } });
+  });
+
+  it("un rappel déjà passé se juge au début de la période", () => {
+    const r = echeance({
+      date: undefined,
+      precision: "mois",
+      mois: "11",
+      annee: "2026",
+      rappel0Nombre: "1",
+      rappel0Unite: "month",
+      rappel0Email: "on",
+    });
+
+    if (!r.ok) {
+      throw new Error("saisie refusée");
+    }
+
+    expect(rappelsDejaPasses(r.valeur, fromISO("2026-10-01"))).toEqual([0]);
+    expect(rappelsDejaPasses(r.valeur, fromISO("2026-09-30"))).toEqual([]);
   });
 });
 
