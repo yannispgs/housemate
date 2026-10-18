@@ -8,20 +8,27 @@
  */
 import { z } from "zod";
 import type { MailContent } from "@/lib/auth/messages";
+import type { OccurrenceState } from "@/lib/domain/occurrence";
 import {
   addDays,
   compare,
   daysBetween,
   type PlainDate,
 } from "@/lib/domain/plain-date";
+import { defaultReminders, reminderDate } from "@/lib/domain/reminders";
+import type { Tenure } from "@/lib/ui/deadline";
 import { IMPORTANCE_LABELS, type Importance } from "@/lib/ui/deadline";
+import type { ConsommableRow } from "./store";
 import {
   ACTIONNABLE,
+  type ConsommableSitue,
   type EcheanceRow,
   IMPORTANCE_RANK,
   type Situee,
   shortDate,
   situer,
+  situerConsommable,
+  TO_DOMAIN,
   whenText,
 } from "./views";
 
@@ -124,28 +131,73 @@ export function resumesDus(
     dus.push("hebdo");
   }
 
-  if (reglages.quotidien && heure >= reglages.quotidienHeure) {
+  // Le quotidien se compose chaque jour à son heure, voulu ou non : un
+  // rappel par e-mail du jour suffit à le faire partir (§ 6).
+  if (heure >= reglages.quotidienHeure) {
     dus.push("quotidien");
   }
 
   return dus;
 }
 
-const trier = (a: Situee, b: Situee) =>
-  compare(a.occurrence.due, b.occurrence.due) ||
+/**
+ * Ce dont parle un résumé : une échéance ou un consommable, ramené à ce que
+ * le message en dit.
+ */
+interface Element {
+  readonly cle: string;
+  readonly titre: string;
+  readonly ficheTitre: string | null;
+  readonly due: PlainDate;
+  readonly state: OccurrenceState;
+  readonly importance: Importance;
+  readonly tenue: Tenure;
+  /** Daté au compteur : une estimation. */
+  readonly estimee: boolean;
+}
+
+interface Fait {
+  readonly titre: string;
+  readonly ficheTitre: string | null;
+  readonly le: PlainDate;
+}
+
+const depuisEcheance = (s: Situee): Element => ({
+  cle: `e-${s.row.id}`,
+  titre: s.row.titre,
+  ficheTitre: s.row.ficheTitre,
+  due: s.occurrence.due,
+  state: s.occurrence.state,
+  importance: s.importance,
+  tenue: s.row.tenue,
+  estimee: false,
+});
+
+const depuisConsommable = (c: ConsommableSitue): Element => ({
+  cle: `c-${c.row.id}`,
+  titre: c.row.intitule,
+  ficheTitre: c.row.ficheTitre,
+  due: c.due,
+  state: c.state,
+  importance: c.importance,
+  tenue: c.row.tenue,
+  estimee: c.estimee,
+});
+
+const trier = (a: Element, b: Element) =>
+  compare(a.due, b.due) ||
   IMPORTANCE_RANK[a.importance] - IMPORTANCE_RANK[b.importance];
 
-function ligne(s: Situee, today: PlainDate, quand: boolean): string {
+function ligne(e: Element, today: PlainDate, quand: boolean): string {
   const marques = [
-    s.importance === "critique" || s.importance === "important"
-      ? IMPORTANCE_LABELS[s.importance].toLowerCase()
+    e.importance === "critique" || e.importance === "important"
+      ? IMPORTANCE_LABELS[e.importance].toLowerCase()
       : "",
-    s.row.tenue === "ferme" ? "ferme" : "",
+    e.tenue === "ferme" ? "ferme" : "",
+    e.estimee ? "estimé au compteur" : "",
   ].filter(Boolean);
-  const date = quand
-    ? whenText(s.occurrence.due, today)
-    : shortDate(s.occurrence.due);
-  const suite = [s.row.titre, s.row.ficheTitre ?? ""].filter(Boolean);
+  const date = quand ? whenText(e.due, today) : shortDate(e.due);
+  const suite = [e.titre, e.ficheTitre ?? ""].filter(Boolean);
   const fin = marques.length > 0 ? ` (${marques.join(", ")})` : "";
 
   return `- ${date} · ${suite.join(" · ")}${fin}`;
@@ -159,61 +211,130 @@ function pluriel(n: number): string {
   return n === 1 ? "1 échéance" : `${n} échéances`;
 }
 
+const dansLaSemaine = (le: PlainDate, today: PlainDate) =>
+  daysBetween(le, today) >= 0 && daysBetween(le, today) < 7;
+
+/**
+ * Les échéances dont un rappel « par e-mail » tombe aujourd'hui (§ 6) :
+ * ceux ajoutés à la main, demande explicite, toujours ; celui que donne
+ * l'importance (une critique, le jour même) si la colonne E-mail garde ce
+ * niveau. Seulement ce qui me concerne, quel que soit le périmètre.
+ */
+function rappelsDuJour(
+  rows: readonly EcheanceRow[],
+  today: PlainDate,
+  email: ReglagesResumes["email"],
+): Situee[] {
+  return rows
+    .filter(row => row.pourMoi)
+    .map(row => situer(row, today))
+    .filter(
+      (s): s is Situee =>
+        s !== null &&
+        // Un rappel prévient AVANT : rien pour ce qui est déjà en retard.
+        s.occurrence.state !== "retard" &&
+        [
+          ...(email[s.row.importance]
+            ? defaultReminders(TO_DOMAIN[s.row.importance])
+            : []),
+          ...s.row.rappels,
+        ]
+          .filter(r => r.channels.includes("email"))
+          .some(r => compare(reminderDate(s.occurrence.due, r), today) === 0),
+    );
+}
+
+/** Ce que la personne voit, et ce qui a été fait dans la semaine. */
+export interface ContenuResume {
+  readonly echeances: readonly EcheanceRow[];
+  readonly consommables: readonly ConsommableRow[];
+}
+
 /**
  * Le résumé d'une personne, ou `null` s'il n'y a rien à dire.
  *
+ * - « Rappels du jour » (quotidien seulement) : les rappels par e-mail qui
+ *   tombent aujourd'hui, même hors de l'horizon. Ils suffisent à faire
+ *   partir le quotidien, même si la personne ne l'a pas voulu : seuls eux y
+ *   figurent alors ;
  * - « À faire » : ce qui est dû ou en tolérance ;
  * - « En retard » : si la personne le veut ;
  * - « À venir » : jusqu'à l'horizon ;
  * - « Fait » (hebdomadaire seulement) : les sept derniers jours.
  *
- * Seuls les niveaux cochés dans la colonne « E-mail » figurent, et seulement
- * ce qui la concerne si elle l'a choisi.
+ * Échéances et consommables du plan d'entretien, ensemble. Seuls les niveaux
+ * cochés dans la colonne « E-mail » figurent, et seulement ce qui concerne la
+ * personne si elle l'a choisi (un consommable concerne tout le foyer).
  */
 export function composerResume(
-  rows: readonly EcheanceRow[],
+  { echeances, consommables }: ContenuResume,
   today: PlainDate,
   sorte: SorteResume,
   reglages: ReglagesResumes,
   lienReglages: string,
 ): MailContent | null {
-  const retenues = rows.filter(
+  const rappels =
+    sorte === "quotidien"
+      ? rappelsDuJour(echeances, today, reglages.email)
+          .map(depuisEcheance)
+          .sort(trier)
+      : [];
+  const complet = sorte === "hebdo" || reglages.quotidien;
+  const retenues = echeances.filter(
     row => reglages.perimetre === "foyer" || row.pourMoi,
   );
-  const situees = retenues
-    .map(row => situer(row, today))
-    .filter((s): s is Situee => s !== null && reglages.email[s.importance])
-    .sort(trier);
+  const dejaRappelees = new Set(rappels.map(e => e.cle));
+  const elements = complet
+    ? [
+        ...retenues
+          .map(row => situer(row, today))
+          .filter((s): s is Situee => s !== null)
+          .map(depuisEcheance),
+        ...consommables
+          .map(row => situerConsommable(row, today))
+          .filter((c): c is ConsommableSitue => c !== null)
+          .map(depuisConsommable),
+      ]
+        .filter(e => reglages.email[e.importance] && !dejaRappelees.has(e.cle))
+        .sort(trier)
+    : [];
   const limite = addDays(today, reglages.horizonJours - 1);
 
-  const aFaire = situees.filter(
-    s => ACTIONNABLE.has(s.occurrence.state) && s.occurrence.state !== "retard",
+  const aFaire = elements.filter(
+    e => ACTIONNABLE.has(e.state) && e.state !== "retard",
   );
   const enRetard = reglages.retards
-    ? situees.filter(s => s.occurrence.state === "retard")
+    ? elements.filter(e => e.state === "retard")
     : [];
-  const aVenir = situees.filter(
-    s =>
-      !ACTIONNABLE.has(s.occurrence.state) &&
-      compare(s.occurrence.due, limite) <= 0,
+  const aVenir = elements.filter(
+    e => !ACTIONNABLE.has(e.state) && compare(e.due, limite) <= 0,
   );
-  const faites =
+  const faites: Fait[] =
     sorte === "hebdo"
-      ? retenues
-          .filter(row => reglages.email[row.importance])
-          .flatMap(row =>
-            row.completions
-              .filter(
-                c =>
-                  daysBetween(c.faiteLe, today) >= 0 &&
-                  daysBetween(c.faiteLe, today) < 7,
-              )
-              .map(c => ({ row, faiteLe: c.faiteLe })),
-          )
-          .sort((a, b) => compare(b.faiteLe, a.faiteLe))
+      ? [
+          ...retenues
+            .filter(row => reglages.email[row.importance])
+            .flatMap(row =>
+              row.completions.map(c => ({
+                titre: row.titre,
+                ficheTitre: row.ficheTitre,
+                le: c.faiteLe,
+              })),
+            ),
+          ...consommables.flatMap(row =>
+            row.remplacements.map(r => ({
+              titre: row.intitule,
+              ficheTitre: row.ficheTitre,
+              le: r.le,
+            })),
+          ),
+        ]
+          .filter(f => dansLaSemaine(f.le, today))
+          .sort((a, b) => compare(b.le, a.le))
       : [];
 
-  const nombre = aFaire.length + enRetard.length + aVenir.length;
+  const nombre =
+    rappels.length + aFaire.length + enRetard.length + aVenir.length;
 
   if (nombre === 0 && faites.length === 0) {
     return null;
@@ -231,23 +352,27 @@ export function composerResume(
     "Bonjour,",
     "",
     ...section(
+      "Rappels du jour",
+      rappels.map(e => ligne(e, today, true)),
+    ),
+    ...section(
       "À faire",
-      aFaire.map(s => ligne(s, today, true)),
+      aFaire.map(e => ligne(e, today, true)),
     ),
     ...section(
       "En retard",
-      enRetard.map(s => ligne(s, today, true)),
+      enRetard.map(e => ligne(e, today, true)),
     ),
     ...section(
       `À venir, ${horizon}`,
-      aVenir.map(s => ligne(s, today, false)),
+      aVenir.map(e => ligne(e, today, false)),
     ),
     ...section(
       "Fait ces sept derniers jours",
-      faites.map(({ row, faiteLe }) => {
-        const suite = [row.titre, row.ficheTitre ?? ""].filter(Boolean);
+      faites.map(f => {
+        const suite = [f.titre, f.ficheTitre ?? ""].filter(Boolean);
 
-        return `- ${shortDate(faiteLe)} · ${suite.join(" · ")}`;
+        return `- ${shortDate(f.le)} · ${suite.join(" · ")}`;
       }),
     ),
     `Régler ces résumés : ${lienReglages}`,

@@ -28,6 +28,7 @@ import {
   toISO,
 } from "@/lib/domain/plain-date";
 import type { ScheduledRecurrence } from "@/lib/domain/recurrence";
+import type { Reminder } from "@/lib/domain/reminders";
 import type {
   CategoryIcon,
   DeadlineView,
@@ -118,10 +119,12 @@ export interface EcheanceRow {
   /** Jour de création : aucune occurrence n'est cherchée avant. */
   readonly creeLe: PlainDate;
   readonly completions: readonly CompletionRow[];
+  /** Les rappels ajoutés à la main ; ceux de l'importance se calculent. */
+  readonly rappels: readonly Reminder[];
 }
 
 /** Les niveaux de la base et de l'écran, vers ceux du domaine, et retour. */
-const TO_DOMAIN: Readonly<Record<Importance, DomainImportance>> = {
+export const TO_DOMAIN: Readonly<Record<Importance, DomainImportance>> = {
   critique: "critical",
   important: "important",
   normal: "normal",
@@ -370,7 +373,7 @@ export function occurrenceACocher(
 /* Consommables du plan d'entretien (§ 5.3)                                 */
 /* ------------------------------------------------------------------------ */
 
-interface ConsommableSitue {
+export interface ConsommableSitue {
   readonly row: ConsommableRow;
   readonly due: PlainDate;
   readonly state: OccurrenceState;
@@ -386,7 +389,7 @@ interface ConsommableSitue {
  * qu'aucun remplacement n'est noté, et monte selon sa tenue — ferme jusqu'à
  * critique, souple jamais (§ 5.3). `null` sans échéance calculable.
  */
-function situerConsommable(
+export function situerConsommable(
   row: ConsommableRow,
   today: PlainDate,
 ): ConsommableSitue | null {
