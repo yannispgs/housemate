@@ -73,6 +73,57 @@ const unite = z.enum(["day", "week", "month", "year"], {
 });
 
 /* ------------------------------------------------------------------------ */
+/* Catégories (§ 5.4)                                                       */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Les thèmes de départ (décision du foyer, 2026-10-17). La liste s'enrichit à
+ * l'usage : toute catégorie déjà employée par le foyer y est proposée.
+ */
+export const CATEGORIES_DE_DEPART = [
+  "Administratif",
+  "Bricolage",
+  "Cuisine",
+  "Fêtes",
+  "Jardin",
+  "Maison",
+  "Nettoyage",
+  "Santé",
+  "Véhicule",
+] as const;
+
+const cle = (categorie: string) =>
+  categorie.trim().toLocaleLowerCase("fr").normalize("NFC");
+
+/** Les catégories à proposer : celles de départ et celles déjà employées. */
+export function categoriesProposees(employees: readonly string[]): string[] {
+  const parCle = new Map<string, string>();
+
+  for (const categorie of [...CATEGORIES_DE_DEPART, ...employees]) {
+    if (categorie.trim() !== "" && !parCle.has(cle(categorie))) {
+      parCle.set(cle(categorie), categorie.trim());
+    }
+  }
+
+  return [...parCle.values()].sort((a, b) => a.localeCompare(b, "fr"));
+}
+
+/**
+ * Une catégorie saisie, ramenée à une catégorie connue quand elle n'en diffère
+ * que par la casse ou les espaces : « cuisine », « Cuisine␣ » → « Cuisine ».
+ */
+export function categorieConnue(
+  saisie: string | null,
+  connues: readonly string[],
+): string | null {
+  if (saisie === null) {
+    return null;
+  }
+
+  return connues.find(c => cle(c) === cle(saisie)) ?? saisie.trim();
+}
+
+/* ------------------------------------------------------------------------ */
 /* Fiche vierge                                                             */
 /* ------------------------------------------------------------------------ */
 
@@ -176,7 +227,8 @@ function recurrenceDe(s: EcheanceSaisie): ScheduledRecurrence {
 export function nouvelleEcheance(s: EcheanceSaisie): NouvelleEcheance {
   return {
     titre: s.titre,
-    categorie: s.categorie,
+    // Liée à une fiche, elle en hérite la catégorie (§ 5.4) : rien à garder.
+    categorie: s.ficheId === null ? s.categorie : null,
     recurrence: serializeRecurrence(recurrenceDe(s)),
     toleranceJours: s.toleranceJours,
     preavisJours: s.preavisJours,
@@ -193,7 +245,6 @@ export function nouvelleEcheance(s: EcheanceSaisie): NouvelleEcheance {
 
 export const GARANTIE_PAR_DEFAUT = { count: 2, unit: "year" } as const;
 export const PREAVIS_GARANTIE_JOURS = 30;
-export const CATEGORIE_GARANTIES = "Garanties";
 
 export const garantieSaisie = z.object({
   titre,
@@ -239,7 +290,8 @@ export function nouvelleGarantie(s: GarantieSaisie): {
     // dérivée de la date d'achat (§ 5.2).
     echeance: {
       titre: `Fin de garantie — ${s.titre}`,
-      categorie: CATEGORIE_GARANTIES,
+      // Liée à l'objet : elle en hérite la catégorie (§ 5.4).
+      categorie: null,
       recurrence: serializeRecurrence({
         kind: "derived",
         sourceDate: fromISO(s.dateAchat),

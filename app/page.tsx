@@ -9,7 +9,7 @@ import {
 } from "@/demo/data";
 import { demoEnabled } from "@/demo/mode";
 import { enMonNom } from "@/lib/data/server";
-import { listerEcheances } from "@/lib/data/store";
+import { listerConsommables, listerEcheances } from "@/lib/data/store";
 import { aujourdhuiAParis } from "@/lib/data/today";
 import { homeDeadlines, nextUpText } from "@/lib/data/views";
 import { toISO } from "@/lib/domain/plain-date";
@@ -32,11 +32,13 @@ export default async function Page() {
   // Lue à chaque visite, au nom de la personne connectée.
   await connection();
   const today = aujourdhuiAParis();
-  const rows = await enMonNom(listerEcheances);
+  const [rows, consommables] = await enMonNom(tx =>
+    Promise.all([listerEcheances(tx), listerConsommables(tx)]),
+  );
 
   return (
     <HomeScreen
-      deadlines={homeDeadlines(rows, today)}
+      deadlines={homeDeadlines(rows, today, consommables)}
       fixedToday={toISO(today)}
       nextUp={nextUpText(rows, today)}
       aside={null}

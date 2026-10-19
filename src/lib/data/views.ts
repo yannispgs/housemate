@@ -8,6 +8,9 @@
  * celles en préavis. Le rang 2 (événement en cours) viendra avec les séjours.
  * Une échéance dormante n'est qu'à « À venir ».
  */
+
+import type { ConsommableRow } from "@/lib/data/store";
+import { etatConsommable, importanceConsommable } from "@/lib/domain/entretien";
 import {
   type Importance as DomainImportance,
   effectiveImportance,
@@ -233,11 +236,29 @@ function tone(state: OccurrenceState, importance: Importance): StatusTone {
   return importance === "critique" ? "critical" : "serious";
 }
 
-/** L'icône d'une carte, devinée de la catégorie ; générique à défaut. */
-export function iconFor(categorie: string | null): CategoryIcon {
+/**
+ * La sorte d'une échéance (§ 5.4), calculée d'après sa forme, jamais saisie :
+ * une fin de garantie est dérivée d'une date d'achat (§ 5.2) ; un consommable
+ * est un entretien (§ 5.3) ; le reste, un rappel.
+ */
+export type SorteEcheance = "garantie" | "entretien" | "rappel";
+
+export function sorteEcheance(row: EcheanceRow): SorteEcheance {
+  return row.recurrence?.kind === "derived" ? "garantie" : "rappel";
+}
+
+/**
+ * L'icône d'une carte : d'abord la sorte (une fin de garantie garde son
+ * icône, même rangée sous « Cuisine »), puis la catégorie ; générique à
+ * défaut.
+ */
+export function iconFor(
+  categorie: string | null,
+  sorte: SorteEcheance = "rappel",
+): CategoryIcon {
   const c = (categorie ?? "").toLowerCase();
 
-  if (/garantie/.test(c)) {
+  if (sorte === "garantie" || /garantie/.test(c)) {
     return "warranty";
   }
 
@@ -296,7 +317,7 @@ function deadlineView(s: Situee, today: PlainDate): DeadlineView {
     raised: s.raised,
     tenure: row.tenue,
     tone: tone(occurrence.state, s.importance),
-    icon: iconFor(row.categorie),
+    icon: iconFor(row.categorie, sorteEcheance(row)),
     window: null,
     frostRange: null,
     // Reporter n'existe que pour les préparatifs d'un séjour (§ 3.6).
@@ -343,33 +364,181 @@ export function occurrenceACocher(
     : s.occurrence.due;
 }
 
-/** L'accueil : rangs 1, 3 et 4, puis le plus pressant devant. */
+/* ------------------------------------------------------------------------ */
+/* Consommables du plan d'entretien (§ 5.3)                                 */
+/* ------------------------------------------------------------------------ */
+
+interface ConsommableSitue {
+  readonly row: ConsommableRow;
+  readonly due: PlainDate;
+  readonly state: OccurrenceState;
+  readonly importance: Importance;
+  readonly raised: boolean;
+  /** La date vient du compteur : c'est une estimation. */
+  readonly estimee: boolean;
+}
+
+/**
+ * Un consommable comme une échéance « depuis la dernière fois » : il s'ouvre
+ * au seuil de son objet (7,5 % de sa durée de vie par défaut), reste dû tant
+ * qu'aucun remplacement n'est noté, et monte selon sa tenue — ferme jusqu'à
+ * critique, souple jamais (§ 5.3). `null` sans échéance calculable.
+ */
+function situerConsommable(
+  row: ConsommableRow,
+  today: PlainDate,
+): ConsommableSitue | null {
+  const etat = etatConsommable(row, row.releves, today, row.seuil);
+
+  if (etat.echeance === null || etat.reste === null) {
+    return null;
+  }
+
+  const jours = daysBetween(today, etat.echeance);
+  let state: OccurrenceState = "dormante";
+
+  if (jours < 0) {
+    state = "retard";
+  } else if (jours === 0) {
+    state = "due";
+  } else if (etat.reste <= 1) {
+    // Le préavis s'ouvre dans l'unité du terme : kilomètres ou durée.
+    state = "preavis";
+  }
+
+  const importance = FROM_DOMAIN[importanceConsommable(row.tenue, etat.reste)];
+
+  return {
+    row,
+    due: etat.echeance,
+    state,
+    importance,
+    raised: importance !== "normal",
+    estimee: etat.terme === "compteur",
+  };
+}
+
+const KM = new Intl.NumberFormat("fr-FR");
+
+function consommableView(c: ConsommableSitue, today: PlainDate): DeadlineView {
+  const quand = c.estimee
+    ? `vers le ${longDate(c.due)}, estimé au compteur`
+    : longDate(c.due);
+
+  return {
+    id: `consommable-${c.row.id}`,
+    title: c.row.intitule,
+    detail: [quand, c.row.ficheTitre].join(" · "),
+    state: STATE_LABELS[c.state],
+    when: whenText(c.due, today),
+    category: c.row.categorie ?? SANS_CATEGORIE,
+    recipient: "Foyer",
+    // Pas de « Fait » : un remplacement se note avec le compteur du jour,
+    // depuis le plan d'entretien de la fiche (pas encore dessiné).
+    verb: "",
+    note: NOTES[c.importance],
+    importance: c.importance,
+    raised: c.raised,
+    tenure: c.row.tenue,
+    tone: tone(c.state, c.importance),
+    icon: iconFor(c.row.categorie, "entretien"),
+    window: null,
+    frostRange: null,
+    canPostpone: false,
+    history: [...c.row.remplacements]
+      .sort((a, b) => compare(b.le, a.le))
+      .slice(0, 3)
+      .map(r => ({
+        date: shortDate(r.le),
+        text:
+          r.compteur === null
+            ? "Remplacé"
+            : `Remplacé à ${KM.format(r.compteur)} km`,
+      })),
+    plants: null,
+  };
+}
+
+/** Le rang d'accueil d'un consommable (§ 10.1) ; `null` : pas à l'accueil. */
+function rangConsommable(c: ConsommableSitue): 1 | 3 | 4 | null {
+  if (c.state === "due" || c.state === "retard") {
+    return c.importance === "critique" ? 1 : 3;
+  }
+
+  return c.state === "preavis" ? 4 : null;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Accueil et À venir                                                       */
+/* ------------------------------------------------------------------------ */
+
+interface Rangee {
+  readonly rang: 1 | 3 | 4;
+  readonly importance: Importance;
+  readonly due: PlainDate;
+  readonly vue: () => DeadlineView;
+}
+
+/**
+ * L'accueil : rangs 1, 3 et 4, puis le plus pressant devant. Les
+ * consommables y prennent place comme des échéances fermes.
+ */
 export function homeDeadlines(
   rows: readonly EcheanceRow[],
   today: PlainDate,
+  consommables: readonly ConsommableRow[] = [],
 ): DeadlineView[] {
-  return rows
-    .map(row => situer(row, today))
-    .filter((s): s is Situee => s !== null && homeRank(s) !== null)
+  const echeances = rows.flatMap((row): Rangee[] => {
+    const s = situer(row, today);
+    const rang = s && homeRank(s);
+
+    return s && rang
+      ? [
+          {
+            rang,
+            importance: s.importance,
+            due: s.occurrence.due,
+            vue: () => deadlineView(s, today),
+          },
+        ]
+      : [];
+  });
+  const remplacements = consommables.flatMap((row): Rangee[] => {
+    const c = situerConsommable(row, today);
+    const rang = c && rangConsommable(c);
+
+    return c && rang
+      ? [
+          {
+            rang,
+            importance: c.importance,
+            due: c.due,
+            vue: () => consommableView(c, today),
+          },
+        ]
+      : [];
+  });
+
+  return [...echeances, ...remplacements]
     .sort(
       (a, b) =>
-        (homeRank(a) ?? 9) - (homeRank(b) ?? 9) ||
+        a.rang - b.rang ||
         // En préavis, la critique passe en tête de son rang.
         IMPORTANCE_RANK[a.importance] - IMPORTANCE_RANK[b.importance] ||
-        compare(a.occurrence.due, b.occurrence.due),
+        compare(a.due, b.due),
     )
-    .map(s => deadlineView(s, today));
+    .map(r => r.vue());
 }
 
-/** À venir : toute échéance qui a une occurrence, à sa date. */
+/** À venir : toute échéance qui a une occurrence, et tout consommable, à sa date. */
 export function upcomingItems(
   rows: readonly EcheanceRow[],
   today: PlainDate,
+  consommables: readonly ConsommableRow[] = [],
 ): UpcomingItem[] {
-  return rows
+  const echeances = rows
     .map(row => situer(row, today))
     .filter((s): s is Situee => s !== null)
-    .sort((a, b) => compare(a.occurrence.due, b.occurrence.due))
     .map(s => ({
       date: toISO(s.occurrence.due),
       title: s.row.titre,
@@ -379,6 +548,24 @@ export function upcomingItems(
       raised: s.raised,
       tenure: s.row.tenue,
     }));
+  const remplacements = consommables
+    .map(row => situerConsommable(row, today))
+    .filter((c): c is ConsommableSitue => c !== null)
+    .map(c => ({
+      date: toISO(c.due),
+      title: c.row.intitule,
+      detail: c.estimee
+        ? `${c.row.ficheTitre} · date estimée au compteur`
+        : c.row.ficheTitre,
+      category: c.row.categorie ?? SANS_CATEGORIE,
+      importance: c.importance,
+      raised: c.raised,
+      tenure: c.row.tenue,
+    }));
+
+  return [...echeances, ...remplacements].sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
 }
 
 /**

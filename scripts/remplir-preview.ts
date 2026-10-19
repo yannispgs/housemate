@@ -79,7 +79,7 @@ try {
   console.log(
     bilan === null
       ? "Foyer déjà rempli : rien à faire."
-      : `Foyer rempli : ${bilan.fiches} fiches, ${bilan.echeances} échéances.`,
+      : `Foyer rempli : ${bilan.fiches} fiches, ${bilan.echeances} échéances, ${bilan.consommables} consommables.`,
   );
 } finally {
   await sql.end();

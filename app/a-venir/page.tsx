@@ -4,7 +4,7 @@ import { UpcomingScreen } from "@/components/screens/UpcomingScreen";
 import { DEMO_UPCOMING } from "@/demo/data";
 import { demoEnabled } from "@/demo/mode";
 import { enMonNom } from "@/lib/data/server";
-import { listerEcheances } from "@/lib/data/store";
+import { listerConsommables, listerEcheances } from "@/lib/data/store";
 import { aujourdhuiAParis } from "@/lib/data/today";
 import { upcomingItems } from "@/lib/data/views";
 
@@ -16,7 +16,13 @@ export default async function Page() {
   }
 
   await connection();
-  const rows = await enMonNom(listerEcheances);
+  const [rows, consommables] = await enMonNom(tx =>
+    Promise.all([listerEcheances(tx), listerConsommables(tx)]),
+  );
 
-  return <UpcomingScreen items={upcomingItems(rows, aujourdhuiAParis())} />;
+  return (
+    <UpcomingScreen
+      items={upcomingItems(rows, aujourdhuiAParis(), consommables)}
+    />
+  );
 }

@@ -7,8 +7,11 @@ import { ETAT_AJOUT } from "@/lib/data/ajout-etat";
 import { NATURE_LABELS, NATURES } from "@/lib/data/views";
 import { ajouterFiche } from "../../../app/_actions/ajout";
 import { BOUTON, CHAMP, Champ, LISTE } from "../forms/Champ";
+import { ChoixCategorie } from "../forms/ChoixCategorie";
 
-export function FicheForm() {
+export function FicheForm({
+  categories,
+}: Readonly<{ categories: readonly string[] }>) {
   const [etat, agir, enCours] = useActionState(ajouterFiche, ETAT_AJOUT);
   const router = useRouter();
   const erreurs = etat.etape === "saisie" ? (etat.erreurs ?? {}) : {};
@@ -33,9 +36,7 @@ export function FicheForm() {
       <Champ libelle="Nom" erreur={erreurs.titre}>
         <input name="titre" className={CHAMP} required maxLength={120} />
       </Champ>
-      <Champ libelle="Catégorie" erreur={erreurs.categorie}>
-        <input name="categorie" className={CHAMP} maxLength={120} />
-      </Champ>
+      <ChoixCategorie categories={categories} erreur={erreurs.categorie} />
       <button type="submit" className={BOUTON} disabled={enCours}>
         Créer la fiche
       </button>

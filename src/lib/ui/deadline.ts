@@ -79,7 +79,10 @@ export interface DeadlineView {
   readonly when: string;
   readonly category: string;
   readonly recipient: string;
-  /** Libellé du bouton principal : « Fait », « Rendez-vous pris »… */
+  /**
+   * Libellé du bouton principal : « Fait », « Rendez-vous pris »… Vide :
+   * pas de bouton (un consommable se remplace depuis sa fiche).
+   */
   readonly verb: string;
   /** Comment l'échéance prévient : « notifiée », « récap seulement »… */
   readonly note: string;
