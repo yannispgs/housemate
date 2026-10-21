@@ -89,7 +89,7 @@ export default async function Page({
   const categories = categoriesProposees(employees);
 
   return (
-    <Screen title={choix.titre} subtitle={choix.texte}>
+    <Screen title={choix.titre} subtitle={choix.texte} back="/ajouter">
       <Panel className="p-[18px]">
         {choix.type === "garantie" && (
           <GarantieForm aujourdhui={aujourdhui} categories={categories} />
@@ -103,12 +103,6 @@ export default async function Page({
         )}
         {choix.type === "fiche" && <FicheForm categories={categories} />}
       </Panel>
-      <Link
-        href="/ajouter"
-        className="px-1 text-[13.5px] text-ink-secondary underline"
-      >
-        Ajouter autre chose
-      </Link>
     </Screen>
   );
 }
