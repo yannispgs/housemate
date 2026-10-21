@@ -3,17 +3,22 @@
  * contenu, et sur grand écran une colonne latérale (handoff de design :
  * contenu à gauche, ~620 px ; colonne à droite, ~280 px).
  */
+import Link from "next/link";
 import type { ReactNode } from "react";
+import { ArrowLeftIcon } from "./icons";
 
 export function Screen({
   title,
   subtitle,
+  back,
   titleAside,
   aside,
   children,
 }: Readonly<{
   title: ReactNode;
   subtitle?: ReactNode;
+  /** Au-dessus du titre : « ← Retour » vers l'écran précédent. */
+  back?: string;
   /** À droite du titre : un menu, des filtres. */
   titleAside?: ReactNode;
   /** Colonne latérale du bureau ; absente sur mobile. */
@@ -28,6 +33,15 @@ export function Screen({
               titre seul et le sous-titre prend toute la largeur ; sur bureau,
               il se range à droite du bloc entier, aligné en bas. */}
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-[22px] pt-2.5 pb-[18px] md:gap-x-4 md:gap-y-[7px] md:p-0">
+            {back && (
+              <Link
+                href={back}
+                className="col-span-2 -ml-0.5 flex w-fit items-center gap-1.5 text-[14px] text-ink-secondary no-underline hover:text-ink"
+              >
+                <ArrowLeftIcon size={17} strokeWidth={2.25} />
+                Retour
+              </Link>
+            )}
             <h1 className="m-0 font-display text-[27px] leading-[1.12] font-normal tracking-normal text-ink md:text-[32px] md:leading-[1.1]">
               {title}
             </h1>

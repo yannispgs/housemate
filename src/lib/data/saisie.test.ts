@@ -8,8 +8,12 @@ import {
   ficheSaisie,
   garantieSaisie,
   lire,
+  marqueConnue,
+  marquesConnues,
+  marquesSuggerees,
   nouvelleEcheance,
   nouvelleGarantie,
+  SUGGESTIONS_MAX,
 } from "@/lib/data/saisie";
 import { fromISO } from "@/lib/domain/plain-date";
 
@@ -311,5 +315,67 @@ describe("catégories (§ 5.4)", () => {
     expect(seule.ok && nouvelleEcheance(seule.valeur).categorie).toBe(
       "Véhicule",
     );
+  });
+});
+
+describe("marques : proposées à mesure qu'on les écrit", () => {
+  const connues = marquesConnues([
+    "Bosch",
+    "bosch ",
+    "Brandt",
+    "De'Longhi",
+    "Électrolux",
+    "Rosières",
+    "Ambosch",
+    "  ",
+  ]);
+
+  it("garde les marques du foyer sans vide ni doublon de casse", () => {
+    expect(connues).toEqual([
+      "Ambosch",
+      "Bosch",
+      "Brandt",
+      "De'Longhi",
+      "Électrolux",
+      "Rosières",
+    ]);
+  });
+
+  it("propose celle qui égale la saisie, puis celles qui la commencent, puis celles qui la contiennent", () => {
+    expect(marquesSuggerees("bosch", [...connues, "Boschmann"])).toEqual([
+      "Bosch",
+      "Boschmann",
+      "Ambosch",
+    ]);
+    expect(marquesSuggerees("b", connues)).toEqual([
+      "Bosch",
+      "Brandt",
+      "Ambosch",
+    ]);
+  });
+
+  it("ne tient compte ni de la casse, ni des accents, ni des espaces autour", () => {
+    expect(marquesSuggerees("  ELECTRO", connues)).toEqual(["Électrolux"]);
+    expect(marquesSuggerees("rosie", connues)).toEqual(["Rosières"]);
+  });
+
+  it("ne propose rien pour une saisie vide ou sans correspondance", () => {
+    expect(marquesSuggerees("", connues)).toEqual([]);
+    expect(marquesSuggerees("   ", connues)).toEqual([]);
+    expect(marquesSuggerees("Miele", connues)).toEqual([]);
+  });
+
+  it(`en propose ${SUGGESTIONS_MAX} au plus`, () => {
+    const nombreuses = Array.from({ length: 10 }, (_, i) => `Marque ${i}`);
+
+    expect(marquesSuggerees("marque", nombreuses)).toHaveLength(
+      SUGGESTIONS_MAX,
+    );
+  });
+
+  it("ramène une marque saisie à la marque connue qu'elle désigne", () => {
+    expect(marqueConnue(" bosch ", connues)).toBe("Bosch");
+    expect(marqueConnue(" Miele ", connues)).toBe("Miele");
+    expect(marqueConnue(null, connues)).toBeNull();
   });
 });

@@ -11,6 +11,8 @@ import {
   ficheSaisie,
   garantieSaisie,
   lire,
+  marqueConnue,
+  marquesConnues,
   nouvelleEcheance,
   nouvelleGarantie,
 } from "@/lib/data/saisie";
@@ -20,6 +22,7 @@ import {
   creerFiche,
   creerGarantie,
   listerCategories,
+  listerMarques,
   type Tx,
 } from "@/lib/data/store";
 import { aujourdhuiAParis } from "@/lib/data/today";
@@ -76,6 +79,10 @@ export async function ajouterGarantie(
       nouvelleGarantie({
         ...saisie.valeur,
         categorie: await categorie(tx, saisie.valeur.categorie),
+        marque: marqueConnue(
+          saisie.valeur.marque,
+          marquesConnues(await listerMarques(tx)),
+        ),
       }),
     ),
   );

@@ -110,6 +110,12 @@ export const ArrowUpIcon = (props: IconProps) => (
   </Icon>
 );
 
+export const ArrowLeftIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M19 12H5M12 19l-7-7 7-7" />
+  </Icon>
+);
+
 export const ChevronDownIcon = (props: IconProps) => (
   <Icon {...props}>
     <path d="m6 9 6 6 6-6" />

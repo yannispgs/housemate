@@ -10,14 +10,29 @@ import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { ETAT_AJOUT } from "@/lib/data/ajout-etat";
 import { ajouterGarantie } from "../../../app/_actions/ajout";
-import { BOUTON, CHAMP, Champ, LISTE } from "../forms/Champ";
+import {
+  BOUTON,
+  CHAMP,
+  Champ,
+  DATE,
+  LISTE,
+  Ligne,
+  NOMBRE,
+} from "../forms/Champ";
+import { ChampMarque } from "../forms/ChampMarque";
 import { ChoixCategorie } from "../forms/ChoixCategorie";
 import { envoyerPieceJointe } from "../forms/fichier";
 
 export function GarantieForm({
   aujourdhui,
   categories,
-}: Readonly<{ aujourdhui: string; categories: readonly string[] }>) {
+  marques,
+}: Readonly<{
+  aujourdhui: string;
+  categories: readonly string[];
+  /** Les marques déjà saisies par le foyer, proposées à la saisie. */
+  marques: readonly string[];
+}>) {
   const [etat, agir, enCours] = useActionState(ajouterGarantie, ETAT_AJOUT);
   const facture = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -76,18 +91,18 @@ export function GarantieForm({
       <Champ libelle="Objet" erreur={erreurs.titre}>
         <input name="titre" className={CHAMP} required maxLength={120} />
       </Champ>
-      <Champ libelle="Marque" erreur={erreurs.marque}>
-        <input name="marque" className={CHAMP} maxLength={120} />
-      </Champ>
-      <Champ libelle="Modèle" erreur={erreurs.modele}>
-        <input name="modele" className={CHAMP} maxLength={120} />
-      </Champ>
+      <Ligne>
+        <ChampMarque marques={marques} erreur={erreurs.marque} />
+        <Champ libelle="Modèle" erreur={erreurs.modele}>
+          <input name="modele" className={CHAMP} maxLength={120} />
+        </Champ>
+      </Ligne>
       <ChoixCategorie categories={categories} erreur={erreurs.categorie} />
       <Champ libelle="Date d'achat" erreur={erreurs.dateAchat}>
         <input
           name="dateAchat"
           type="date"
-          className={CHAMP}
+          className={DATE}
           defaultValue={aujourdhui}
           max={aujourdhui}
           required
@@ -106,14 +121,14 @@ export function GarantieForm({
             min={1}
             max={50}
             defaultValue={2}
-            className={`${CHAMP} w-24 flex-none`}
+            className={NOMBRE}
             required
             aria-label="Durée"
           />
           <select
             name="dureeUnite"
             defaultValue="year"
-            className={LISTE}
+            className={`${LISTE} flex-1`}
             aria-label="Unité"
           >
             <option value="year">ans</option>

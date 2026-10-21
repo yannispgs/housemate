@@ -8,7 +8,15 @@ import { useActionState, useState } from "react";
 import { ETAT_AJOUT } from "@/lib/data/ajout-etat";
 import { IMPORTANCE_LABELS, IMPORTANCES } from "@/lib/ui/deadline";
 import { ajouterEcheance } from "../../../app/_actions/ajout";
-import { BOUTON, CHAMP, Champ, LISTE } from "../forms/Champ";
+import {
+  BOUTON,
+  CHAMP,
+  Champ,
+  DATE,
+  LISTE,
+  Ligne,
+  NOMBRE,
+} from "../forms/Champ";
 import { ChoixCategorie } from "../forms/ChoixCategorie";
 
 type Motif = "once" | "interval" | "annual" | "sinceCompletion";
@@ -74,13 +82,13 @@ export function EcheanceForm({
               inputMode="numeric"
               min={1}
               defaultValue={1}
-              className={`${CHAMP} w-24 flex-none`}
+              className={NOMBRE}
               aria-label="Nombre"
             />
             <select
               name="unite"
               defaultValue="month"
-              className={LISTE}
+              className={`${LISTE} flex-1`}
               aria-label="Unité"
             >
               <option value="day">jours</option>
@@ -95,59 +103,62 @@ export function EcheanceForm({
         <input
           name="date"
           type="date"
-          className={CHAMP}
+          className={DATE}
           defaultValue={motif === "sinceCompletion" ? "" : aujourdhui}
           max={motif === "sinceCompletion" ? aujourdhui : undefined}
           required={motif !== "sinceCompletion"}
         />
       </Champ>
-      <Champ libelle="Importance" erreur={erreurs.importance}>
-        <select name="importance" defaultValue="normal" className={LISTE}>
-          {IMPORTANCES.map(niveau => (
-            <option key={niveau} value={niveau}>
-              {IMPORTANCE_LABELS[niveau]}
-            </option>
-          ))}
-        </select>
-      </Champ>
-      <Champ
-        libelle="Tenue"
-        aide="Ferme : à ne pas rater, reste en retard. Souple : on vise la suivante."
-        erreur={erreurs.tenue}
-      >
-        <select name="tenue" defaultValue="souple" className={LISTE}>
-          <option value="souple">Souple</option>
-          <option value="ferme">Ferme</option>
-        </select>
-      </Champ>
-      <Champ
-        libelle="Préavis (jours)"
-        aide="Combien de jours avant la date l'échéance apparaît à l'accueil."
-        erreur={erreurs.preavisJours}
-      >
-        <input
-          name="preavisJours"
-          type="number"
-          inputMode="numeric"
-          min={0}
-          defaultValue={7}
-          className={CHAMP}
-        />
-      </Champ>
-      <Champ
-        libelle="Tolérance (jours)"
-        aide="Combien de jours après la date avant d'être en retard."
-        erreur={erreurs.toleranceJours}
-      >
-        <input
-          name="toleranceJours"
-          type="number"
-          inputMode="numeric"
-          min={0}
-          defaultValue={3}
-          className={CHAMP}
-        />
-      </Champ>
+      <Ligne>
+        <Champ libelle="Importance" erreur={erreurs.importance}>
+          <select name="importance" defaultValue="normal" className={LISTE}>
+            {IMPORTANCES.map(niveau => (
+              <option key={niveau} value={niveau}>
+                {IMPORTANCE_LABELS[niveau]}
+              </option>
+            ))}
+          </select>
+        </Champ>
+        <Champ libelle="Tenue" erreur={erreurs.tenue}>
+          <select name="tenue" defaultValue="souple" className={LISTE}>
+            <option value="souple">Souple</option>
+            <option value="ferme">Ferme</option>
+          </select>
+        </Champ>
+      </Ligne>
+      <p className="-mt-1.5 m-0 text-[12.5px] leading-normal text-ink-secondary">
+        Ferme : à ne pas rater, reste en retard. Souple : on vise la suivante.
+      </p>
+      <Ligne>
+        <Champ
+          libelle="Préavis"
+          aide="Jours avant : quand elle paraît à l'accueil."
+          erreur={erreurs.preavisJours}
+        >
+          <input
+            name="preavisJours"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            defaultValue={7}
+            className={CHAMP}
+          />
+        </Champ>
+        <Champ
+          libelle="Tolérance"
+          aide="Jours après : avant d'être en retard."
+          erreur={erreurs.toleranceJours}
+        >
+          <input
+            name="toleranceJours"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            defaultValue={3}
+            className={CHAMP}
+          />
+        </Champ>
+      </Ligne>
       {fiches.length > 0 && (
         <Champ
           libelle="Fiche liée (facultatif)"
