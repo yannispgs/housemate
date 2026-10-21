@@ -209,3 +209,31 @@
     transform: translate(-50%, -50%);
   }
 }
+
+/*
+ * Mobile, pendant la frappe : l'en-tête et la barre d'onglets s'effacent tant
+ * qu'un champ qui ouvre le clavier a le focus (décision du foyer, 2026-10-21) ;
+ * le clavier prend déjà plus de la moitié de l'écran. Sur bureau, ces deux
+ * barres sont déjà masquées.
+ */
+@layer utilities {
+  .shell:has(
+      main
+        :is(
+          input:not(
+            [type="checkbox"],
+            [type="radio"],
+            [type="file"],
+            [type="date"],
+            [type="range"],
+            [type="color"],
+            [type="submit"],
+            [type="button"]
+          ),
+          textarea
+        ):focus
+    )
+    .masque-en-saisie {
+    display: none;
+  }
+}
