@@ -103,6 +103,7 @@ interface EcheanceSql {
     email: boolean;
     push: boolean;
   }[];
+  notifier: boolean | null;
 }
 
 export async function listerEcheances(tx: Tx): Promise<EcheanceRow[]> {
@@ -153,7 +154,10 @@ export async function listerEcheances(tx: Tx): Promise<EcheanceRow[]> {
           'nombre', r.nombre, 'unite', r.unite, 'email', r.email,
           'push', r.push) order by r.nombre, r.unite)
         from app.rappels r where r.echeance_id = e.id
-      ), '[]') as rappels
+      ), '[]') as rappels,
+      -- La RLS ne me laisse lire que mes exceptions.
+      (select x.notifier from app.exceptions_push x
+        where x.echeance_id = e.id) as notifier
     from app.echeances e
     left join app.fiches f on f.id = e.fiche_id
     where e.archivee_le is null`) as unknown as EcheanceSql[];
@@ -185,6 +189,7 @@ export async function listerEcheances(tx: Tx): Promise<EcheanceRow[]> {
         ...(r.push ? (["push"] as const) : []),
       ],
     })),
+    notifier: row.notifier,
   }));
 }
 
@@ -257,7 +262,12 @@ export async function creerEcheance(
     await completer(tx, id, jour, jour);
   }
 
-  await Promise.all(echeance.rappels.map(r => ajouterRappel(tx, id, r)));
+  await Promise.all([
+    ...echeance.rappels.map(r => ajouterRappel(tx, id, r)),
+    ...(echeance.notifier === null
+      ? []
+      : [definirExceptionPush(tx, id, echeance.notifier)]),
+  ]);
 
   return id;
 }
@@ -274,6 +284,25 @@ export async function ajouterRappel(
       ${rappel.channels.includes("email")}, ${rappel.channels.includes("push")})`;
 }
 
+/**
+ * Mon exception push sur une échéance (§ 6) : la faire notifier quel que
+ * soit le tableau (`true`), la taire (`false`), ou revenir au tableau
+ * (`null`).
+ */
+export async function definirExceptionPush(
+  tx: Tx,
+  echeanceId: string,
+  notifier: boolean | null,
+): Promise<void> {
+  await (notifier === null
+    ? tx`delete from app.exceptions_push where echeance_id = ${echeanceId}`
+    : tx`
+        insert into app.exceptions_push (echeance_id, notifier)
+        values (${echeanceId}, ${notifier})
+        on conflict (membre_id, echeance_id)
+          do update set notifier = excluded.notifier`);
+}
+
 /** La fiche de l'objet et sa fin de garantie, ensemble ou pas du tout. */
 export async function creerGarantie(
   tx: Tx,
@@ -281,7 +310,7 @@ export async function creerGarantie(
     readonly fiche: NouvelleFiche;
     readonly echeance: Omit<
       NouvelleEcheance,
-      "ficheId" | "derniereFois" | "rappels"
+      "ficheId" | "derniereFois" | "rappels" | "notifier"
     >;
   },
 ): Promise<string> {
@@ -291,6 +320,7 @@ export async function creerGarantie(
     ficheId,
     derniereFois: null,
     rappels: [],
+    notifier: null,
   });
 
   return ficheId;
