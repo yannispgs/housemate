@@ -95,24 +95,29 @@ export const CATEGORIES_DE_DEPART = [
 const cle = (categorie: string) =>
   categorie.trim().toLocaleLowerCase("fr").normalize("NFC");
 
-/** Les catégories à proposer : celles de départ et celles déjà employées. */
-export function categoriesProposees(employees: readonly string[]): string[] {
+/** Une liste sans vides ni doublons de casse, dans l'ordre alphabétique. */
+function sansDoublon(valeurs: readonly string[]): string[] {
   const parCle = new Map<string, string>();
 
-  for (const categorie of [...CATEGORIES_DE_DEPART, ...employees]) {
-    if (categorie.trim() !== "" && !parCle.has(cle(categorie))) {
-      parCle.set(cle(categorie), categorie.trim());
+  for (const valeur of valeurs) {
+    if (valeur.trim() !== "" && !parCle.has(cle(valeur))) {
+      parCle.set(cle(valeur), valeur.trim());
     }
   }
 
   return [...parCle.values()].sort((a, b) => a.localeCompare(b, "fr"));
 }
 
+/** Les catégories à proposer : celles de départ et celles déjà employées. */
+export function categoriesProposees(employees: readonly string[]): string[] {
+  return sansDoublon([...CATEGORIES_DE_DEPART, ...employees]);
+}
+
 /**
- * Une catégorie saisie, ramenée à une catégorie connue quand elle n'en diffère
- * que par la casse ou les espaces : « cuisine », « Cuisine␣ » → « Cuisine ».
+ * Une saisie, ramenée à la valeur connue dont elle ne diffère que par la
+ * casse ou les espaces.
  */
-export function categorieConnue(
+function valeurConnue(
   saisie: string | null,
   connues: readonly string[],
 ): string | null {
@@ -121,6 +126,62 @@ export function categorieConnue(
   }
 
   return connues.find(c => cle(c) === cle(saisie)) ?? saisie.trim();
+}
+
+/**
+ * Une catégorie saisie, ramenée à une catégorie connue quand elle n'en diffère
+ * que par la casse ou les espaces : « cuisine », « Cuisine␣ » → « Cuisine ».
+ */
+export const categorieConnue = valeurConnue;
+
+/* ------------------------------------------------------------------------ */
+/* Marques                                                                  */
+/* ------------------------------------------------------------------------ */
+
+/** Les marques déjà saisies par le foyer, sans doublon de casse. */
+export const marquesConnues = sansDoublon;
+
+/** Une marque saisie, ramenée à la marque connue qu'elle désigne : « bosch » → « Bosch ». */
+export const marqueConnue = valeurConnue;
+
+export const SUGGESTIONS_MAX = 6;
+
+/** Pour comparer sans tenir compte de la casse ni des accents. */
+const pli = (texte: string) =>
+  texte.trim().normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase("fr");
+
+/**
+ * Les marques connues qui égalent ou contiennent la saisie, à mesure qu'on
+ * l'écrit (décision du foyer, 2026-10-21), sans tenir compte de la casse ni
+ * des accents : celle qui l'égale d'abord, puis celles qui commencent par
+ * elle, puis les autres ; six au plus.
+ */
+export function marquesSuggerees(
+  saisie: string,
+  connues: readonly string[],
+): string[] {
+  const cherche = pli(saisie);
+
+  if (cherche === "") {
+    return [];
+  }
+
+  const rang = (marque: string) => {
+    const pliee = pli(marque);
+
+    if (pliee === cherche) {
+      return 0;
+    }
+
+    return pliee.startsWith(cherche) ? 1 : 2;
+  };
+
+  return connues
+    .filter(marque => pli(marque).includes(cherche))
+    .map(marque => ({ marque, rang: rang(marque) }))
+    .sort((a, b) => a.rang - b.rang || a.marque.localeCompare(b.marque, "fr"))
+    .slice(0, SUGGESTIONS_MAX)
+    .map(s => s.marque);
 }
 
 /* ------------------------------------------------------------------------ */

@@ -19,13 +19,20 @@ import {
   Ligne,
   NOMBRE,
 } from "../forms/Champ";
+import { ChampMarque } from "../forms/ChampMarque";
 import { ChoixCategorie } from "../forms/ChoixCategorie";
 import { envoyerPieceJointe } from "../forms/fichier";
 
 export function GarantieForm({
   aujourdhui,
   categories,
-}: Readonly<{ aujourdhui: string; categories: readonly string[] }>) {
+  marques,
+}: Readonly<{
+  aujourdhui: string;
+  categories: readonly string[];
+  /** Les marques déjà saisies par le foyer, proposées à la saisie. */
+  marques: readonly string[];
+}>) {
   const [etat, agir, enCours] = useActionState(ajouterGarantie, ETAT_AJOUT);
   const facture = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -85,9 +92,7 @@ export function GarantieForm({
         <input name="titre" className={CHAMP} required maxLength={120} />
       </Champ>
       <Ligne>
-        <Champ libelle="Marque" erreur={erreurs.marque}>
-          <input name="marque" className={CHAMP} maxLength={120} />
-        </Champ>
+        <ChampMarque marques={marques} erreur={erreurs.marque} />
         <Champ libelle="Modèle" erreur={erreurs.modele}>
           <input name="modele" className={CHAMP} maxLength={120} />
         </Champ>

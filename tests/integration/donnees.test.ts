@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { FACTURE_FICTIVE, jeuFictif } from "@/lib/data/jeu-fictif";
 import { foyerVide, remplirFoyer } from "@/lib/data/remplissage";
 import {
+  type Attribut,
   echeanceSaisie,
   garantieSaisie,
   lire,
@@ -26,6 +27,7 @@ import {
   listerConsommables,
   listerEcheances,
   listerFiches,
+  listerMarques,
   modifierDureeDeVie,
   modifierTenueConsommable,
   noterReleve,
@@ -947,5 +949,42 @@ describe("catégories (§ 5.4)", () => {
     expect(
       (await commeMembre(sql(), conjoint.compte, listerCategories)).sort(),
     ).toEqual(["Cuisine", "Santé"]);
+  });
+
+  it("liste les marques du foyer : l'attribut « Marque » de ses fiches", async () => {
+    const fiche = (titre: string, attributs: Attribut[]) => ({
+      nature: "equipement" as const,
+      titre,
+      categorie: null,
+      attributs,
+    });
+    await commeMembre(sql(), moi.compte, async tx => {
+      await creerFiche(
+        tx,
+        fiche("Le four", [
+          { libelle: "Marque", type: "texte", valeur: "Bosch" },
+          { libelle: "Modèle", type: "texte", valeur: "Serie 6" },
+        ]),
+      );
+      await creerFiche(
+        tx,
+        fiche("Le lave-vaisselle", [
+          { libelle: "Marque", type: "texte", valeur: "Bosch" },
+        ]),
+      );
+      await creerFiche(tx, fiche("La perceuse", []));
+    });
+    await commeMembre(sql(), voisin.compte, tx =>
+      creerFiche(
+        tx,
+        fiche("Le bateau", [
+          { libelle: "Marque", type: "texte", valeur: "Bénéteau" },
+        ]),
+      ),
+    );
+
+    expect(await commeMembre(sql(), conjoint.compte, listerMarques)).toEqual([
+      "Bosch",
+    ]);
   });
 });

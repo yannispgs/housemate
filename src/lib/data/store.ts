@@ -64,6 +64,16 @@ export async function listerCategories(tx: Tx): Promise<string[]> {
   return rows.map(r => r.categorie);
 }
 
+/** Les marques déjà saisies par le foyer : l'attribut « Marque » de ses fiches. */
+export async function listerMarques(tx: Tx): Promise<string[]> {
+  const rows = await tx<{ marque: string }[]>`
+    select distinct attribut->>'valeur' as marque
+    from app.fiches, jsonb_array_elements(attributs) as attribut
+    where attribut->>'libelle' = 'Marque' and attribut->>'type' = 'texte'`;
+
+  return rows.map(r => r.marque);
+}
+
 export async function listerFiches(tx: Tx): Promise<FicheRow[]> {
   return (await tx`
     select id::text, nature, titre, categorie
