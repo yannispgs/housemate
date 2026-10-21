@@ -31,6 +31,7 @@ const echeance = (overrides: Partial<EcheanceRow>): EcheanceRow => ({
   importance: "normal",
   ficheTitre: null,
   destinataire: "Foyer",
+  pourMoi: true,
   creeLe: d("2026-10-01"),
   completions: [],
   ...overrides,

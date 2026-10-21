@@ -20,6 +20,7 @@ import {
 } from "./forecasts";
 import { evaluateEvening, reviewNight, sendPending } from "./frost-run";
 import type { Mail } from "./frost-watch";
+import { demanderResumes } from "./resumes";
 import {
   parisDate,
   parisHour,
@@ -57,6 +58,10 @@ interface Env {
   SMTP_KEY: string;
   /** Destinataire des alertes : un seul, pour l'instant. */
   ALERT_TO: string;
+  /** L'envoi des résumés de l'app (variable de `wrangler.jsonc`). */
+  RESUMES_URL: string;
+  /** Le jeton partagé avec l'app (`RESUMES_SECRET` côté Vercel). */
+  RESUMES_SECRET?: string;
 }
 
 const MAIL_FROM = "noreply@house-mate.app";
@@ -214,6 +219,13 @@ export default {
 
     if (shouldFetchRainForecasts(hour)) {
       tasks.push(collectRainForecasts(env, sql));
+    }
+
+    // Les résumés par e-mail : chaque heure, l'app décide qui en reçoit un.
+    if (env.RESUMES_SECRET) {
+      tasks.push(demanderResumes(env.RESUMES_URL, env.RESUMES_SECRET));
+    } else {
+      console.warn("RESUMES_SECRET absent : résumés non demandés.");
     }
 
     // Les tâches vont au bout même si l'une échoue ; l'échec est ensuite

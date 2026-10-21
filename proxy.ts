@@ -18,12 +18,12 @@ export const config = {
   // Valeur littérale, lue telle quelle par Next au build : `[.]` plutôt que
   // `\.` pour le point.
   matcher: [
-    // Tout, sauf : le relais et les webhooks de Neon Auth (ils ont leurs
-    // propres contrôles), les fichiers de Next, et les fichiers statiques
+    // Tout, sauf : le relais et les webhooks de Neon Auth, et l'envoi des
+    // résumés (ils ont leurs propres contrôles), les fichiers de Next, et les fichiers statiques
     // (polices, manifeste), qui ne révèlent rien du foyer. Les icônes
     // générées (`/icon/<taille>`, `/apple-icon`) n'ont pas d'extension :
     // nommées ici, sans quoi l'onglet de la page de connexion et l'icône de
     // l'écran d'accueil de l'iPhone renverraient vers `/connexion`.
-    "/((?!api/auth|api/neon-auth|_next/static|_next/image|manifest[.]webmanifest|icon/|apple-icon|.*[.][a-z0-9]+$).*)",
+    "/((?!api/auth|api/neon-auth|api/resumes|_next/static|_next/image|manifest[.]webmanifest|icon/|apple-icon|.*[.][a-z0-9]+$).*)",
   ],
 };

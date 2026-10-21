@@ -93,6 +93,7 @@ interface EcheanceSql {
   importance: Importance;
   fiche_titre: string | null;
   destinataire: string;
+  pour_moi: boolean;
   cree_le: string;
   completions: { occurrence: string; faite_le: string }[];
 }
@@ -120,6 +121,15 @@ export async function listerEcheances(tx: Tx): Promise<EcheanceRow[]> {
           case when e.destinataire_groupe is null then 'Un membre'
             else 'Un groupe' end)
       end as destinataire,
+      -- Ce qui me concerne (§ 6) : à moi, à l'un de mes groupes, ou à tout
+      -- le foyer.
+      coalesce(
+        (e.destinataire_membre is null and e.destinataire_groupe is null)
+          or e.destinataire_membre = app.membre_courant()
+          or e.destinataire_groupe in (
+            select g.groupe_id from app.groupe_membres g
+            where g.membre_id = app.membre_courant()),
+        false) as pour_moi,
       to_char(e.cree_le at time zone 'Europe/Paris', 'YYYY-MM-DD') as cree_le,
       coalesce((
         select json_agg(json_build_object(
@@ -146,6 +156,7 @@ export async function listerEcheances(tx: Tx): Promise<EcheanceRow[]> {
     importance: row.importance,
     ficheTitre: row.fiche_titre,
     destinataire: row.destinataire,
+    pourMoi: row.pour_moi,
     creeLe: fromISO(row.cree_le),
     completions: row.completions.map(
       (c): CompletionRow => ({

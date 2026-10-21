@@ -15,3 +15,20 @@ const PARIS = new Intl.DateTimeFormat("en-CA", {
 export function aujourdhuiAParis(maintenant: Date = new Date()): PlainDate {
   return fromISO(PARIS.format(maintenant));
 }
+
+const HEURE = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/Paris",
+  hour: "2-digit",
+  hourCycle: "h23",
+});
+
+/** Le jour et l'heure à Paris : l'heure d'envoi des résumés (§ 6). */
+export function instantAParis(maintenant: Date = new Date()): {
+  jour: PlainDate;
+  heure: number;
+} {
+  return {
+    jour: aujourdhuiAParis(maintenant),
+    heure: Number(HEURE.format(maintenant)),
+  };
+}
