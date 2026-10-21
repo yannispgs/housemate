@@ -9,7 +9,8 @@
  * horizontal qui porte aussi les onglets et les actions.
  *
  * Mobile, pendant la frappe, l'en-tête et la barre d'onglets s'effacent
- * (`.masque-en-saisie`, voir `globals.css`) pour laisser la place au clavier.
+ * (`.masque-en-saisie`, voir `globals.css`) pour laisser la place au clavier,
+ * et le champ où l'on écrit reste en vue (`useChampVisible`).
  *
  * Client component : l'onglet actif dépend du chemin courant. La barre d'état
  * et l'indicateur d'accueil de la maquette ne sont pas dessinés : ce sont les
@@ -33,6 +34,7 @@ import {
   PlusIcon,
   SlidersIcon,
 } from "./icons";
+import { useChampVisible } from "./useChampVisible";
 
 function Brand() {
   return (
@@ -199,6 +201,7 @@ export function AppShell({
   children: ReactNode;
 }>) {
   const pathname = usePathname();
+  useChampVisible();
 
   return (
     <div className="shell flex h-dvh flex-col overflow-hidden bg-page text-ink">
@@ -207,7 +210,9 @@ export function AppShell({
         <DomainToggle pathname={pathname} compact={false} />
       </header>
       <DesktopHeader pathname={pathname} household={household} />
-      <main className="min-h-0 flex-1 overflow-auto">{children}</main>
+      <main className="min-h-0 flex-1 overflow-auto pb-[var(--clavier,0px)]">
+        {children}
+      </main>
       <TabBar pathname={pathname} />
     </div>
   );

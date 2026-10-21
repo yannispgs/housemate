@@ -19,7 +19,7 @@ export default async function Page() {
   const desactivee = authMode().kind === "desactivee";
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-page">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-page pb-[var(--clavier,0px)]">
       <main className="mx-auto flex min-h-full w-full max-w-[460px] flex-col gap-[26px] px-[18px] pt-[max(env(safe-area-inset-top),28px)] pb-10 md:justify-center">
         {/* La marque, comme dans la coquille de l'app. */}
         <span className="inline-flex flex-none flex-col gap-[5px] self-start px-1">
