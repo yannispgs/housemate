@@ -74,38 +74,3 @@ export async function insertForecasts(
     on conflict do nothing
   `;
 }
-
-export interface StoredRain {
-  readonly source: string;
-  readonly model: string;
-  readonly issuedAt: Date | null;
-  readonly start: Date;
-  readonly end: Date;
-  readonly millimetres: number;
-}
-
-export async function insertRainForecasts(
-  sql: Sql,
-  retrievedAt: Date,
-  rain: readonly StoredRain[],
-): Promise<void> {
-  if (rain.length === 0) {
-    return;
-  }
-
-  await sql`
-    insert into meteo.previsions_pluie
-      (source, modele, recuperee_le, emise_le, debut, fin, precipitation_mm)
-    select source, modele, ${retrievedAt.toISOString()}::timestamptz,
-      emise_le, debut, fin, precipitation_mm
-    from unnest(
-      ${rain.map(point => point.source)}::text[],
-      ${rain.map(point => point.model)}::text[],
-      ${rain.map(point => point.issuedAt?.toISOString() ?? null)}::timestamptz[],
-      ${rain.map(point => point.start.toISOString())}::timestamptz[],
-      ${rain.map(point => point.end.toISOString())}::timestamptz[],
-      ${rain.map(point => point.millimetres)}::numeric[]
-    ) as p(source, modele, emise_le, debut, fin, precipitation_mm)
-    on conflict do nothing
-  `;
-}
