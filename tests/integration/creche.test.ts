@@ -19,7 +19,7 @@ import { commeMembre } from "@/lib/data/store";
 import { DIRECT_URL } from "./env";
 
 /**
- * Le rappel de crèche en base (migration 0013) : les réglages partagés par
+ * Le rappel de crèche en base (migrations 0013 et 0014) : les réglages partagés par
  * le foyer, l'abonnement de chacun, la pluie figée et le journal.
  */
 const owner = postgres(DIRECT_URL, { max: 1, onnotice: () => {} });

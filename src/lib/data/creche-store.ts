@@ -1,5 +1,5 @@
 /**
- * Le rappel de crèche en base (migration 0013) : les réglages du foyer et
+ * Le rappel de crèche en base (migrations 0013 et 0014) : les réglages du foyer et
  * l'abonnement de chacun, lus et écrits à son nom, sous la RLS ; et, pour
  * l'envoi, les abonnés, la pluie prévue et le journal, en propriétaire.
  */
