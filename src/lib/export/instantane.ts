@@ -50,6 +50,18 @@ export interface Instantane {
   readonly tables: Readonly<Record<Table, readonly Ligne[]>>;
 }
 
+/**
+ * L'ordre des unités de code, et non `localeCompare` : l'ordre linguistique
+ * dépend de la version d'ICU, et une forme canonique ne doit dépendre de rien.
+ */
+export function ordreBinaire(a: string, b: string): number {
+  if (a === b) {
+    return 0;
+  }
+
+  return a < b ? -1 : 1;
+}
+
 /** Ce qui identifie une ligne pour la trier : son `id`, sinon toutes ses valeurs. */
 function cleDeTri(ligne: Ligne): string {
   return typeof ligne.id === "string" ? ligne.id : jsonCanonique(ligne);
@@ -61,9 +73,7 @@ export function instantane(
   const triees = Object.fromEntries(
     TABLES.map(table => [
       table,
-      [...tables[table]].sort((a, b) =>
-        cleDeTri(a) < cleDeTri(b) ? -1 : cleDeTri(a) > cleDeTri(b) ? 1 : 0,
-      ),
+      [...tables[table]].sort((a, b) => ordreBinaire(cleDeTri(a), cleDeTri(b))),
     ]),
   ) as unknown as Record<Table, readonly Ligne[]>;
 
@@ -80,7 +90,7 @@ export function jsonCanonique(valeur: Json): string {
     const objet = valeur as { readonly [cle: string]: Json };
 
     return `{${Object.keys(objet)
-      .sort()
+      .sort(ordreBinaire)
       .map(cle => `${JSON.stringify(cle)}:${jsonCanonique(objet[cle] as Json)}`)
       .join(",")}}`;
   }

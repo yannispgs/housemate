@@ -23,7 +23,7 @@ export function archiver(json: string, markdown: string, le: Date): Uint8Array {
   );
 }
 
-export async function chiffrer(
+export function chiffrer(
   contenu: Uint8Array,
   clePublique: string,
 ): Promise<Uint8Array> {
