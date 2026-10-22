@@ -53,6 +53,13 @@ test.describe("navigation", () => {
     await expect(page.locator('a[href="/recap"]:visible')).toHaveCount(0);
   });
 
+  test("Réglages cache le toggle Échéances / Fiches", async ({ page }) => {
+    await page.goto("/reglages");
+
+    await expect(page.locator('a[href="/inventaire"]:visible')).toHaveCount(0);
+    await expect(page.locator('a[href="/recap"]:visible')).toHaveCount(1);
+  });
+
   for (const path of ["/recap", "/a-venir", "/inventaire", "/reglages"]) {
     test(`la vue ${path} répond et porte un titre`, async ({ page }) => {
       const response = await page.goto(path);
