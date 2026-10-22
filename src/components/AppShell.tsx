@@ -4,8 +4,8 @@
  * Coquille de l'application (handoff de design, § « Chrome mobile » et
  * « Chrome bureau »).
  *
- * Mobile : l'en-tête (marque et toggle Échéances / Fiches), le contenu qui
- * défile, la barre d'onglets en bas. Bureau (`md` et plus) : un en-tête
+ * Mobile : l'en-tête (marque et toggle Échéances / Fiches, caché sur
+ * Réglages, qui n'appartient à aucun des deux), le contenu qui défile, la barre d'onglets en bas. Bureau (`md` et plus) : un en-tête
  * horizontal qui porte aussi les onglets et les actions.
  *
  * Mobile, pendant la frappe, l'en-tête et la barre d'onglets s'effacent
@@ -137,7 +137,7 @@ function DesktopHeader({
   return (
     <header className="hidden h-[62px] flex-none items-center gap-7 border-b border-border bg-surface px-10 md:flex">
       <Brand />
-      <DomainToggle pathname={pathname} compact />
+      {!settingsOn && <DomainToggle pathname={pathname} compact />}
       {domainOf(pathname) === "echeances" && (
         <nav
           aria-label="Navigation principale"
@@ -207,7 +207,9 @@ export function AppShell({
     <div className="shell flex h-dvh flex-col overflow-hidden bg-page text-ink">
       <header className="masque-en-saisie flex flex-none items-start justify-between gap-3.5 px-[22px] pt-[max(env(safe-area-inset-top),14px)] md:hidden">
         <Brand />
-        <DomainToggle pathname={pathname} compact={false} />
+        {!isActive(SETTINGS.href, pathname) && (
+          <DomainToggle pathname={pathname} compact={false} />
+        )}
       </header>
       <DesktopHeader pathname={pathname} household={household} />
       <main className="min-h-0 flex-1 overflow-auto pb-[var(--clavier,0px)]">
