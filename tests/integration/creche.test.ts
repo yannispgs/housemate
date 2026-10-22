@@ -2,12 +2,13 @@ import postgres from "postgres";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { REGLAGES_CRECHE_PAR_DEFAUT } from "@/lib/data/creche";
 import {
+  abonnerRappelCreche,
+  desabonnerRappelCreche,
   enregistrerReglagesCreche,
   libererRappelCreche,
   lireReglagesCreche,
   listerAbonnesCreche,
   pluiePrevue,
-  recevoirRappelCreche,
   recoisRappelCreche,
   reserverRappelCreche,
 } from "@/lib/data/creche-store";
@@ -94,25 +95,23 @@ describe("réglages de crèche", () => {
 
 describe("abonnement au rappel", () => {
   it("est personnel, et rejouable", async () => {
-    await commeMembre(owner, moi.compte, tx => recevoirRappelCreche(tx, true));
-    await commeMembre(owner, moi.compte, tx => recevoirRappelCreche(tx, true));
+    await commeMembre(owner, moi.compte, abonnerRappelCreche);
+    await commeMembre(owner, moi.compte, abonnerRappelCreche);
 
     expect(await commeMembre(owner, moi.compte, recoisRappelCreche)).toBe(true);
     expect(await commeMembre(owner, conjoint.compte, recoisRappelCreche)).toBe(
       false,
     );
 
-    await commeMembre(owner, moi.compte, tx => recevoirRappelCreche(tx, false));
+    await commeMembre(owner, moi.compte, desabonnerRappelCreche);
     expect(await commeMembre(owner, moi.compte, recoisRappelCreche)).toBe(
       false,
     );
   });
 
   it("liste les abonnés avec leur adresse et les réglages de leur foyer", async () => {
-    await commeMembre(owner, moi.compte, tx => recevoirRappelCreche(tx, true));
-    await commeMembre(owner, voisin.compte, tx =>
-      recevoirRappelCreche(tx, true),
-    );
+    await commeMembre(owner, moi.compte, abonnerRappelCreche);
+    await commeMembre(owner, voisin.compte, abonnerRappelCreche);
     await commeMembre(owner, moi.compte, tx =>
       enregistrerReglagesCreche(tx, { ...NOMMES, jours: [...NOMMES.jours] }),
     );

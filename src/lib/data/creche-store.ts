@@ -60,15 +60,14 @@ export async function recoisRappelCreche(tx: Tx): Promise<boolean> {
   return rows.length > 0;
 }
 
-export async function recevoirRappelCreche(
-  tx: Tx,
-  oui: boolean,
-): Promise<void> {
-  if (oui) {
-    await tx`insert into app.abonnes_creche default values on conflict do nothing`;
-  } else {
-    await tx`delete from app.abonnes_creche`;
-  }
+/** Je reçois le rappel (rejouable). */
+export async function abonnerRappelCreche(tx: Tx): Promise<void> {
+  await tx`insert into app.abonnes_creche default values on conflict do nothing`;
+}
+
+/** Je ne reçois plus le rappel. */
+export async function desabonnerRappelCreche(tx: Tx): Promise<void> {
+  await tx`delete from app.abonnes_creche`;
 }
 
 export interface AbonneCreche {

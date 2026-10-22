@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { reglagesCrecheSaisis } from "@/lib/data/creche";
 import {
+  abonnerRappelCreche,
+  desabonnerRappelCreche,
   enregistrerReglagesCreche,
-  recevoirRappelCreche,
 } from "@/lib/data/creche-store";
 import {
   enregistrerAbonnement,
@@ -56,7 +57,7 @@ export async function enregistrerCreche(saisie: unknown): Promise<void> {
 export async function recevoirCreche(oui: unknown): Promise<void> {
   const valeur = z.boolean().parse(oui);
 
-  await enMonNom(tx => recevoirRappelCreche(tx, valeur));
+  await enMonNom(valeur ? abonnerRappelCreche : desabonnerRappelCreche);
 
   revalidatePath("/reglages");
 }
