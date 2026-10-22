@@ -13,10 +13,7 @@ import {
   metNorwayUrl,
   openMeteoUrl,
   parseMetNorway,
-  parseMetNorwayRain,
   parseOpenMeteo,
-  parseOpenMeteoRain,
-  type RainPoint,
 } from "./forecasts";
 import { evaluateEvening, reviewNight, sendPending } from "./frost-run";
 import type { Mail } from "./frost-watch";
@@ -24,7 +21,6 @@ import {
   parisDate,
   parisHour,
   shouldEvaluateFrost,
-  shouldFetchRainForecasts,
   shouldFetchTemperatureForecasts,
   shouldReadSensors,
   shouldReviewNight,
@@ -34,7 +30,6 @@ import { buildMessage, deliver } from "./smtp";
 import { openSmtp } from "./smtp-socket";
 import {
   insertForecasts,
-  insertRainForecasts,
   insertReadings,
   type Reading,
   type Sql,
@@ -183,20 +178,6 @@ async function collectTemperatureForecasts(env: Env, sql: Sql): Promise<void> {
   );
 }
 
-async function collectRainForecasts(env: Env, sql: Sql): Promise<void> {
-  const where = coordinates(env);
-  const retrievedAt = new Date();
-  await storeThenReport<RainPoint>(
-    [
-      fetchJson(openMeteoUrl(where, "precipitation")).then(parseOpenMeteoRain),
-      fetchJson(metNorwayUrl(where), MET_NORWAY_HEADERS).then(payload =>
-        parseMetNorwayRain(payload, retrievedAt),
-      ),
-    ],
-    points => insertRainForecasts(sql, retrievedAt, points),
-  );
-}
-
 export default {
   async scheduled(controller, env) {
     const now = new Date(controller.scheduledTime);
@@ -210,10 +191,6 @@ export default {
 
     if (shouldFetchTemperatureForecasts(hour)) {
       tasks.push(collectTemperatureForecasts(env, sql));
-    }
-
-    if (shouldFetchRainForecasts(hour)) {
-      tasks.push(collectRainForecasts(env, sql));
     }
 
     // Les tâches vont au bout même si l'une échoue ; l'échec est ensuite
