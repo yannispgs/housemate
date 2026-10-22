@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import { plainDate } from "@/lib/domain/plain-date";
 import type { RainHour } from "@/lib/domain/school-run";
 import {
+  apresBasculement,
+  basculement,
+  calendrierCreche,
   composerRappelCreche,
   crecheAnnoncee,
+  estJourDeCreche,
+  periodeDuCalendrier,
   REGLAGES_CRECHE_PAR_DEFAUT,
   type ReglagesCreche,
   reglagesCrecheSaisis,
@@ -64,6 +69,21 @@ describe("crecheAnnoncee", () => {
       JEUDI,
     );
     expect(crecheAnnoncee({ jour: MERCREDI, heure: 21 }, NOMMES)).toBeNull();
+  });
+
+  it("suit les jours retirés ou ajoutés dans le calendrier", () => {
+    const mardi = plainDate(2026, 10, 20);
+
+    expect(
+      crecheAnnoncee({ jour: MERCREDI, heure: 22 }, NOMMES, [
+        { jour: "2026-10-22", creche: false },
+      ]),
+    ).toBeNull();
+    expect(
+      crecheAnnoncee({ jour: mardi, heure: 22 }, NOMMES, [
+        { jour: "2026-10-21", creche: true },
+      ]),
+    ).toEqual(MERCREDI);
   });
 
   it("se tait la veille d'un jour sans crèche, selon les jours réglés", () => {
@@ -146,5 +166,78 @@ describe("composerRappelCreche", () => {
     expect(pluvieux.text).toContain(
       "c'est le parent des jours de pluie qui emmène l'enfant.",
     );
+  });
+});
+
+describe("basculement", () => {
+  it("retire un jour habituel, puis le rend", () => {
+    const retire = apresBasculement(JEUDI, NOMMES, []);
+
+    expect(retire).toEqual([{ jour: "2026-10-22", creche: false }]);
+    expect(estJourDeCreche(JEUDI, NOMMES, retire)).toBe(false);
+    expect(apresBasculement(JEUDI, NOMMES, retire)).toEqual([]);
+  });
+
+  it("ajoute un jour inhabituel, sans toucher aux autres exceptions", () => {
+    const autre = { jour: "2026-10-23", creche: false };
+
+    expect(apresBasculement(MERCREDI, NOMMES, [autre])).toEqual([
+      autre,
+      { jour: "2026-10-21", creche: true },
+    ]);
+  });
+
+  it("change toujours ce qu'on voit, même si la semaine a changé depuis", () => {
+    // Mercredi ajouté, puis devenu un jour habituel : l'exception est muette.
+    const ancienne = [{ jour: "2026-10-21", creche: true }];
+    const avecMercredi = { ...NOMMES, jours: [1, 2, 3, 4, 5] as const };
+
+    expect(basculement(MERCREDI, avecMercredi, ancienne)).toEqual({
+      jour: "2026-10-21",
+      creche: false,
+    });
+  });
+});
+
+describe("calendrierCreche", () => {
+  it("couvre ce mois et le suivant, du jour même", () => {
+    expect(periodeDuCalendrier(MERCREDI)).toEqual({
+      du: "2026-10-21",
+      au: "2026-11-30",
+    });
+    expect(periodeDuCalendrier(plainDate(2026, 12, 5))).toEqual({
+      du: "2026-12-05",
+      au: "2027-01-31",
+    });
+  });
+
+  it("met en avant les jours de crèche, et marque les exceptions", () => {
+    const [octobre, novembre] = calendrierCreche(MERCREDI, NOMMES, [
+      { jour: "2026-10-22", creche: false },
+      { jour: "2026-11-04", creche: true },
+    ]);
+
+    // Le 1er octobre 2026 est un jeudi, le 1er novembre un dimanche.
+    expect(octobre?.titre).toBe("octobre 2026");
+    expect(octobre?.decalage).toBe(3);
+    expect(octobre?.cases).toHaveLength(31);
+    expect(novembre?.decalage).toBe(6);
+    expect(octobre?.cases[19]).toEqual({
+      iso: "2026-10-20",
+      jour: 20,
+      creche: true,
+      habituel: true,
+      passe: true,
+    });
+    expect(octobre?.cases[21]).toMatchObject({
+      creche: false,
+      habituel: true,
+      passe: false,
+    });
+    expect(novembre?.cases[3]).toMatchObject({
+      iso: "2026-11-04",
+      creche: true,
+      habituel: false,
+    });
   });
 });

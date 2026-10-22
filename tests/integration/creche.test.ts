@@ -6,11 +6,14 @@ import {
   desabonnerRappelCreche,
   enregistrerReglagesCreche,
   libererRappelCreche,
+  lireExceptionsCreche,
   lireReglagesCreche,
   listerAbonnesCreche,
   pluiePrevue,
+  poserExceptionCreche,
   recoisRappelCreche,
   reserverRappelCreche,
+  retirerExceptionCreche,
 } from "@/lib/data/creche-store";
 import { commeMembre } from "@/lib/data/store";
 import { DIRECT_URL } from "./env";
@@ -55,6 +58,7 @@ async function membre(foyerId: string, nom: string): Promise<Membre> {
 beforeEach(async () => {
   await owner`delete from app.creche_envoyes`;
   await owner`delete from app.abonnes_creche`;
+  await owner`delete from app.jours_creche`;
   await owner`delete from app.reglages_creche`;
   await owner`delete from meteo.previsions_pluie`;
   const nous = await foyer("La crèche");
@@ -93,6 +97,43 @@ describe("réglages de crèche", () => {
   });
 });
 
+describe("jours sans crèche", () => {
+  it("se posent, se remplacent et se retirent, dans le foyer seulement", async () => {
+    await commeMembre(owner, moi.compte, async tx => {
+      await poserExceptionCreche(tx, { jour: "2026-12-24", creche: true });
+      await poserExceptionCreche(tx, { jour: "2026-12-24", creche: false });
+      await poserExceptionCreche(tx, { jour: "2026-12-25", creche: false });
+      await poserExceptionCreche(tx, { jour: "2027-01-04", creche: false });
+    });
+    await commeMembre(owner, conjoint.compte, tx =>
+      retirerExceptionCreche(tx, "2026-12-25"),
+    );
+
+    expect(
+      await commeMembre(owner, conjoint.compte, tx =>
+        lireExceptionsCreche(tx, "2026-12-01", "2026-12-31"),
+      ),
+    ).toEqual([{ jour: "2026-12-24", creche: false }]);
+    expect(
+      await commeMembre(owner, voisin.compte, tx =>
+        lireExceptionsCreche(tx, "2026-01-01", "2027-12-31"),
+      ),
+    ).toEqual([]);
+  });
+
+  it("accompagnent les abonnés, sans les jours passés", async () => {
+    await commeMembre(owner, moi.compte, async tx => {
+      await abonnerRappelCreche(tx);
+      await poserExceptionCreche(tx, { jour: "2000-01-03", creche: false });
+      await poserExceptionCreche(tx, { jour: "2999-01-03", creche: false });
+    });
+
+    const [abonne] = await listerAbonnesCreche(owner);
+
+    expect(abonne?.exceptions).toEqual([{ jour: "2999-01-03", creche: false }]);
+  });
+});
+
 describe("abonnement au rappel", () => {
   it("est personnel, et rejouable", async () => {
     await commeMembre(owner, moi.compte, abonnerRappelCreche);
@@ -123,11 +164,13 @@ describe("abonnement au rappel", () => {
       membre: moi.id,
       email: "moi@exemple.fr",
       reglages: { ...NOMMES, jours: [1, 2, 4] },
+      exceptions: [],
     });
     expect(abonnes).toContainEqual({
       membre: voisin.id,
       email: "voisin@exemple.fr",
       reglages: REGLAGES_CRECHE_PAR_DEFAUT,
+      exceptions: [],
     });
   });
 });

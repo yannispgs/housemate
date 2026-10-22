@@ -2,11 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { reglagesCrecheSaisis } from "@/lib/data/creche";
+import { basculement, reglagesCrecheSaisis } from "@/lib/data/creche";
 import {
   abonnerRappelCreche,
   desabonnerRappelCreche,
   enregistrerReglagesCreche,
+  lireExceptionsCreche,
+  lireReglagesCreche,
+  poserExceptionCreche,
+  retirerExceptionCreche,
 } from "@/lib/data/creche-store";
 import {
   enregistrerAbonnement,
@@ -15,6 +19,7 @@ import {
 import { reglagesSaisis } from "@/lib/data/resumes";
 import { enregistrerReglagesResumes } from "@/lib/data/resumes-store";
 import { enMonNom } from "@/lib/data/server";
+import { fromISO } from "@/lib/domain/plain-date";
 
 /** La section Notifications de Réglages : le tableau et mes résumés (§ 6). */
 export async function enregistrerResumes(saisie: unknown): Promise<void> {
@@ -58,6 +63,28 @@ export async function recevoirCreche(oui: unknown): Promise<void> {
   const valeur = z.boolean().parse(oui);
 
   await enMonNom(valeur ? abonnerRappelCreche : desabonnerRappelCreche);
+
+  revalidatePath("/reglages");
+}
+
+/**
+ * Un clic sur un jour du calendrier de crèche : il l'inverse (§ 12.9). Le
+ * nouvel état se calcule ici, sur ce qui est en base, et non sur l'écran.
+ */
+export async function basculerJourCreche(jour: unknown): Promise<void> {
+  const iso = z.iso.date().parse(jour);
+
+  await enMonNom(async tx => {
+    const suivante = basculement(
+      fromISO(iso),
+      await lireReglagesCreche(tx),
+      await lireExceptionsCreche(tx, iso, iso),
+    );
+
+    await (suivante === null
+      ? retirerExceptionCreche(tx, iso)
+      : poserExceptionCreche(tx, suivante));
+  });
 
   revalidatePath("/reglages");
 }

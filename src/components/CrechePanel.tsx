@@ -5,14 +5,21 @@
  * 2026-10-22 : tout se règle ici, aucun prénom côté serveur). Les jours et
  * les prénoms valent pour le foyer ; recevoir le rappel est un choix
  * personnel. Chaque changement s'enregistre aussitôt — les prénoms, quand on
- * quitte le champ.
+ * quitte le champ. Le calendrier montre ce mois et le suivant, jours de
+ * crèche mis en avant ; un clic retire un jour, ou l'ajoute (§ 12.9).
  *
  * ⚠️ Provisoire : la section n'est pas encore dessinée dans Claude Design
  * (a-dessiner.md).
  */
 import { useState, useTransition } from "react";
-import type { ReglagesCreche } from "@/lib/data/creche";
+import {
+  apresBasculement,
+  calendrierCreche,
+  type ExceptionCreche,
+  type ReglagesCreche,
+} from "@/lib/data/creche";
 import { JOURS } from "@/lib/data/resumes";
+import { fromISO } from "@/lib/domain/plain-date";
 import type { Weekday } from "@/lib/domain/school-run";
 import { CHAMP, LIBELLE } from "./forms/Champ";
 import { AIDE, Bascule, Ligne } from "./NotificationsPanel";
@@ -31,13 +38,21 @@ export function CrechePanel({
   recoit: recoitInitial,
   enregistrer,
   recevoir,
+  aujourdhui,
+  exceptions: exceptionsInitiales,
+  basculer,
 }: Readonly<{
   initial: ReglagesCreche;
   recoit: boolean;
   /** Server actions ; `null` en démonstration (rien n'est enregistré). */
   enregistrer: ((reglages: ReglagesCreche) => Promise<void>) | null;
   recevoir: ((oui: boolean) => Promise<void>) | null;
+  /** AAAA-MM-JJ, à Paris. */
+  aujourdhui: string;
+  exceptions: readonly ExceptionCreche[];
+  basculer: ((jour: string) => Promise<void>) | null;
 }>) {
+  const [exceptions, setExceptions] = useState(exceptionsInitiales);
   const [reglages, setReglages] = useState(initial);
   const [recoit, setRecoit] = useState(recoitInitial);
   const [etat, setEtat] = useState<"" | "enregistre" | "erreur">("");
@@ -69,6 +84,14 @@ export function CrechePanel({
         : [...reglages.jours, jour].sort((a, b) => a - b),
     });
 
+  const basculerDate = (iso: string) => {
+    setExceptions(apresBasculement(fromISO(iso), reglages, exceptions));
+
+    if (basculer !== null) {
+      sauver(() => basculer(iso));
+    }
+  };
+
   return (
     <Panel className="gap-3 p-[18px]">
       <span className={LIBELLE}>Rappel de crèche</span>
@@ -88,7 +111,9 @@ export function CrechePanel({
       <span className={AIDE}>
         La veille de chaque jour de crèche, à 22 h : qui emmène l'enfant, selon
         la pluie prévue de 8 h à 9 h. Si les prévisions hésitent, le message le
-        dit. Les réglages ci-dessous valent pour tout le foyer.
+        dit. Les réglages ci-dessous valent pour tout le foyer ; dans le
+        calendrier, touche un jour pour le retirer (vacances, fermeture) ou
+        l'ajouter.
       </span>
 
       <span className="pt-2 text-[12.5px] text-ink-secondary">
@@ -122,6 +147,11 @@ export function CrechePanel({
         })}
       </fieldset>
 
+      <Calendrier
+        mois={calendrierCreche(fromISO(aujourdhui), reglages, exceptions)}
+        basculer={basculerDate}
+      />
+
       {PRENOMS.map(([cle, libelle, indice]) => (
         <label key={cle} className="flex flex-col gap-1">
           <span className="text-[12.5px] text-ink-secondary">{libelle}</span>
@@ -151,5 +181,90 @@ export function CrechePanel({
           "Pas enregistré : réessaie dans un instant."}
       </span>
     </Panel>
+  );
+}
+
+const ENTETES = ["L", "M", "M", "J", "V", "S", "D"];
+
+const NOM_DU_JOUR = new Intl.DateTimeFormat("fr-FR", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: "UTC",
+});
+
+function etiquette(iso: string, creche: boolean, habituel: boolean): string {
+  const nom = NOM_DU_JOUR.format(new Date(`${iso}T12:00:00Z`));
+
+  if (creche === habituel) {
+    return `${nom} : ${creche ? "crèche" : "pas de crèche"}`;
+  }
+
+  return `${nom} : ${creche ? "crèche ajoutée" : "crèche retirée"}`;
+}
+
+/** Les deux mois, une grille par mois ; le jour retiré est barré. */
+function Calendrier({
+  mois,
+  basculer,
+}: Readonly<{
+  mois: ReturnType<typeof calendrierCreche>;
+  basculer: (iso: string) => void;
+}>) {
+  return (
+    <div className="flex flex-col gap-3 pt-2">
+      {mois.map(({ titre, decalage, cases }) => (
+        <div key={titre} className="flex flex-col gap-1.5">
+          <span className="text-[12.5px] text-ink-secondary first-letter:uppercase">
+            {titre}
+          </span>
+          <fieldset
+            aria-label={titre}
+            className="m-0 grid min-w-0 grid-cols-7 gap-1 border-0 p-0"
+          >
+            {ENTETES.map((lettre, index) => (
+              <span
+                // biome-ignore lint/suspicious/noArrayIndexKey: colonnes fixes.
+                key={index}
+                aria-hidden="true"
+                className="text-center text-[11px] text-ink-muted"
+              >
+                {lettre}
+              </span>
+            ))}
+            {decalage > 0 && (
+              <span style={{ gridColumn: `span ${decalage}` }} />
+            )}
+            {cases.map(({ iso, jour, creche, habituel, passe }) => {
+              const modifie = creche !== habituel;
+
+              return (
+                <button
+                  key={iso}
+                  type="button"
+                  disabled={passe}
+                  aria-pressed={creche}
+                  aria-label={etiquette(iso, creche, habituel)}
+                  onClick={() => basculer(iso)}
+                  className="h-9 cursor-pointer rounded-full border text-[13px] leading-none disabled:cursor-default disabled:opacity-40"
+                  style={{
+                    background: creche ? "var(--brand-strong)" : "transparent",
+                    borderColor: modifie
+                      ? "var(--brand-strong)"
+                      : "transparent",
+                    borderStyle: modifie ? "dashed" : "solid",
+                    color: creche ? "white" : "var(--ink-secondary)",
+                    textDecoration:
+                      modifie && !creche ? "line-through" : "none",
+                  }}
+                >
+                  {jour}
+                </button>
+              );
+            })}
+          </fieldset>
+        </div>
+      ))}
+    </div>
   );
 }

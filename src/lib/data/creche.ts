@@ -9,7 +9,16 @@
  */
 import { z } from "zod";
 import type { MailContent } from "@/lib/auth/messages";
-import { addDays, type PlainDate, toISO } from "@/lib/domain/plain-date";
+import {
+  addDays,
+  addMonths,
+  compare,
+  daysInMonth,
+  fromISO,
+  type PlainDate,
+  plainDate,
+  toISO,
+} from "@/lib/domain/plain-date";
 import {
   DEFAULT_SCHOOL_RUN,
   decideSchoolRun,
@@ -20,7 +29,7 @@ import {
   type SchoolRunSettings,
   type Weekday,
 } from "@/lib/domain/school-run";
-import type { InstantParis } from "./resumes";
+import { type InstantParis, jourIso } from "./resumes";
 
 export interface ReglagesCreche {
   /** 1 = lundi … 7 = dimanche, triés. */
@@ -57,27 +66,162 @@ export const reglagesCrecheSaisis = z.object({
 export const HEURE_RAPPEL = 22;
 
 /**
+ * Un jour qui s'écarte de la semaine habituelle, saisi dans le calendrier :
+ * `creche` vrai pour un jour inhabituel où on l'emmène, faux pour un jour
+ * habituel sans crèche (vacances, fermeture, agenda du foyer).
+ */
+export interface ExceptionCreche {
+  /** AAAA-MM-JJ. */
+  readonly jour: string;
+  readonly creche: boolean;
+}
+
+/** Y a-t-il crèche ce jour-là, compte tenu des exceptions saisies ? */
+export function estJourDeCreche(
+  jour: PlainDate,
+  reglages: ReglagesCreche,
+  exceptions: readonly ExceptionCreche[] = [],
+): boolean {
+  const settings = { ...DEFAULT_SCHOOL_RUN, weekdays: reglages.jours };
+
+  return isSchoolDay(jour, settings, {
+    closures: [],
+    skippedDays: exceptions.filter(e => !e.creche).map(e => fromISO(e.jour)),
+    extraDays: exceptions.filter(e => e.creche).map(e => fromISO(e.jour)),
+  });
+}
+
+/**
+ * Un clic sur un jour du calendrier l'inverse. L'exception qui en résulte, ou
+ * `null` quand le jour revient à la semaine habituelle (l'exception se
+ * retire). Calculé sur l'état réel du jour, pas sur l'exception seule : un
+ * clic change toujours ce qu'on voit, même si les jours habituels ont changé
+ * depuis la saisie.
+ */
+export function basculement(
+  jour: PlainDate,
+  reglages: ReglagesCreche,
+  exceptions: readonly ExceptionCreche[],
+): ExceptionCreche | null {
+  const voulu = !estJourDeCreche(jour, reglages, exceptions);
+
+  return voulu === estJourDeCreche(jour, reglages)
+    ? null
+    : { jour: toISO(jour), creche: voulu };
+}
+
+/** Les exceptions après un clic sur ce jour. */
+export function apresBasculement(
+  jour: PlainDate,
+  reglages: ReglagesCreche,
+  exceptions: readonly ExceptionCreche[],
+): ExceptionCreche[] {
+  const iso = toISO(jour);
+  const suivante = basculement(jour, reglages, exceptions);
+  const autres = exceptions.filter(e => e.jour !== iso);
+
+  return suivante === null ? autres : [...autres, suivante];
+}
+
+/** Combien de mois montre le calendrier : on sait un ou deux mois d'avance. */
+export const MOIS_DU_CALENDRIER = 2;
+
+/** Du jour même à la fin du dernier mois montré, en AAAA-MM-JJ. */
+export function periodeDuCalendrier(aujourdhui: PlainDate): {
+  du: string;
+  au: string;
+} {
+  const dernier = addMonths(
+    plainDate(aujourdhui.year, aujourdhui.month, 1),
+    MOIS_DU_CALENDRIER - 1,
+  );
+
+  return {
+    du: toISO(aujourdhui),
+    au: toISO(
+      plainDate(
+        dernier.year,
+        dernier.month,
+        daysInMonth(dernier.year, dernier.month),
+      ),
+    ),
+  };
+}
+
+export interface CaseDuCalendrier {
+  readonly iso: string;
+  readonly jour: number;
+  /** Crèche ce jour-là, exceptions comprises. */
+  readonly creche: boolean;
+  /** Un jour de crèche de la semaine habituelle. */
+  readonly habituel: boolean;
+  /** Avant aujourd'hui : plus rien à y changer. */
+  readonly passe: boolean;
+}
+
+export interface MoisDuCalendrier {
+  /** « octobre 2026 ». */
+  readonly titre: string;
+  /** Les cases vides avant le 1er, la semaine commençant le lundi. */
+  readonly decalage: number;
+  readonly cases: readonly CaseDuCalendrier[];
+}
+
+const MOIS = new Intl.DateTimeFormat("fr-FR", {
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+/** Le calendrier des jours de crèche, du mois en cours au suivant. */
+export function calendrierCreche(
+  aujourdhui: PlainDate,
+  reglages: ReglagesCreche,
+  exceptions: readonly ExceptionCreche[],
+): MoisDuCalendrier[] {
+  const premier = plainDate(aujourdhui.year, aujourdhui.month, 1);
+
+  return Array.from({ length: MOIS_DU_CALENDRIER }, (_, rang) => {
+    const debut = addMonths(premier, rang);
+    const cases = Array.from(
+      { length: daysInMonth(debut.year, debut.month) },
+      (_, index) => {
+        const jour = addDays(debut, index);
+
+        return {
+          iso: toISO(jour),
+          jour: jour.day,
+          creche: estJourDeCreche(jour, reglages, exceptions),
+          habituel: estJourDeCreche(jour, reglages),
+          passe: compare(jour, aujourdhui) < 0,
+        };
+      },
+    );
+
+    return {
+      titre: MOIS.format(new Date(Date.UTC(debut.year, debut.month - 1, 1))),
+      decalage: jourIso(debut) - 1,
+      cases,
+    };
+  });
+}
+
+/**
  * Le jour de crèche qu'annonce un appel à cette heure : demain, si c'est un
- * jour de crèche et que l'heure du rappel est venue ; sinon rien. Pas encore
- * de calendrier des fermetures (à dessiner) : un rappel de trop coûte peu.
+ * jour de crèche et que l'heure du rappel est venue ; sinon rien.
  */
 export function crecheAnnoncee(
   instant: InstantParis,
   reglages: ReglagesCreche,
+  exceptions: readonly ExceptionCreche[] = [],
 ): PlainDate | null {
   if (instant.heure < HEURE_RAPPEL) {
     return null;
   }
 
   const demain = addDays(instant.jour, 1);
-  const settings = { ...DEFAULT_SCHOOL_RUN, weekdays: reglages.jours };
-  const ouvert = isSchoolDay(demain, settings, {
-    closures: [],
-    skippedDays: [],
-    extraDays: [],
-  });
 
-  return ouvert ? demain : null;
+  return estJourDeCreche(demain, reglages, exceptions) ? demain : null;
 }
 
 const JOUR = new Intl.DateTimeFormat("fr-FR", {

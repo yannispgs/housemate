@@ -6,7 +6,11 @@
 import type postgres from "postgres";
 import type { Tx } from "@/lib/data/store";
 import type { RainHour, Weekday } from "@/lib/domain/school-run";
-import { REGLAGES_CRECHE_PAR_DEFAUT, type ReglagesCreche } from "./creche";
+import {
+  type ExceptionCreche,
+  REGLAGES_CRECHE_PAR_DEFAUT,
+  type ReglagesCreche,
+} from "./creche";
 
 interface ReglagesSql {
   jours: number[];
@@ -70,10 +74,45 @@ export async function desabonnerRappelCreche(tx: Tx): Promise<void> {
   await tx`delete from app.abonnes_creche`;
 }
 
+/** Les exceptions du foyer, de `du` à `au` inclus (AAAA-MM-JJ). */
+export async function lireExceptionsCreche(
+  tx: Tx,
+  du: string,
+  au: string,
+): Promise<ExceptionCreche[]> {
+  const rows = await tx<ExceptionCreche[]>`
+    select jour::text as jour, creche from app.jours_creche
+    where jour between ${du} and ${au}
+    order by jour`;
+
+  return rows.map(row => ({ ...row }));
+}
+
+/** Pose l'exception d'un jour, ou la remplace. */
+export async function poserExceptionCreche(
+  tx: Tx,
+  exception: ExceptionCreche,
+): Promise<void> {
+  await tx`
+    insert into app.jours_creche (jour, creche)
+    values (${exception.jour}, ${exception.creche})
+    on conflict (foyer_id, jour) do update set creche = excluded.creche`;
+}
+
+/** Rend un jour à la semaine habituelle. */
+export async function retirerExceptionCreche(
+  tx: Tx,
+  jour: string,
+): Promise<void> {
+  await tx`delete from app.jours_creche where jour = ${jour}`;
+}
+
 export interface AbonneCreche {
   readonly membre: string;
   readonly email: string;
   readonly reglages: ReglagesCreche;
+  /** Les exceptions de son foyer, d'hier à plus tard. */
+  readonly exceptions: readonly ExceptionCreche[];
 }
 
 /** Les comptes abonnés qui ont une adresse, avec les réglages de leur foyer. */
@@ -82,7 +121,13 @@ export async function listerAbonnesCreche(
 ): Promise<AbonneCreche[]> {
   const rows = (await sql`
     select m.id::text as membre, a.email, r.foyer_id is not null as regle,
-      r.jours::int[] as jours, r.enfant, r.parent_sec, r.parent_pluie
+      r.jours::int[] as jours, r.enfant, r.parent_sec, r.parent_pluie,
+      coalesce((
+        select jsonb_agg(jsonb_build_object('jour', e.jour::text,
+          'creche', e.creche) order by e.jour)
+        from app.jours_creche e
+        where e.foyer_id = m.foyer_id and e.jour >= current_date - 1
+      ), '[]') as exceptions
     from app.abonnes_creche ab
     join app.membres m on m.id = ab.membre_id
     join app.adresses a on a.membre_id = m.id
@@ -93,12 +138,14 @@ export async function listerAbonnesCreche(
     membre: string;
     email: string;
     regle: boolean;
+    exceptions: ExceptionCreche[];
   })[];
 
   return rows.map(row => ({
     membre: row.membre,
     email: row.email,
     reglages: reglagesDe(row.regle ? row : undefined),
+    exceptions: row.exceptions,
   }));
 }
 

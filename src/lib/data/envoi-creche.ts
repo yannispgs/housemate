@@ -31,7 +31,7 @@ export async function envoyerRappelsCreche(
   instant: InstantParis,
 ): Promise<BilanCreche> {
   const dus = (await deps.abonnes()).flatMap(abonne => {
-    const jour = crecheAnnoncee(instant, abonne.reglages);
+    const jour = crecheAnnoncee(instant, abonne.reglages, abonne.exceptions);
 
     return jour === null ? [] : [{ abonne, jour }];
   });

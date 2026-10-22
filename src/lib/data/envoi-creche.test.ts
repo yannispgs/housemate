@@ -14,6 +14,7 @@ function abonne(
     membre,
     email: `${membre}@exemple.fr`,
     reglages: { ...REGLAGES_CRECHE_PAR_DEFAUT, jours },
+    exceptions: [],
   };
 }
 
@@ -56,6 +57,18 @@ describe("envoyerRappelsCreche", () => {
         subject: "Crèche demain : la pluie est incertaine",
       }),
     );
+  });
+
+  it("se tait pour un foyer qui a retiré ce jour-là", async () => {
+    const d = deps([
+      { ...abonne("a"), exceptions: [{ jour: "2026-10-22", creche: false }] },
+    ]);
+
+    expect(await envoyerRappelsCreche(d, MERCREDI_22H)).toEqual({
+      envoyes: 0,
+      echecs: 0,
+    });
+    expect(d.envoyer).not.toHaveBeenCalled();
   });
 
   it("ne lit pas la pluie quand personne n'attend de rappel", async () => {
