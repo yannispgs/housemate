@@ -16,9 +16,10 @@ export async function lireTables(
 ): Promise<Record<Table, Ligne[]>> {
   const lues = await Promise.all(
     TABLES.map(async table => {
+      const nom = `app.${table}`;
       const [row] = await sql<[{ lignes: Ligne[] }]>`
         select coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) as lignes
-        from ${sql(`app.${table}`)} t`;
+        from ${sql(nom)} t`;
 
       return [table, row.lignes] as const;
     }),

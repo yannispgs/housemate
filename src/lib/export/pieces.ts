@@ -18,9 +18,14 @@ function extension(nom: unknown): string {
   return /^[a-z0-9]{1,8}$/.test(ext) ? `.${ext}` : "";
 }
 
+/** Un identifiant arrive de `to_jsonb` en texte ; sinon, sa forme JSON. */
+function texteDe(id: unknown): string {
+  return typeof id === "string" ? id : JSON.stringify(id);
+}
+
 /** Le chemin d'une pièce dans la destination, chiffrée. */
 export function cheminDePiece(piece: Ligne): string {
-  return `pieces/${String(piece.id)}${extension(piece.nom)}.age`;
+  return `pieces/${texteDe(piece.id)}${extension(piece.nom)}.age`;
 }
 
 /** Les pièces à déposer : celles dont le fichier manque à la destination. */

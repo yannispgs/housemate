@@ -47,10 +47,8 @@ describe("archiver puis chiffrer", () => {
     });
   });
 
-  it("refuse une clé qui n'est pas une clé publique age", async () => {
-    await expect(
-      chiffrer(new Uint8Array([1]), "pas-une-cle"),
-    ).rejects.toThrow();
+  it("refuse une clé qui n'est pas une clé publique age", () => {
+    expect(() => chiffrer(new Uint8Array([1]), "pas-une-cle")).toThrow();
   });
 });
 
