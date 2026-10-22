@@ -17,6 +17,7 @@ import {
   instantane,
   jsonCanonique,
   type Ligne,
+  ordreBinaire,
   type Table,
 } from "./instantane";
 import { enMarkdown } from "./markdown";
@@ -123,8 +124,7 @@ export function nomDArchive(jour: string): string {
 export function aElaguer(chemins: readonly string[], garder: number): string[] {
   return chemins
     .filter(c => c.startsWith(PREFIXE) && c.endsWith(SUFFIXE))
-    .sort()
-    .reverse()
+    .sort((a, b) => ordreBinaire(b, a))
     .slice(garder);
 }
 
@@ -142,12 +142,14 @@ async function deposerPieces(
 ): Promise<number> {
   const manquantes = piecesADeposer(i.tables.pieces_jointes, deposes);
 
-  for (const p of manquantes) {
-    await deps.destination.deposer(
-      cheminDePiece(p),
-      await chiffrer(await deps.piece(p), deps.clePublique),
-    );
-  }
+  await Promise.all(
+    manquantes.map(async p =>
+      deps.destination.deposer(
+        cheminDePiece(p),
+        await chiffrer(await deps.piece(p), deps.clePublique),
+      ),
+    ),
+  );
 
   return manquantes.length;
 }
@@ -193,12 +195,11 @@ export async function exporter(
     const pieces = await deposerPieces(deps, i, deposes);
     await deps.destination.deposer(fichier, chiffre);
 
-    for (const ancien of aElaguer(
-      [...new Set([...deposes, fichier])],
-      VERSIONS_GARDEES,
-    )) {
-      await deps.destination.supprimer(ancien);
-    }
+    await Promise.all(
+      aElaguer([...new Set([...deposes, fichier])], VERSIONS_GARDEES).map(
+        ancien => deps.destination.supprimer(ancien),
+      ),
+    );
 
     await deps.noter("exporte", e, fichier, `${chiffre.length} octets`);
 

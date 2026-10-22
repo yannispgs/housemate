@@ -42,12 +42,12 @@ function echeance(e: Ligne, completions: readonly Ligne[]): string[] {
   const faites = de(completions, "echeance_id", e.id)
     .slice()
     .sort((a, b) => texte(a.faite_le).localeCompare(texte(b.faite_le)))
-    .map(
-      c =>
-        `  - fait le ${texte(c.faite_le)} (échéance du ${texte(c.occurrence)})${
-          c.annulee === true ? ", annulé" : ""
-        }${typeof c.note === "string" ? ` — ${c.note}` : ""}`,
-    );
+    .map(c => {
+      const annule = c.annulee === true ? ", annulé" : "";
+      const note = typeof c.note === "string" ? ` — ${c.note}` : "";
+
+      return `  - fait le ${texte(c.faite_le)} (échéance du ${texte(c.occurrence)})${annule}${note}`;
+    });
 
   return [
     `- **${texte(e.titre)}** — ${texte(e.importance)}, ${texte(e.tenue)}${

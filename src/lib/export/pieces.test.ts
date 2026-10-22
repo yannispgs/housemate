@@ -12,6 +12,7 @@ describe("cheminDePiece", () => {
     expect(cheminDePiece({ id: "p1", nom: "facture" })).toBe("pieces/p1.age");
     expect(cheminDePiece({ id: "p1", nom: "a.b/../x" })).toBe("pieces/p1.age");
     expect(cheminDePiece({ id: "p1", nom: null })).toBe("pieces/p1.age");
+    expect(cheminDePiece({ id: 7, nom: "a.pdf" })).toBe("pieces/7.pdf.age");
   });
 });
 
