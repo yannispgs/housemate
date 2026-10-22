@@ -2,6 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { reglagesCrecheSaisis } from "@/lib/data/creche";
+import {
+  enregistrerReglagesCreche,
+  recevoirRappelCreche,
+} from "@/lib/data/creche-store";
 import {
   enregistrerAbonnement,
   retirerAbonnement,
@@ -36,4 +41,22 @@ export async function desabonnerAppareil(endpoint: unknown): Promise<void> {
   const valeur = abonnement.shape.endpoint.parse(endpoint);
 
   await enMonNom(tx => retirerAbonnement(tx, valeur));
+}
+
+/** La section Rappel de crèche : les réglages du foyer (§ 12.9). */
+export async function enregistrerCreche(saisie: unknown): Promise<void> {
+  const reglages = reglagesCrecheSaisis.parse(saisie);
+
+  await enMonNom(tx => enregistrerReglagesCreche(tx, reglages));
+
+  revalidatePath("/reglages");
+}
+
+/** « Recevoir le rappel » : un choix personnel. */
+export async function recevoirCreche(oui: unknown): Promise<void> {
+  const valeur = z.boolean().parse(oui);
+
+  await enMonNom(tx => recevoirRappelCreche(tx, valeur));
+
+  revalidatePath("/reglages");
 }

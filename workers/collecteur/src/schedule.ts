@@ -51,6 +51,14 @@ export function shouldFetchRainForecasts(hour: number): boolean {
   return hour === 22;
 }
 
+/**
+ * Le rappel de crèche part à 22 h, juste après que la pluie s'est figée
+ * (SPEC § 12.9) : la veille, pour régler son réveil.
+ */
+export function shouldSendSchoolRun(hour: number): boolean {
+  return hour === 22;
+}
+
 const PARIS_DATE = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Europe/Paris",
   year: "numeric",

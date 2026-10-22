@@ -12,7 +12,10 @@
   "observability": { "enabled": true },
   // L'envoi des résumés : l'adresse exacte, sans redirection (pas
   // `house-mate.app`, qui redirige vers `www`).
-  "vars": { "RESUMES_URL": "https://www.house-mate.app/api/resumes" }
+  "vars": {
+    "RESUMES_URL": "https://www.house-mate.app/api/resumes",
+    "CRECHE_URL": "https://www.house-mate.app/api/creche"
+  }
   // Le reste de la configuration est secret : `wrangler secret put <NOM>` pour
   // DATABASE_URL, SWITCHBOT_TOKEN, SWITCHBOT_SECRET, SENSOR_EXTERIOR_ID,
   // SENSOR_VERANDA_ID, LATITUDE, LONGITUDE ; et pour la veille de gel,

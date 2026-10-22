@@ -20,7 +20,7 @@ import {
 } from "./forecasts";
 import { evaluateEvening, reviewNight, sendPending } from "./frost-run";
 import type { Mail } from "./frost-watch";
-import { demanderResumes } from "./resumes";
+import { demanderRappelsCreche, demanderResumes } from "./resumes";
 import {
   parisDate,
   parisHour,
@@ -30,6 +30,7 @@ import {
   shouldReadSensors,
   shouldReviewNight,
   shouldSendFrostMessage,
+  shouldSendSchoolRun,
 } from "./schedule";
 import { buildMessage, deliver } from "./smtp";
 import { openSmtp } from "./smtp-socket";
@@ -60,6 +61,8 @@ interface Env {
   ALERT_TO: string;
   /** L'envoi des résumés de l'app (variable de `wrangler.jsonc`). */
   RESUMES_URL: string;
+  /** Les rappels de crèche de l'app (variable de `wrangler.jsonc`). */
+  CRECHE_URL: string;
   /** Le jeton partagé avec l'app (`RESUMES_SECRET` côté Vercel). */
   RESUMES_SECRET?: string;
 }
@@ -202,6 +205,25 @@ async function collectRainForecasts(env: Env, sql: Sql): Promise<void> {
   );
 }
 
+/**
+ * Le rappel de crèche (SPEC § 12.9), APRÈS la pluie de la même heure, même
+ * si une source a échoué : l'app décide sur ce qui a été figé, et sans
+ * aucune prévision, son verdict est un doute — le rappel part quand même.
+ */
+async function remindSchoolRun(env: Env, hour: number): Promise<void> {
+  if (!shouldSendSchoolRun(hour)) {
+    return;
+  }
+
+  if (!env.RESUMES_SECRET) {
+    console.warn("RESUMES_SECRET absent : rappel de crèche non demandé.");
+
+    return;
+  }
+
+  await demanderRappelsCreche(env.CRECHE_URL, env.RESUMES_SECRET);
+}
+
 export default {
   async scheduled(controller, env) {
     const now = new Date(controller.scheduledTime);
@@ -218,7 +240,11 @@ export default {
     }
 
     if (shouldFetchRainForecasts(hour)) {
-      tasks.push(collectRainForecasts(env, sql));
+      tasks.push(
+        collectRainForecasts(env, sql).finally(() =>
+          remindSchoolRun(env, hour),
+        ),
+      );
     }
 
     // Les résumés par e-mail : chaque heure, l'app décide qui en reçoit un.

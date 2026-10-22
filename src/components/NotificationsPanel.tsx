@@ -24,9 +24,10 @@ import {
 import { LIBELLE, LISTE } from "./forms/Champ";
 import { Panel } from "./Screen";
 
-const AIDE = "text-[12.5px] leading-normal text-pretty text-ink-secondary";
+export const AIDE =
+  "text-[12.5px] leading-normal text-pretty text-ink-secondary";
 
-function Bascule({
+export function Bascule({
   on,
   onChange,
   label,
@@ -56,7 +57,7 @@ function Bascule({
   );
 }
 
-function Ligne({
+export function Ligne({
   titre,
   children,
 }: Readonly<{ titre: string; children: React.ReactNode }>) {

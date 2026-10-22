@@ -8,6 +8,7 @@ import {
   shouldReadSensors,
   shouldReviewNight,
   shouldSendFrostMessage,
+  shouldSendSchoolRun,
 } from "./schedule";
 
 describe("parisHour", () => {
@@ -78,5 +79,13 @@ describe("veille de gel", () => {
     expect(hours.filter(shouldEvaluateFrost)).toEqual([20]);
     expect(hours.filter(shouldSendFrostMessage)).toEqual([20, 21, 22, 23]);
     expect(hours.filter(shouldReviewNight)).toEqual([9]);
+  });
+});
+
+describe("shouldSendSchoolRun", () => {
+  it("part à 22 h seulement", () => {
+    expect(shouldSendSchoolRun(22)).toBe(true);
+    expect(shouldSendSchoolRun(21)).toBe(false);
+    expect(shouldSendSchoolRun(23)).toBe(false);
   });
 });
