@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { z } from "zod";
 import { AjouterPiece } from "@/components/ajout/AjouterPiece";
+import { CarnetEntretien } from "@/components/CarnetEntretien";
 import { PlantationFiche } from "@/components/fiche/PlantationFiche";
 import { TitreFiche } from "@/components/fiche/TitreFiche";
 import { Panel, Screen, SectionLabel } from "@/components/Screen";
@@ -16,7 +17,7 @@ import {
 } from "@/lib/data/plantes";
 import { emplacementsProposes } from "@/lib/data/saisie";
 import { enMonNom } from "@/lib/data/server";
-import { lireFiche, listerEmplacements } from "@/lib/data/store";
+import { lireCarnet, lireFiche, listerEmplacements } from "@/lib/data/store";
 import { NATURE_LABELS } from "@/lib/data/views";
 
 export const metadata: Metadata = { title: "Fiche" };
@@ -24,7 +25,8 @@ export const metadata: Metadata = { title: "Fiche" };
 /**
  * ⚠️ Écran provisoire : la fiche n'est pas encore dessinée dans Claude
  * Design (`a-dessiner.md`, § 2.1). Titre renommable, plantation d'une
- * plante, attributs, échéances liées, pièces jointes ; le reste (historique, frise, archivage) viendra avec sa maquette.
+ * plante, attributs, pièces jointes, carnet d'entretien, échéances liées ; le
+ * reste (frise, archivage) viendra avec sa maquette.
  */
 export default async function Page({
   params,
@@ -36,8 +38,12 @@ export default async function Page({
   }
 
   await connection();
-  const [fiche, emplacements] = await enMonNom(tx =>
-    Promise.all([lireFiche(tx, id.data), listerEmplacements(tx)]),
+  const [fiche, emplacements, carnet] = await enMonNom(tx =>
+    Promise.all([
+      lireFiche(tx, id.data),
+      listerEmplacements(tx),
+      lireCarnet(tx, id.data),
+    ]),
   );
 
   if (fiche === null) {
@@ -114,6 +120,8 @@ export default async function Page({
         )}
         <AjouterPiece ficheId={fiche.id} />
       </Panel>
+
+      {carnet.entretien && <CarnetEntretien entrees={carnet.entrees} />}
 
       {fiche.echeances.length > 0 && (
         <Panel className="gap-3 p-[18px]">
