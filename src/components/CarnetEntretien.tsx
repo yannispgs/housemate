@@ -7,8 +7,9 @@
  *
  * ⚠️ Provisoire : pas encore dessinée dans Claude Design (a-dessiner.md).
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  ancreCarnet,
   ENTREES_VISIBLES,
   type EntreeCarnet,
   enteteEntree,
@@ -21,6 +22,26 @@ export function CarnetEntretien({
   const [tout, setTout] = useState(false);
   const montrees = tout ? entrees : entrees.slice(0, ENTREES_VISIBLES);
 
+  // Un repère du graphique mène à une date du carnet (#carnet-AAAA-MM-JJ) :
+  // tout montrer si elle est au-delà des premières entrées, puis y aller.
+  useEffect(() => {
+    const suivre = () => {
+      const ancre = globalThis.location.hash.slice(1);
+
+      if (ancre.startsWith("carnet-")) {
+        setTout(true);
+        requestAnimationFrame(() =>
+          document.getElementById(ancre)?.scrollIntoView({ block: "center" }),
+        );
+      }
+    };
+
+    suivre();
+    globalThis.addEventListener("hashchange", suivre);
+
+    return () => globalThis.removeEventListener("hashchange", suivre);
+  }, []);
+
   return (
     <Panel className="gap-3 p-[18px]">
       <SectionLabel count={entrees.length}>Carnet d'entretien</SectionLabel>
@@ -30,10 +51,15 @@ export function CarnetEntretien({
         </span>
       ) : (
         <ol className="m-0 flex list-none flex-col gap-3 p-0">
-          {montrees.map(entree => (
+          {montrees.map((entree, index) => (
             <li
               key={`${entree.genre} ${entree.le} ${entree.libelle}`}
-              className="flex flex-col gap-0.5"
+              id={
+                montrees[index - 1]?.le === entree.le
+                  ? undefined
+                  : ancreCarnet(entree.le)
+              }
+              className="scroll-mt-4 flex flex-col gap-0.5"
             >
               <span className="text-[12.5px] text-ink-secondary">
                 {enteteEntree(entree)}
