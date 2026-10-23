@@ -9,6 +9,7 @@
  * porte.
  */
 import type postgres from "postgres";
+import type { Carnet, EntreeCarnet } from "@/lib/data/carnet";
 import { parseRecurrence } from "@/lib/data/recurrence-json";
 import type {
   Attribut,
@@ -353,6 +354,34 @@ export async function lirePieceJointe(
 /* ------------------------------------------------------------------------ */
 /* Plan d'entretien (§ 5.3)                                                 */
 /* ------------------------------------------------------------------------ */
+
+/**
+ * Le carnet d'entretien d'une fiche : ses remplacements de consommables et
+ * les complétions en vigueur de ses échéances liées, archivées comprises
+ * (l'historique survit à l'échéance), du plus récent au plus ancien.
+ */
+export async function lireCarnet(tx: Tx, ficheId: string): Promise<Carnet> {
+  const [{ entretien }] = (await tx`
+    select exists (select from app.consommables where fiche_id = ${ficheId})
+      or exists (select from app.echeances where fiche_id = ${ficheId})
+      as entretien`) as unknown as [{ entretien: boolean }];
+  const entrees = await tx<EntreeCarnet[]>`
+    select 'remplacement' as genre, c.intitule as libelle,
+      r.fait_le::text as le, r.compteur
+    from app.remplacements r
+    join app.consommables c on c.id = r.consommable_id
+    where c.fiche_id = ${ficheId}
+    union all
+    select 'echeance', e.titre, c.faite_le::text, null
+    from app.completions c
+    join app.echeances e on e.id = c.echeance_id
+    where e.fiche_id = ${ficheId}
+      and not c.annulee
+      and not exists (select from app.completions v where v.corrige = c.id)
+    order by le desc, compteur desc nulls last, libelle`;
+
+  return { entretien, entrees: entrees.map(entree => ({ ...entree })) };
+}
 
 export interface DureeDeVie {
   /** Au compteur de la fiche ; `null` : purement calendaire. */

@@ -3,19 +3,21 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { z } from "zod";
 import { AjouterPiece } from "@/components/ajout/AjouterPiece";
+import { CarnetEntretien } from "@/components/CarnetEntretien";
 import { Panel, Screen, SectionLabel } from "@/components/Screen";
 import { demoEnabled } from "@/demo/mode";
 import { valeurAffichee } from "@/lib/data/fiche-vue";
 import { enMonNom } from "@/lib/data/server";
-import { lireFiche } from "@/lib/data/store";
+import { lireCarnet, lireFiche } from "@/lib/data/store";
 import { NATURE_LABELS } from "@/lib/data/views";
 
 export const metadata: Metadata = { title: "Fiche" };
 
 /**
  * ⚠️ Écran provisoire : la fiche n'est pas encore dessinée dans Claude
- * Design (`a-dessiner.md`, § 2.1). Attributs, échéances liées, pièces
- * jointes ; le reste (historique, frise, archivage) viendra avec sa maquette.
+ * Design (`a-dessiner.md`, § 2.1). Attributs, pièces jointes, carnet
+ * d'entretien, échéances liées ; le reste (frise, archivage) viendra avec sa
+ * maquette.
  */
 export default async function Page({
   params,
@@ -27,7 +29,10 @@ export default async function Page({
   }
 
   await connection();
-  const fiche = await enMonNom(tx => lireFiche(tx, id.data));
+  const [fiche, carnet] = await enMonNom(
+    async tx =>
+      [await lireFiche(tx, id.data), await lireCarnet(tx, id.data)] as const,
+  );
 
   if (fiche === null) {
     notFound();
@@ -82,6 +87,8 @@ export default async function Page({
         )}
         <AjouterPiece ficheId={fiche.id} />
       </Panel>
+
+      {carnet.entretien && <CarnetEntretien entrees={carnet.entrees} />}
 
       {fiche.echeances.length > 0 && (
         <Panel className="gap-3 p-[18px]">

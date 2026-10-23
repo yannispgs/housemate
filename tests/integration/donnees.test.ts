@@ -19,6 +19,7 @@ import {
   creerEcheance,
   creerFiche,
   creerGarantie,
+  lireCarnet,
   lireFiche,
   lireFoyer,
   lirePieceJointe,
@@ -783,6 +784,74 @@ describe("plan d'entretien (§ 5.3)", () => {
           values (${ficheId}, 'Filtre', 3)`,
       ),
     ).rejects.toThrow(/check constraint/);
+  });
+
+  it("tient le carnet : remplacements et échéances faites, du plus récent au plus ancien", async () => {
+    const ficheId = await voiture(moi);
+    const vide = await commeMembre(sql(), moi.compte, tx =>
+      lireCarnet(tx, ficheId),
+    );
+    const revision = await echeanceDe(moi, {
+      titre: "Révision",
+      fiche: ficheId,
+    });
+    const ct = await echeanceDe(moi, {
+      titre: "Contrôle technique",
+      fiche: ficheId,
+    });
+    await commeMembre(sql(), moi.compte, async tx => {
+      const huile = await ajouterConsommable(tx, ficheId, "Vidange", {
+        compteur: 15_000,
+        temps: null,
+      });
+      await noterRemplacement(tx, huile, fromISO("2026-03-03"), 45_000);
+      await noterRemplacement(tx, huile, fromISO("2025-03-01"), null);
+      await completer(
+        tx,
+        revision,
+        fromISO("2026-03-01"),
+        fromISO("2026-03-03"),
+      );
+      const annulee = await completer(
+        tx,
+        ct,
+        fromISO("2026-01-10"),
+        fromISO("2026-01-10"),
+      );
+      await annulerCompletions(tx, [annulee]);
+    });
+    // Archivée : son historique reste au carnet.
+    await owner`update app.echeances set archivee_le = now() where id = ${revision}`;
+
+    expect(vide).toEqual({ entretien: false, entrees: [] });
+    expect(
+      await commeMembre(sql(), conjoint.compte, tx => lireCarnet(tx, ficheId)),
+    ).toEqual({
+      entretien: true,
+      entrees: [
+        {
+          genre: "remplacement",
+          libelle: "Vidange",
+          le: "2026-03-03",
+          compteur: 45_000,
+        },
+        {
+          genre: "echeance",
+          libelle: "Révision",
+          le: "2026-03-03",
+          compteur: null,
+        },
+        {
+          genre: "remplacement",
+          libelle: "Vidange",
+          le: "2025-03-01",
+          compteur: null,
+        },
+      ],
+    });
+    expect(
+      await commeMembre(sql(), voisin.compte, tx => lireCarnet(tx, ficheId)),
+    ).toEqual({ entretien: false, entrees: [] });
   });
 });
 
