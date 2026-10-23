@@ -7,8 +7,10 @@ import { CarnetEntretien } from "@/components/CarnetEntretien";
 import { EcheancesFiche } from "@/components/fiche/EcheancesFiche";
 import { PlantationFiche } from "@/components/fiche/PlantationFiche";
 import { TitreFiche } from "@/components/fiche/TitreFiche";
+import { GraphiqueKilometrage } from "@/components/GraphiqueKilometrage";
 import { Panel, Screen, SectionLabel } from "@/components/Screen";
 import { demoEnabled } from "@/demo/mode";
+import { reperesDuCarnet } from "@/lib/data/carnet";
 import { valeurAffichee } from "@/lib/data/fiche-vue";
 import {
   LIBELLE_EMPLACEMENT,
@@ -21,6 +23,7 @@ import { enMonNom } from "@/lib/data/server";
 import {
   lireCarnet,
   lireFiche,
+  lirePlanEntretien,
   listerConsommables,
   listerEcheances,
   listerEmplacements,
@@ -55,15 +58,17 @@ export default async function Page({
   }
 
   await connection();
-  const [fiche, emplacements, carnet, rows, consommables] = await enMonNom(tx =>
-    Promise.all([
-      lireFiche(tx, id.data),
-      listerEmplacements(tx),
-      lireCarnet(tx, id.data),
-      listerEcheances(tx),
-      listerConsommables(tx),
-    ]),
-  );
+  const [fiche, emplacements, carnet, plan, rows, consommables] =
+    await enMonNom(tx =>
+      Promise.all([
+        lireFiche(tx, id.data),
+        listerEmplacements(tx),
+        lireCarnet(tx, id.data),
+        lirePlanEntretien(tx, id.data),
+        listerEcheances(tx),
+        listerConsommables(tx),
+      ]),
+    );
 
   if (fiche === null) {
     notFound();
@@ -143,6 +148,14 @@ export default async function Page({
         )}
         <AjouterPiece ficheId={fiche.id} />
       </Panel>
+
+      {plan.releves.length > 0 && (
+        <GraphiqueKilometrage
+          releves={plan.releves}
+          reperes={reperesDuCarnet(carnet.entrees)}
+          aujourdhui={jour.iso}
+        />
+      )}
 
       {carnet.entretien && (
         <CarnetEntretien
