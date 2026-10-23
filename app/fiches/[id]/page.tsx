@@ -4,12 +4,16 @@ import { connection } from "next/server";
 import { z } from "zod";
 import { AjouterPiece } from "@/components/ajout/AjouterPiece";
 import { CarnetEntretien } from "@/components/CarnetEntretien";
+import { GraphiqueKilometrage } from "@/components/GraphiqueKilometrage";
 import { Panel, Screen, SectionLabel } from "@/components/Screen";
 import { demoEnabled } from "@/demo/mode";
+import { reperesDuCarnet } from "@/lib/data/carnet";
 import { valeurAffichee } from "@/lib/data/fiche-vue";
 import { enMonNom } from "@/lib/data/server";
-import { lireCarnet, lireFiche } from "@/lib/data/store";
+import { lireCarnet, lireFiche, lirePlanEntretien } from "@/lib/data/store";
+import { aujourdhuiAParis } from "@/lib/data/today";
 import { NATURE_LABELS } from "@/lib/data/views";
+import { toISO } from "@/lib/domain/plain-date";
 
 export const metadata: Metadata = { title: "Fiche" };
 
@@ -29,9 +33,13 @@ export default async function Page({
   }
 
   await connection();
-  const [fiche, carnet] = await enMonNom(
+  const [fiche, carnet, plan] = await enMonNom(
     async tx =>
-      [await lireFiche(tx, id.data), await lireCarnet(tx, id.data)] as const,
+      [
+        await lireFiche(tx, id.data),
+        await lireCarnet(tx, id.data),
+        await lirePlanEntretien(tx, id.data),
+      ] as const,
   );
 
   if (fiche === null) {
@@ -87,6 +95,14 @@ export default async function Page({
         )}
         <AjouterPiece ficheId={fiche.id} />
       </Panel>
+
+      {plan.releves.length > 0 && (
+        <GraphiqueKilometrage
+          releves={plan.releves}
+          reperes={reperesDuCarnet(carnet.entrees)}
+          aujourdhui={toISO(aujourdhuiAParis())}
+        />
+      )}
 
       {carnet.entretien && <CarnetEntretien entrees={carnet.entrees} />}
 
