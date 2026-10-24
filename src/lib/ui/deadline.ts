@@ -69,6 +69,17 @@ export interface FrostRange {
   readonly explanation: string;
 }
 
+/**
+ * Ce que « Fait » demande sur un consommable avant de confirmer (§ 5.3) :
+ * la date, et le kilométrage s'il est au compteur.
+ */
+export interface RemplacementView {
+  readonly consommableId: string;
+  readonly auCompteur: boolean;
+  /** Le compteur estimé, en indication seulement ; `null` sans relevé. */
+  readonly estimation: number | null;
+}
+
 export interface DeadlineView {
   readonly id: string;
   readonly title: string;
@@ -101,6 +112,8 @@ export interface DeadlineView {
   readonly history: readonly HistoryEntry[];
   /** Échéance regroupée : les plantes, cochées une à une. */
   readonly plants: readonly GroupedPlant[] | null;
+  /** Un consommable : « Fait » demande d'abord la date et le compteur. */
+  readonly remplacement?: RemplacementView;
 }
 
 export const TONE_INK: Readonly<Record<StatusTone, string>> = {

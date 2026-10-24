@@ -22,6 +22,7 @@ import {
   plantsProgress,
   TONE_INK,
 } from "@/lib/ui/deadline";
+import { ConfirmerRemplacement } from "./ConfirmerRemplacement";
 import {
   AlertIcon,
   ArrowUpIcon,
@@ -483,6 +484,8 @@ export function DeadlineCard({
   todayLabel,
   onToggle,
   onDone,
+  aujourdhui = "",
+  onReplace,
 }: Readonly<{
   deadline: DeadlineView;
   open: boolean;
@@ -490,7 +493,12 @@ export function DeadlineCard({
   todayLabel: string;
   onToggle: () => void;
   onDone: () => void;
+  /** AAAA-MM-JJ : la date proposée pour un remplacement. */
+  aujourdhui?: string;
+  /** Un consommable : enregistre le remplacement confirmé. */
+  onReplace?: (le: string, compteur: string) => Promise<string | null>;
 }>) {
+  const [confirmation, setConfirmation] = useState(false);
   const [plants, setPlants] = useState<PlantState>(() => ({
     doneOn: Object.fromEntries(
       (deadline.plants ?? []).map(plant => [plant.id, plant.doneOn]),
@@ -627,13 +635,29 @@ export function DeadlineCard({
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-[9px]">
-            {/* Sans verbe, pas d'action principale : un consommable se
-                remplace depuis sa fiche, avec le compteur du jour. */}
+          {confirmation && deadline.remplacement && onReplace && (
+            <ConfirmerRemplacement
+              remplacement={deadline.remplacement}
+              aujourdhui={aujourdhui}
+              onConfirm={onReplace}
+              onClose={() => setConfirmation(false)}
+            />
+          )}
+
+          <div
+            className="flex flex-wrap items-center gap-[9px]"
+            hidden={confirmation}
+          >
+            {/* Sans verbe, pas d'action principale. */}
             {deadline.verb && (
               <button
                 type="button"
-                onClick={onDone}
+                // Un consommable demande d'abord la date et le compteur.
+                onClick={
+                  deadline.remplacement && onReplace
+                    ? () => setConfirmation(true)
+                    : onDone
+                }
                 className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full bg-brand-strong px-5 font-text text-[15px] leading-none font-semibold text-white hover:brightness-[1.08] active:brightness-[.92]"
               >
                 <CheckIcon size={17} />

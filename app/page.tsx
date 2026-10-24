@@ -14,6 +14,7 @@ import { aujourdhuiAParis } from "@/lib/data/today";
 import { homeDeadlines, nextUpText } from "@/lib/data/views";
 import { toISO } from "@/lib/domain/plain-date";
 import { annuler, cocher } from "./_actions/echeances";
+import { remplacer } from "./_actions/entretien";
 
 export const metadata: Metadata = { title: "Accueil" };
 
@@ -42,7 +43,7 @@ export default async function Page() {
       fixedToday={toISO(today)}
       nextUp={nextUpText(rows, today)}
       aside={null}
-      actions={{ cocher, annuler }}
+      actions={{ cocher, annuler, remplacer }}
     />
   );
 }
