@@ -18,7 +18,7 @@
  *
  * Rejouable : chaque insertion ignore une ligne déjà présente.
  */
-import postgres from "postgres";
+import type postgres from "postgres";
 import { aujourdhuiAParis } from "../src/lib/data/today.ts";
 import { decaler } from "../src/lib/db/seed-dates.ts";
 import {
@@ -28,6 +28,7 @@ import {
   type TableSnapshot,
 } from "../src/lib/db/seed-merge.ts";
 import { daysBetween, fromISO, toISO } from "../src/lib/domain/plain-date.ts";
+import { projetPreviews } from "./neon-previews.ts";
 import {
   colonnesDatees,
   creerMarquage,
@@ -40,39 +41,14 @@ const project = process.env.NEON_PROJECT_ID;
 const previewName = process.env.PREVIEW_BRANCH;
 // SEED_BRANCH remplace `seed` : pour essayer sur des branches jetables.
 const seedName = process.env.SEED_BRANCH ?? "seed";
-const DATABASE = "housemate-previews";
-const ROLE = "housemate-previews_owner";
 
 if (!key || !project || !previewName) {
   console.error("NEON_API_KEY, NEON_PROJECT_ID et PREVIEW_BRANCH sont requis.");
   process.exit(1);
 }
 
-const api = `https://console.neon.tech/api/v2/projects/${project}`;
-
-async function neon<T>(path: string): Promise<T> {
-  const response = await fetch(`${api}${path}`, {
-    headers: { Authorization: `Bearer ${key}` },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Neon ${path} : HTTP ${response.status}`);
-  }
-
-  return (await response.json()) as T;
-}
-
-async function connect(branchId: string): Promise<postgres.Sql> {
-  const { uri } = await neon<{ uri: string }>(
-    `/connection_uri?branch_id=${branchId}&database_name=${DATABASE}&role_name=${ROLE}`,
-  );
-
-  return postgres(uri, { max: 1, onnotice: () => {} });
-}
-
-const { branches } = await neon<{
-  branches: { id: string; name: string }[];
-}>("/branches");
+const { branches: lireBranches, connect } = projetPreviews(key, project);
+const branches = await lireBranches();
 const preview = branches.find(b => b.name === previewName);
 const seedBranch = branches.find(b => b.name === seedName);
 
