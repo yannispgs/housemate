@@ -2,9 +2,10 @@ name: Fill preview
 description: >-
   Fills the preview's household with the fictional data set
   (src/lib/data/jeu-fictif.ts), dated from today, so a new preview shows
-  deadlines due, in notice, overdue and done. Only an empty household is
-  filled: a preview already filled, or edited by hand, is left as is. Safe to
-  repeat.
+  deadlines due, in notice, overdue and done. Once per preview: its rows are
+  listed in `preview_meta.jeu_fictif`, so that merging the PR leaves them out
+  of `seed` (seed-enrich). A preview whose set is already listed, or older
+  than the listing with a filled household, is left as is. Safe to repeat.
 
 inputs:
   api-key:
