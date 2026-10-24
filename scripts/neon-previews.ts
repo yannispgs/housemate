@@ -40,7 +40,26 @@ export function projetPreviews(key: string, project: string) {
         `/connection_uri?branch_id=${branchId}&database_name=${DATABASE}&role_name=${ROLE}`,
       );
 
-      return postgres(uri, { max: 1, onnotice: () => {} });
+      // L'adresse vient de l'API : on n'en garde que l'hôte Neon et les
+      // identifiants, la base et le rôle restant ceux des previews.
+      const url = new URL(uri);
+
+      if (
+        url.protocol !== "postgresql:" ||
+        !url.hostname.endsWith(".neon.tech")
+      ) {
+        throw new Error(`Neon connection_uri : adresse inattendue`);
+      }
+
+      return postgres({
+        host: url.hostname,
+        database: DATABASE,
+        username: ROLE,
+        password: decodeURIComponent(url.password),
+        ssl: "require",
+        max: 1,
+        onnotice: () => {},
+      });
     },
   };
 }
