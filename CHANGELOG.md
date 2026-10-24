@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.4.0](https://github.com/yannispgs/housemate/compare/v0.3.0...v0.4.0) (2026-10-24)
+
+
+### Features
+
+* **ajout:** propose les marques du foyer à mesure qu'on écrit ([b9e3a91](https://github.com/yannispgs/housemate/commit/b9e3a91ff3d272afd5a29bd3bd27bdf6dc746876))
+* **categories:** un thème choisi dans une liste, hérité de la fiche ([5b9e455](https://github.com/yannispgs/housemate/commit/5b9e455767433e634e3281ccc83e7e2f9c6e7a3f))
+* **categories:** un thème choisi dans une liste, hérité de la fiche ([9c1ab89](https://github.com/yannispgs/housemate/commit/9c1ab895345192fdaa6e04142259285bc9196afd))
+* **entretien:** « Fait » sur un consommable, avec la date et le compteur ([d7be15e](https://github.com/yannispgs/housemate/commit/d7be15e578fdc0b3005ca3702b88ce44fea83eda))
+* **entretien:** « Fait » sur un consommable, avec la date et le compteur ([201a2ab](https://github.com/yannispgs/housemate/commit/201a2abd4e6ddb688e794922d561cb9930ef983a))
+* **entretien:** ferme ou souple, et un seuil réglé par objet ([b6f8bd2](https://github.com/yannispgs/housemate/commit/b6f8bd20f17d8d45126fcd2592dedd9ae2dcf66e))
+* **entretien:** les consommables à l'accueil et dans À venir ([b430afe](https://github.com/yannispgs/housemate/commit/b430afeb6ce7e5ff5403db089e6bc0f70a8c7b91))
+* **entretien:** les consommables à l'accueil et dans À venir, ferme ou souple ([0308421](https://github.com/yannispgs/housemate/commit/03084217fff1f84c26ab84bdac7ec900d2dee5aa))
+* **mobile:** efface l'en-tête et les onglets pendant la frappe ([7f7d192](https://github.com/yannispgs/housemate/commit/7f7d192d82142c3433f663cd5cb89552b6c9648d))
+* **mobile:** garde en vue le champ où l'on écrit ([a53d734](https://github.com/yannispgs/housemate/commit/a53d734e9a9646f13165fa87b00444a7c2a24f41))
+
+
+### Bug Fixes
+
+* **ajout:** « ← Retour » en haut du formulaire, au lieu d'« Ajouter autre chose » ([7b0e3cd](https://github.com/yannispgs/housemate/commit/7b0e3cd26a8317e010c52c636f3596538eabd296))
+* **ajout:** la date et la durée tiennent dans l'écran, formulaires compactés ([0bf069f](https://github.com/yannispgs/housemate/commit/0bf069f0f7868ca87611a7cb791e8aacc47ff6a9))
+* **ajout:** la date et la durée tiennent dans l'écran, formulaires compactés ([18b16e2](https://github.com/yannispgs/housemate/commit/18b16e214608c2111b3f5ffcef2259b63d3f8c16))
+* **categories:** pas de focus automatique (SonarCloud) ([e54cbfb](https://github.com/yannispgs/housemate/commit/e54cbfb2ae6da25932fc568a55ad7ac30e1c46fa))
+* **entretien:** les deux tenues définies une seule fois (SonarCloud) ([6b0a4e2](https://github.com/yannispgs/housemate/commit/6b0a4e2e702f1a63645145163ae25fce939c1b3a))
+
 ## [0.3.0](https://github.com/yannispgs/housemate/compare/v0.2.0...v0.3.0) (2026-10-16)
 
 
