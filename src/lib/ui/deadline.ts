@@ -56,6 +56,8 @@ export interface GroupedPlant {
   readonly guideUrl: string;
   /** Date de réalisation affichée, si elle est faite. */
   readonly doneOn: string | null;
+  /** Sa fiche : son nom y mène. */
+  readonly ficheId: string | null;
 }
 
 /** La fourchette de température d'une alerte de gel. */
@@ -112,6 +114,11 @@ export interface DeadlineView {
   readonly history: readonly HistoryEntry[];
   /** Échéance regroupée : les plantes, cochées une à une. */
   readonly plants: readonly GroupedPlant[] | null;
+  /**
+   * La fiche liée : « Voir la fiche » y mène, et n'apparaît pas sans elle.
+   * Une échéance regroupée n'en a pas, chaque plante a la sienne.
+   */
+  readonly ficheId: string | null;
   /** Un consommable : « Fait » demande d'abord la date et le compteur. */
   readonly remplacement?: RemplacementView;
 }

@@ -36,6 +36,8 @@ const deadline = (
   canPostpone: true,
   history: [],
   plants: null,
+  // La démo n'a pas d'écran de fiche : aucun lien.
+  ficheId: null,
   ...fields,
 });
 
@@ -157,6 +159,7 @@ export const DEMO_DEADLINES: readonly DeadlineView[] = [
           "Rabattre d'un tiers les tiges de l'année, supprimer le bois mort.",
         guideUrl: "https://exemple.fr/guides/taille-rosier-grimpant",
         doneOn: "9 sept.",
+        ficheId: null,
       },
       {
         id: "laurier",
@@ -165,6 +168,7 @@ export const DEMO_DEADLINES: readonly DeadlineView[] = [
           "Couper les tiges qui ont fleuri, juste au-dessus d'un nœud.",
         guideUrl: "",
         doneOn: null,
+        ficheId: null,
       },
       {
         id: "framboisier",
@@ -172,6 +176,7 @@ export const DEMO_DEADLINES: readonly DeadlineView[] = [
         instruction: "Couper au ras du sol les cannes qui ont donné cet été.",
         guideUrl: "https://exemple.fr/guides/taille-framboisier-remontant",
         doneOn: null,
+        ficheId: null,
       },
     ],
   }),

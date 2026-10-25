@@ -114,6 +114,8 @@ export interface EcheanceRow {
   readonly preavisJours: number | null;
   readonly tenue: Tenure;
   readonly importance: Importance;
+  /** La fiche liée, pour « Voir la fiche ». */
+  readonly ficheId: string | null;
   readonly ficheTitre: string | null;
   /** Déjà traduit pour la personne qui regarde : « Foyer », « Moi »… */
   readonly destinataire: string;
@@ -331,6 +333,7 @@ function deadlineView(s: Situee, today: PlainDate): DeadlineView {
       .slice(0, 3)
       .map(c => ({ date: shortDate(c.faiteLe), text: "Fait" })),
     plants: null,
+    ficheId: row.ficheId,
   };
 }
 
@@ -466,6 +469,7 @@ function consommableView(c: ConsommableSitue, today: PlainDate): DeadlineView {
             : `Remplacé à ${KM.format(r.compteur)} km`,
       })),
     plants: null,
+    ficheId: c.row.ficheId,
     remplacement: {
       consommableId: c.row.id,
       auCompteur: c.row.dureeKm !== null,
