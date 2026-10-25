@@ -16,7 +16,7 @@ export function jetonValide(
   entete: string | null,
   attendu: string | undefined,
 ): boolean {
-  if (!attendu || entete === null || !entete.startsWith("Bearer ")) {
+  if (!attendu || !entete?.startsWith("Bearer ")) {
     return false;
   }
 
