@@ -42,7 +42,15 @@ describe("recordViews", () => {
   it("traduit la nature et range une fiche sans catégorie", () => {
     expect(
       recordViews([
-        { id: "f", nature: "vehicule", titre: "La voiture", categorie: null },
+        {
+          id: "f",
+          nature: "vehicule",
+          titre: "La voiture",
+          categorie: null,
+          attributs: [
+            { libelle: "Emplacement", type: "texte", valeur: "Garage" },
+          ],
+        },
       ]),
     ).toEqual([
       {
@@ -53,6 +61,23 @@ describe("recordViews", () => {
         descriptor: "",
       },
     ]);
+  });
+
+  it("dit d'une plante si elle est en pot ou en terre, et où (§ 12.4)", () => {
+    expect(
+      recordViews([
+        {
+          id: "p",
+          nature: "plante",
+          titre: "Le citronnier",
+          categorie: "Jardin",
+          attributs: [
+            { libelle: "Pot ou terre", type: "texte", valeur: "En pot" },
+            { libelle: "Emplacement", type: "texte", valeur: "Véranda" },
+          ],
+        },
+      ])[0]?.plante,
+    ).toEqual({ pot: "En pot", emplacement: "Véranda" });
   });
 });
 
