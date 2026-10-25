@@ -9,6 +9,12 @@
  * porte.
  */
 import type postgres from "postgres";
+import {
+  avecAttribut,
+  LIBELLE_EMPLACEMENT,
+  LIBELLE_POT,
+  type SituationPlante,
+} from "@/lib/data/plantes";
 import { parseRecurrence } from "@/lib/data/recurrence-json";
 import type {
   Attribut,
@@ -74,9 +80,21 @@ export async function listerMarques(tx: Tx): Promise<string[]> {
   return rows.map(r => r.marque);
 }
 
+/** Les emplacements déjà donnés aux plantes du foyer (§ 12.4). */
+export async function listerEmplacements(tx: Tx): Promise<string[]> {
+  const rows = await tx<{ emplacement: string }[]>`
+    select distinct attribut->>'valeur' as emplacement
+    from app.fiches, jsonb_array_elements(attributs) as attribut
+    where nature = 'plante'
+      and attribut->>'libelle' = ${LIBELLE_EMPLACEMENT}
+      and attribut->>'type' = 'texte'`;
+
+  return rows.map(r => r.emplacement);
+}
+
 export async function listerFiches(tx: Tx): Promise<FicheRow[]> {
   return (await tx`
-    select id::text, nature, titre, categorie
+    select id::text, nature, titre, categorie, attributs
     from app.fiches
     where archivee_le is null
     order by titre`) as unknown as FicheRow[];
@@ -295,6 +313,53 @@ export interface FicheDetail {
     readonly taille: number;
     readonly ajouteeLe: string;
   }[];
+}
+
+/**
+ * Renommer une fiche visible (§ 4.2). Rend `false` si elle n'existe pas ou
+ * n'est pas visible : rien n'est modifié.
+ */
+export async function renommerFiche(
+  tx: Tx,
+  id: string,
+  titre: string,
+): Promise<boolean> {
+  const rows = await tx`
+    update app.fiches set titre = ${titre} where id = ${id} returning id`;
+
+  return rows.length === 1;
+}
+
+/**
+ * En pot ou en terre, et l'emplacement d'une plante visible (§ 12.4) : les
+ * deux attributs, remplacés à leur place ou retirés s'ils sont vides. Rend
+ * `false` si la fiche n'est pas une plante visible.
+ */
+export async function modifierPlante(
+  tx: Tx,
+  id: string,
+  situation: SituationPlante,
+): Promise<boolean> {
+  const [fiche] = await tx<{ attributs: Attribut[] }[]>`
+    select attributs from app.fiches
+    where id = ${id} and nature = 'plante'
+    for update`;
+
+  if (fiche === undefined) {
+    return false;
+  }
+
+  const attributs = avecAttribut(
+    avecAttribut(fiche.attributs, LIBELLE_POT, situation.pot),
+    LIBELLE_EMPLACEMENT,
+    situation.emplacement,
+  );
+  await tx`
+    update app.fiches
+    set attributs = ${tx.json(attributs as unknown as postgres.JSONValue)}
+    where id = ${id}`;
+
+  return true;
 }
 
 /** Une fiche visible de la personne connectée, ou `null`. */

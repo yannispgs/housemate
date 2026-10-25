@@ -278,7 +278,14 @@ const record = (
   nature: RecordView["nature"],
   category: string,
   descriptor: string,
-): RecordView => ({ title, nature, category, descriptor });
+  plante?: RecordView["plante"],
+): RecordView => ({
+  title,
+  nature,
+  category,
+  descriptor,
+  ...(plante && { plante }),
+});
 
 export const DEMO_RECORDS: readonly RecordView[] = [
   record(
@@ -286,14 +293,22 @@ export const DEMO_RECORDS: readonly RecordView[] = [
     "Plante",
     "Jardin",
     "Rentrer sous abri — octobre",
+    { pot: "En pot", emplacement: "Extérieur" },
   ),
-  record("Rosier grimpant", "Plante", "Jardin", "Plantation — oct. → mars"),
-  record("Laurier rose", "Plante", "Jardin", "Hivernage sous abri — novembre"),
+  record("Rosier grimpant", "Plante", "Jardin", "Plantation — oct. → mars", {
+    pot: "En terre",
+    emplacement: "Extérieur",
+  }),
+  record("Laurier rose", "Plante", "Jardin", "Hivernage sous abri — novembre", {
+    pot: "En pot",
+    emplacement: "Véranda",
+  }),
   record(
     "Framboisier remontant",
     "Plante",
     "Jardin",
     "Fertilisation — novembre",
+    { pot: "En terre", emplacement: "Extérieur" },
   ),
   record("Voiture", "Véhicule", "Véhicule", "Contrôle technique dans 19 jours"),
   record(

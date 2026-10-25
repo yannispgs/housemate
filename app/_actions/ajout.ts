@@ -3,11 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { EtatAjout } from "@/lib/data/ajout-etat";
+import { attributsPlante } from "@/lib/data/plantes";
 import {
   achatValide,
   categorieConnue,
   categoriesProposees,
   echeanceSaisie,
+  emplacementConnu,
+  emplacementsProposes,
   ficheSaisie,
   garantieSaisie,
   lire,
@@ -22,6 +25,7 @@ import {
   creerFiche,
   creerGarantie,
   listerCategories,
+  listerEmplacements,
   listerMarques,
   type Tx,
 } from "@/lib/data/store";
@@ -101,11 +105,22 @@ export async function ajouterFiche(
     return { etape: "saisie", erreurs: saisie.erreurs };
   }
 
+  const { potOuTerre, emplacement, ...fiche } = saisie.valeur;
   const ficheId = await enMonNom(async tx =>
     creerFiche(tx, {
-      ...saisie.valeur,
-      categorie: await categorie(tx, saisie.valeur.categorie),
-      attributs: [],
+      ...fiche,
+      categorie: await categorie(tx, fiche.categorie),
+      // En pot ou en terre, et l'emplacement : d'une plante seulement (§ 12.4).
+      attributs:
+        fiche.nature === "plante"
+          ? attributsPlante({
+              pot: potOuTerre,
+              emplacement: emplacementConnu(
+                emplacement,
+                emplacementsProposes(await listerEmplacements(tx)),
+              ),
+            })
+          : [],
     }),
   );
   rafraichir();
