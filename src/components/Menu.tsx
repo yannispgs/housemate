@@ -5,7 +5,7 @@
  * seul menu ouvert à la fois, fermé par un clic en dehors ou par Échap, ou
  * dès qu'une option est choisie.
  */
-import { type ReactNode, type RefObject, useEffect } from "react";
+import { Fragment, type ReactNode, type RefObject, useEffect } from "react";
 import { ChevronDownIcon } from "./icons";
 
 /** Ferme quand on clique hors de `ref`, ou sur Échap. */
@@ -80,6 +80,8 @@ export interface MenuOption {
   readonly label: string;
   readonly checked: boolean;
   readonly onSelect: () => void;
+  /** Ouvre un nouveau groupe : un filet le sépare des options d'avant. */
+  readonly separated?: boolean;
 }
 
 /** Le menu lui-même, positionné par l'appelant. */
@@ -93,19 +95,23 @@ export function MenuList({
       className={`absolute z-10 flex min-w-[200px] flex-col rounded-[var(--radius-md)] border border-border bg-surface p-1.5 shadow-[var(--shadow-md)] ${className}`}
     >
       {options.map(option => (
-        <button
-          key={option.label}
-          type="button"
-          role="menuitemradio"
-          aria-checked={option.checked}
-          onClick={option.onSelect}
-          className="flex min-h-10 cursor-pointer items-center justify-between gap-2.5 rounded-[10px] bg-transparent px-3 text-left text-[14px] leading-none whitespace-nowrap text-ink hover:bg-grid"
-        >
-          <span>{option.label}</span>
-          <span className="text-[12px] leading-none text-ink-muted">
-            {option.checked ? "✓" : ""}
-          </span>
-        </button>
+        <Fragment key={option.label}>
+          {option.separated && (
+            <hr className="mx-3 my-1.5 border-0 border-t border-border" />
+          )}
+          <button
+            type="button"
+            role="menuitemradio"
+            aria-checked={option.checked}
+            onClick={option.onSelect}
+            className="flex min-h-10 cursor-pointer items-center justify-between gap-2.5 rounded-[10px] bg-transparent px-3 text-left text-[14px] leading-none whitespace-nowrap text-ink hover:bg-grid"
+          >
+            <span>{option.label}</span>
+            <span className="text-[12px] leading-none text-ink-muted">
+              {option.checked ? "✓" : ""}
+            </span>
+          </button>
+        </Fragment>
       ))}
     </div>
   );
