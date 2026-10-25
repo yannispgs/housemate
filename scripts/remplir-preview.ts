@@ -5,8 +5,14 @@
  *   NEON_API_KEY=… NEON_PROJECT_ID=… NEON_BRANCH_ID=… DATABASE_NAME=… \
  *   DATABASE_ROLE=… node --import ./scripts/alias.mjs scripts/remplir-preview.ts
  *
- * Seulement si le foyer est encore vide : une preview déjà remplie, ou dont
- * on a saisi des données à la main, n'est jamais touchée. Rejouable.
+ * Une seule fois par preview : ses lignes sont notées dans
+ * `preview_meta.jeu_fictif`, pour que la fusion de la PR ne les recopie pas
+ * dans `seed` (`scripts/enrichir-seed.ts`). Une preview où elles sont déjà
+ * notées n'est plus touchée. Rejouable.
+ *
+ * Au même moment, ce que la preview tient de `seed` avance du temps écoulé
+ * depuis le jour de référence de `seed` : les dates saisies suivent le
+ * calendrier (src/lib/db/seed-dates.ts).
  *
  * Tout passe par la RLS, au nom d'un membre du foyer : le jeu est écrit
  * comme le formulaire d'ajout l'écrirait.
@@ -17,8 +23,18 @@
 import postgres from "postgres";
 import { jeuFictif } from "../src/lib/data/jeu-fictif.ts";
 import { foyerVide, remplirFoyer } from "../src/lib/data/remplissage.ts";
-import { commeMembre } from "../src/lib/data/store.ts";
+import { commeMembre, type Tx } from "../src/lib/data/store.ts";
 import { aujourdhuiAParis } from "../src/lib/data/today.ts";
+import { decaler } from "../src/lib/db/seed-dates.ts";
+import { type IdsByTable, newIds } from "../src/lib/db/seed-merge.ts";
+import { daysBetween, fromISO } from "../src/lib/domain/plain-date.ts";
+import {
+  colonnesDatees,
+  creerMarquage,
+  DATES_PASSEES,
+  existe,
+  lireLignes,
+} from "./seed-lignes.ts";
 
 const {
   NEON_API_KEY: key,
@@ -54,6 +70,82 @@ if (!connection.ok) {
 const { uri } = (await connection.json()) as { uri: string };
 const sql = postgres(uri, { max: 1, onnotice: () => {} });
 
+/** Les identifiants de chaque table de l'app, lus en propriétaire. */
+async function lireIdentifiants(db: postgres.Sql | Tx): Promise<IdsByTable> {
+  const tables = await db<{ table: string }[]>`
+    select table_name as table from information_schema.columns
+    where table_schema = 'app' and column_name = 'id'
+    order by table_name`;
+  const lus = await Promise.all(
+    tables.map(async ({ table }) => {
+      const cible = db(`app.${table}`);
+      const rows = await db<{ id: string }[]>`select id::text from ${cible}`;
+
+      return [table, new Set(rows.map(r => r.id))] as const;
+    }),
+  );
+  const ids = new Map(lus);
+
+  return ids;
+}
+
+/**
+ * Avance les dates de ce que la preview tient de `seed`, du temps écoulé
+ * depuis le jour de référence de `seed` (src/lib/db/seed-dates.ts), et note
+ * de combien : la fusion les fera reculer d'autant.
+ */
+async function avancerHeritage(tx: Tx, herite: IdsByTable): Promise<void> {
+  const [reference] = await tx<{ le: string }[]>`
+    select le::text from preview_meta.reference limit 1`;
+  const aujourdhui = aujourdhuiAParis();
+
+  // Sans jour de référence, `seed` n'a encore rien reçu : rien à avancer, et
+  // la fusion saura que la preview est restée à l'heure réelle.
+  if (reference === undefined) {
+    return;
+  }
+
+  const jours = daysBetween(fromISO(reference.le), aujourdhui);
+  await tx`insert into preview_meta.decalage ${tx({ jours })}`;
+
+  if (jours === 0) {
+    return;
+  }
+
+  const maintenant = new Date();
+
+  await Promise.all(
+    [...(await colonnesDatees(tx))].map(async ([table, colonnes]) => {
+      const ids = herite.get(table) ?? new Set<string>();
+      const lignes = (await lireLignes(tx, table))
+        .filter(ligne => typeof ligne.id === "string" && ids.has(ligne.id))
+        .map(ligne =>
+          decaler(ligne, colonnes, jours, {
+            aujourdhui,
+            maintenant,
+            passees: DATES_PASSEES[table] ?? [],
+          }),
+        );
+
+      if (lignes.length === 0) {
+        return;
+      }
+
+      const cible = tx(`app.${table}`);
+      const noms = tx(colonnes.map(c => c.name));
+      const json = tx.json(lignes as postgres.JSONValue);
+      await tx`
+        update ${cible} as t
+        set (${noms}) = (
+          select ${noms}
+          from json_populate_record(null::${cible}, s.ligne)
+        )
+        from json_array_elements(${json}::json) as s(ligne)
+        where t.id::text = s.ligne->>'id'`;
+    }),
+  );
+}
+
 try {
   // Un seul foyer dans une preview : celui de démonstration, où sont
   // rattachés les comptes de la liste blanche.
@@ -70,16 +162,42 @@ try {
   }
 
   const compte = (membres[0] as { compte: string }).compte;
-  const bilan = await commeMembre(sql, compte, async tx =>
-    (await foyerVide(tx))
-      ? remplirFoyer(tx, jeuFictif(aujourdhuiAParis()))
-      : null,
-  );
+  const table = await existe(sql, "jeu_fictif");
+  // Deux requêtes : une table absente est refusée dès l'analyse, même
+  // derrière un `and` qui ne l'atteindrait pas.
+  const [{ pose } = { pose: false }] = table
+    ? await sql<{ pose: boolean }[]>`
+        select exists (select from preview_meta.jeu_fictif) as pose`
+    : [];
+  const marquage = { table, pose };
+  const avant = await lireIdentifiants(sql);
+  const bilan = marquage?.pose
+    ? null
+    : await commeMembre(sql, compte, async tx => {
+        // Sans table de marquage, la preview est d'avant l'enrichissement de
+        // `seed` : son foyer, s'il n'est pas vide, a déjà son jeu fictif.
+        if (!marquage?.table && !(await foyerVide(tx))) {
+          return null;
+        }
+
+        const rempli = await remplirFoyer(tx, jeuFictif(aujourdhuiAParis()));
+        // Redevenu propriétaire, dans la même transaction : le jeu, sa marque
+        // et le décalage des dates s'écrivent ensemble ou pas du tout.
+        await tx`reset role`;
+        await creerMarquage(tx);
+        const lignes = [...newIds(avant, await lireIdentifiants(tx))].flatMap(
+          ([table, ids]) => [...ids].map(id => ({ table_name: table, id })),
+        );
+        await tx`insert into preview_meta.jeu_fictif ${tx(lignes)}`;
+        await avancerHeritage(tx, avant);
+
+        return rempli;
+      });
 
   console.log(
     bilan === null
-      ? "Foyer déjà rempli : rien à faire."
-      : `Foyer rempli : ${bilan.fiches} fiches, ${bilan.echeances} échéances, ${bilan.consommables} consommables.`,
+      ? "Jeu fictif déjà posé : rien à faire."
+      : `Jeu fictif posé : ${bilan.fiches} fiches, ${bilan.echeances} échéances, ${bilan.consommables} consommables.`,
   );
 } finally {
   await sql.end();

@@ -1,0 +1,27 @@
+name: Seed enrich
+description: >-
+  Copies what was entered on a merged PR's preview into `seed`, so every
+  later preview starts with it (scripts/enrichir-seed.ts). Additions only;
+  the fictional data set is left out. Previews project only, never prod.
+  Safe to repeat. Expects `seed` already migrated.
+
+inputs:
+  pr-number:
+    description: The merged PR.
+    required: true
+  api-key:
+    description: Neon API key.
+    required: true
+  project:
+    description: Neon project id (`housemate-previews`).
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        NEON_API_KEY: ${{ inputs.api-key }}
+        NEON_PROJECT_ID: ${{ inputs.project }}
+        PREVIEW_BRANCH: preview/pr-${{ inputs.pr-number }}
+      run: node --import ./scripts/alias.mjs scripts/enrichir-seed.ts

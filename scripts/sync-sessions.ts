@@ -12,7 +12,7 @@
  * Rejouable : chaque écriture est un « insérer si absent » ou un report
  * d'expiration vers le plus tard.
  */
-import postgres from "postgres";
+import type postgres from "postgres";
 import {
   type AuthSession,
   type AuthUser,
@@ -20,34 +20,18 @@ import {
   type BranchWrites,
   planSessionSync,
 } from "../src/lib/db/session-sync.ts";
+import { projetPreviews } from "./neon-previews.ts";
 
 const key = process.env.NEON_API_KEY;
 const project = process.env.NEON_PROJECT_ID;
-const DATABASE = "housemate-previews";
-const ROLE = "housemate-previews_owner";
 
 if (!key || !project) {
   console.error("NEON_API_KEY et NEON_PROJECT_ID sont requis.");
   process.exit(1);
 }
 
-const api = `https://console.neon.tech/api/v2/projects/${project}`;
-
-async function neon<T>(path: string): Promise<T> {
-  const response = await fetch(`${api}${path}`, {
-    headers: { Authorization: `Bearer ${key}` },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Neon ${path} : HTTP ${response.status}`);
-  }
-
-  return (await response.json()) as T;
-}
-
-const { branches } = await neon<{
-  branches: { id: string; name: string }[];
-}>("/branches");
+const neon = projetPreviews(key, project);
+const branches = await neon.branches();
 // SYNC_BRANCHES (noms séparés par des virgules) restreint la recopie à ces
 // branches : pour l'essayer sur des branches jetables sans toucher aux autres.
 const only = process.env.SYNC_BRANCHES?.split(",").filter(Boolean);
@@ -64,10 +48,7 @@ async function snapshot(branch: {
   id: string;
   name: string;
 }): Promise<BranchSnapshot> {
-  const { uri } = await neon<{ uri: string }>(
-    `/connection_uri?branch_id=${branch.id}&database_name=${DATABASE}&role_name=${ROLE}`,
-  );
-  const sql = postgres(uri, { max: 1, onnotice: () => {} });
+  const sql = await neon.connect(branch.id);
   connections.set(branch.name, sql);
   const [users, sessions] = [
     await sql<AuthUser[]>`
