@@ -205,7 +205,7 @@ export const emplacementConnu = valeurConnue;
 const potOuTerre = z
   .union([z.enum(POT_OU_TERRE), z.literal("")], { error: "Choix inconnu." })
   .optional()
-  .transform((v): PotOuTerre | null => (v ? v : null));
+  .transform((v): PotOuTerre | null => v || null);
 
 /** Ce qu'on dit d'une plante, à la création comme sur sa fiche. */
 export const planteSaisie = z.object({
