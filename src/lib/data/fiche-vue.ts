@@ -10,9 +10,9 @@ const LONG = new Intl.DateTimeFormat("fr-FR", {
 
 const DEGRES = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 });
 
-/** « −5 °C », avec un vrai signe moins. */
+/** « −5 °C », avec un vrai signe moins, et sans passage à la ligne avant « °C ». */
 export function celsius(valeur: number): string {
-  return `${DEGRES.format(valeur).replace("-", "−")} °C`;
+  return `${DEGRES.format(valeur).replace("-", "−")}\u00a0°C`;
 }
 
 const UNITES = {

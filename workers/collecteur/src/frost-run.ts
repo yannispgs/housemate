@@ -185,7 +185,17 @@ export async function sendPending(
   }
 
   try {
-    await send(mailFor(pending, await plantsOfNight(sql, night)));
+    // Le mail part encore à une adresse commune : une plante privée n'y
+    // figure pas tant que l'envoi par membre n'existe pas (§ 7).
+    const shared = (await plantsOfNight(sql, night)).filter(
+      plant => plant.reservedTo === null,
+    );
+
+    if (!shared.some(plant => plant.level !== null)) {
+      return;
+    }
+
+    await send(mailFor(pending, shared));
   } catch (error) {
     await releaseMessage(sql, night);
     throw error;

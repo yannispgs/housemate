@@ -192,6 +192,8 @@ export interface WatchedPlant {
   /** Vide : pas suivie, faute de seuil. Le mail le dit. */
   readonly damageThreshold: number | null;
   readonly deathThreshold: number | null;
+  /** Fiche privée : le membre à qui son alerte est réservée ; sinon `null`. */
+  readonly reservedTo: string | null;
 }
 
 export type PlantLevel = FrostLevel | "indisponible";
