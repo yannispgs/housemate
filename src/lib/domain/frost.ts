@@ -95,6 +95,56 @@ export function predictVerandaMinimum({
   };
 }
 
+/**
+ * La marge de prévision de départ : le protocole situe l'erreur entre 0,4 et
+ * 2 °C, on part du haut. Elle vaut tant qu'aucune marge mesurée n'a été
+ * appliquée (décision du 26/10/2026).
+ */
+export const DEFAULT_FORECAST_MARGIN = 2;
+
+/** Les règles de la proposition du matin (décisions du 26/10/2026). */
+export const MARGIN_PROPOSAL = {
+  /** Assez de nuits froides mesurées pour proposer. */
+  minNights: 10,
+  /** La marge couvre deux fois l'erreur quadratique moyenne. */
+  coverage: 2,
+  /**
+   * Plancher de l'erreur : le capteur relève à l'heure près, il ne sait pas
+   * juger plus fin (comme `FORECAST_BLEND.rmseFloor`).
+   */
+  errorFloor: 0.3,
+  /** En deçà de cet écart avec la marge en vigueur, rien à proposer. */
+  minChange: 0.5,
+} as const;
+
+export interface ForecastErrorStats {
+  readonly nights: number;
+  /** Erreur quadratique moyenne de la prévision, en °C. */
+  readonly error: number;
+}
+
+/**
+ * La marge à proposer d'après l'erreur mesurée, ou `null` : trop peu de nuits,
+ * ou trop proche de la marge en vigueur pour mériter une validation.
+ */
+export function proposeForecastMargin(
+  stats: ForecastErrorStats,
+  current: number,
+): number | null {
+  if (stats.nights < MARGIN_PROPOSAL.minNights) {
+    return null;
+  }
+
+  const proposed = round1(
+    MARGIN_PROPOSAL.coverage *
+      Math.max(stats.error, MARGIN_PROPOSAL.errorFloor),
+  );
+
+  return Math.abs(proposed - current) < MARGIN_PROPOSAL.minChange
+    ? null
+    : proposed;
+}
+
 export interface WatchMargins {
   /**
    * Erreur de la prévision extérieure, mesurée par le journal du soir

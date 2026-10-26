@@ -31,7 +31,7 @@ import {
 import { fromISO, type PlainDate, toISO } from "@/lib/domain/plain-date";
 import type { Duration } from "@/lib/domain/recurrence";
 import type { Importance, Tenure } from "@/lib/ui/deadline";
-import type { FrostRow } from "@/lib/ui/frost";
+import type { FrostRow, MarginRow } from "@/lib/ui/frost";
 
 export type Tx = postgres.TransactionSql;
 
@@ -414,6 +414,57 @@ export async function declarerNuitChauffee(
 ): Promise<boolean> {
   const [row] = await tx<{ fait: boolean }[]>`
     select app.declarer_nuit_chauffee(${instant}, ${chauffee}) as fait`;
+
+  /* c8 ignore next -- repli inatteignable : un select rend toujours sa ligne. */
+  return row?.fait ?? false;
+}
+
+/**
+ * La marge de prévision de la veille gel : celle en vigueur, et la proposition
+ * en attente. `null` hors d'un foyer.
+ */
+export async function lireMargePrevision(tx: Tx): Promise<MarginRow | null> {
+  const [row] = await tx<
+    {
+      actuelle: number | null;
+      appliquee_le: Date | null;
+      proposition: string | null;
+      proposee: number;
+      nuits: number;
+      erreur: number;
+    }[]
+  >`
+    select actuelle::float8 as actuelle, appliquee_le,
+      proposition::text as proposition, proposee::float8 as proposee, nuits,
+      erreur::float8 as erreur
+    from app.marge_prevision()`;
+
+  if (row === undefined) {
+    return null;
+  }
+
+  return {
+    actuelle: row.actuelle,
+    appliqueeLe: row.appliquee_le,
+    proposition:
+      row.proposition === null
+        ? null
+        : {
+            id: row.proposition,
+            valeur: row.proposee,
+            nuits: row.nuits,
+            erreur: row.erreur,
+          },
+  };
+}
+
+/** « Appliquer » la marge proposée : `false` si elle n'est plus en attente. */
+export async function appliquerMargePrevision(
+  tx: Tx,
+  proposition: string,
+): Promise<boolean> {
+  const [row] = await tx<{ fait: boolean }[]>`
+    select app.appliquer_marge_prevision(${proposition}) as fait`;
 
   /* c8 ignore next -- repli inatteignable : un select rend toujours sa ligne. */
   return row?.fait ?? false;

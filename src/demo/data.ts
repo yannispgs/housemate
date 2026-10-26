@@ -12,7 +12,12 @@
  * c'est ce qui rend les captures comparables.
  */
 import type { DeadlineView } from "@/lib/ui/deadline";
-import { type FrostCardView, frostCard } from "@/lib/ui/frost";
+import {
+  type FrostCardView,
+  frostCard,
+  type MarginView,
+  marginView,
+} from "@/lib/ui/frost";
 import type { RecordView } from "@/lib/ui/inventory";
 import type { UpcomingItem, UpcomingRow } from "@/lib/ui/upcoming";
 
@@ -151,7 +156,6 @@ export const DEMO_DEADLINES: readonly DeadlineView[] = [
   }),
 ];
 
-/** Ce que l'accueil vide annonce, faute de mieux. */
 /**
  * Un soir de gel (SPEC § 12.8) : le laurier rose en alerte dehors, le
  * citronnier à surveiller dans la véranda.
@@ -194,8 +198,16 @@ export const DEMO_FROST: {
   return card && { card, emplacements: ["Extérieur", "Véranda", "Salon"] };
 })();
 
+/** Ce que l'accueil vide annonce, faute de mieux. */
 export const DEMO_NEXT_UP =
   "Le prochain rendez-vous est le 1er octobre : rentrer le citronnier sous abri. Il apparaîtra ici quand son préavis s'ouvrira.";
+
+/** Une marge de prévision mesurée, à valider dans les réglages (§ 12.8). */
+export const DEMO_MARGIN: MarginView = marginView({
+  actuelle: null,
+  appliqueeLe: null,
+  proposition: { id: "1", valeur: 1.2, nuits: 14, erreur: 0.6 },
+});
 
 /** Une échéance d'« À venir » : jardin, souple et normale sauf mention. */
 const upcoming = (

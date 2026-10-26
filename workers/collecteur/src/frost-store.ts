@@ -320,3 +320,58 @@ export async function recordReview(
     where nuit = ${night}::date and bilan_le is null
   `;
 }
+
+/** La marge de prévision en vigueur : la dernière appliquée, ou `null`. */
+export async function appliedForecastMargin(sql: Sql): Promise<number | null> {
+  const found = await rows<{ valeur: number }>(sql`
+    select valeur::float8 as valeur from meteo.marges_prevision
+    where appliquee_le is not null
+    order by appliquee_le desc, id desc
+    limit 1
+  `);
+
+  return found[0]?.valeur ?? null;
+}
+
+/** L'erreur de la prévision sur les dernières nuits froides. */
+export async function coldForecastError(
+  sql: Sql,
+): Promise<{ nights: number; error: number }> {
+  const found = await rows<{ nights: number; error: number }>(sql`
+    select nuits as nights, erreur::float8 as error
+    from meteo.erreur_prevision_froid
+  `);
+
+  /* c8 ignore next -- repli inatteignable : un agrégat rend toujours sa ligne. */
+  return found[0] ?? { nights: 0, error: 0 };
+}
+
+/**
+ * Propose une marge : met à jour la proposition en attente, ou en crée une.
+ * Rend `true` seulement à la création — c'est elle qui mérite un mail.
+ */
+export async function recordMarginProposal(
+  sql: Sql,
+  proposal: { valeur: number; nuits: number; erreur: number },
+): Promise<boolean> {
+  const updated = await rows<{ id: number }>(sql`
+    update meteo.marges_prevision set
+      valeur = ${proposal.valeur}, nuits = ${proposal.nuits},
+      erreur = ${proposal.erreur}, proposee_le = now()
+    where appliquee_le is null
+    returning id
+  `);
+
+  if (updated.length > 0) {
+    return false;
+  }
+
+  const inserted = await rows<{ id: number }>(sql`
+    insert into meteo.marges_prevision (valeur, nuits, erreur)
+    values (${proposal.valeur}, ${proposal.nuits}, ${proposal.erreur})
+    on conflict do nothing
+    returning id
+  `);
+
+  return inserted.length > 0;
+}

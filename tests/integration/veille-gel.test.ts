@@ -2,14 +2,17 @@ import postgres from "postgres";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { attributsPlante } from "@/lib/data/plantes";
 import {
+  appliquerMargePrevision,
   commeMembre,
   declarerNuitChauffee,
   deplacerPlante,
+  lireMargePrevision,
   lireVeilleGel,
   type Tx,
 } from "@/lib/data/store";
 import {
   evaluateEvening,
+  proposeMargin,
   reviewNight,
   sendPending,
 } from "../../workers/collecteur/src/frost-run";
@@ -34,6 +37,7 @@ let compte: string;
 
 beforeEach(async () => {
   await owner`delete from meteo.nuits_gel_plantes`;
+  await owner`delete from meteo.marges_prevision`;
   await owner`delete from meteo.minima_prevus`;
   await owner`delete from meteo.nuits_gel`;
   await owner`delete from meteo.releves`;
@@ -649,5 +653,133 @@ describe("la carte de l'accueil", () => {
       false,
     );
     expect(await chauffee()).toBe(false);
+  });
+});
+
+describe("la marge de prévision", () => {
+  /** Des nuits froides déjà bilantées, avant celle du test. */
+  async function nuitsFroides(erreurs: readonly number[], depuis = 1) {
+    for (const [i, erreur] of erreurs.entries()) {
+      const nuit = `2026-11-${String(depuis + i).padStart(2, "0")}`;
+      await owner`
+        insert into meteo.nuits_gel
+          (nuit, alerte, message, prevision_min, min_exterieur, erreur_prevision)
+        values (${nuit}, false, null, 0, 1, ${erreur})`;
+    }
+  }
+
+  const propositions = () =>
+    owner`
+      select valeur::float8 as valeur, nuits, erreur::float8 as erreur,
+        appliquee_le
+      from meteo.marges_prevision order by id`;
+
+  const commeMoi = <T>(run: (tx: Tx) => Promise<T>) =>
+    commeMembre(owner, compte, run);
+
+  it("ne propose rien avant dix nuits froides, ni pour une nuit douce", async () => {
+    await nuitsFroides([0.6, -0.6, 0.6, -0.6, 0.6, -0.6, 0.6, -0.6, 0.6]);
+    await owner`
+      insert into meteo.nuits_gel
+        (nuit, alerte, message, prevision_min, min_exterieur, erreur_prevision)
+      values ('2026-10-01', false, null, 9, 8, 3)`;
+
+    expect(await asWatch(proposeMargin)).toBeNull();
+    expect(await propositions()).toEqual([]);
+  });
+
+  it("propose une fois par mail, puis met à jour en silence", async () => {
+    await nuitsFroides(
+      Array.from({ length: 12 }, (_, i) => (i % 2 ? 0.6 : -0.6)),
+    );
+
+    const mail = await asWatch(proposeMargin);
+
+    expect(mail?.text).toContain("de 2,0 °C à 1,2 °C");
+    expect(await propositions()).toEqual([
+      { valeur: 1.2, nuits: 12, erreur: 0.6, appliquee_le: null },
+    ]);
+
+    // Deux nuits de plus, à un degré : √((12 × 0,36 + 2) / 14) = 0,67.
+    await nuitsFroides([1, -1], 13);
+
+    expect(await asWatch(proposeMargin)).toBeNull();
+    expect(await propositions()).toEqual([
+      { valeur: 1.3, nuits: 14, erreur: 0.67, appliquee_le: null },
+    ]);
+  });
+
+  it("ne change qu'une fois appliquée, et sert dès le soir suivant", async () => {
+    await nuitsFroides(
+      Array.from({ length: 12 }, (_, i) => (i % 2 ? 0.6 : -0.6)),
+    );
+    await asWatch(proposeMargin);
+
+    const avant = await commeMoi(lireMargePrevision);
+
+    expect(avant).toEqual({
+      actuelle: null,
+      appliqueeLe: null,
+      proposition: {
+        id: expect.any(String),
+        valeur: 1.2,
+        nuits: 12,
+        erreur: 0.6,
+      },
+    });
+
+    const id = avant?.proposition?.id as string;
+
+    expect(await commeMoi(tx => appliquerMargePrevision(tx, id))).toBe(true);
+    // Déjà appliquée : plus rien à faire.
+    expect(await commeMoi(tx => appliquerMargePrevision(tx, id))).toBe(false);
+    expect(await commeMoi(lireMargePrevision)).toEqual({
+      actuelle: 1.2,
+      appliqueeLe: expect.any(Date),
+      proposition: null,
+    });
+    // Appliquée, la même erreur ne propose plus rien.
+    expect(await asWatch(proposeMargin)).toBeNull();
+
+    await plante("Le laurier rose", "Extérieur", -5);
+    await coldEvening();
+    await asWatch(sql => evaluateEvening(sql, NIGHT, EVENING));
+
+    // Dehors : −3 annoncé, moins 1,2 de prévision, 3 de radiatif, 1,5 de sol.
+    expect((await plantes())[0]).toMatchObject({
+      estimation: -3,
+      borne_basse: -8.7,
+    });
+  });
+
+  it("n'est lue ni appliquée par personne hors du foyer", async () => {
+    await nuitsFroides(
+      Array.from({ length: 12 }, (_, i) => (i % 2 ? 0.6 : -0.6)),
+    );
+    await asWatch(proposeMargin);
+    const [{ id }] = (await owner`
+      select id::text from meteo.marges_prevision`) as unknown as [
+      { id: string },
+    ];
+    const inconnu = `veille-${crypto.randomUUID()}`;
+
+    expect(await commeMembre(owner, inconnu, lireMargePrevision)).toBeNull();
+    expect(
+      await commeMembre(owner, inconnu, tx => appliquerMargePrevision(tx, id)),
+    ).toBe(false);
+  });
+
+  it("ne peut pas être validée par la veille elle-même", async () => {
+    await nuitsFroides(
+      Array.from({ length: 12 }, (_, i) => (i % 2 ? 0.6 : -0.6)),
+    );
+    await asWatch(proposeMargin);
+
+    await expect(
+      owner.begin(async tx => {
+        await tx`set local role meteo_veille`;
+        await tx`update meteo.marges_prevision set appliquee_le = now()`;
+      }),
+    ).rejects.toThrow(/permission denied/);
   });
 });

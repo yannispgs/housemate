@@ -4,6 +4,7 @@ import {
   frostLevel,
   nightErrors,
   predictVerandaMinimum,
+  proposeForecastMargin,
   verandaLowerBound,
 } from "@/lib/domain/frost";
 
@@ -119,5 +120,22 @@ describe("nightErrors", () => {
     // Prévision : 0,5 mesuré contre 1 annoncé.
     // Modèle, avec l'extérieur MESURÉ : prédit 6,4, observé 6.
     expect(errors).toEqual({ forecastError: -0.5, modelError: -0.4 });
+  });
+});
+
+describe("proposeForecastMargin", () => {
+  it("attend dix nuits froides", () => {
+    expect(proposeForecastMargin({ nights: 9, error: 0.6 }, 2)).toBeNull();
+    expect(proposeForecastMargin({ nights: 10, error: 0.6 }, 2)).toBe(1.2);
+  });
+
+  it("couvre deux fois l'erreur, jamais moins que la finesse du capteur", () => {
+    expect(proposeForecastMargin({ nights: 14, error: 1.24 }, 1)).toBe(2.5);
+    expect(proposeForecastMargin({ nights: 14, error: 0.1 }, 2)).toBe(0.6);
+  });
+
+  it("ne dérange pas pour moins d'un demi-degré d'écart", () => {
+    expect(proposeForecastMargin({ nights: 14, error: 0.9 }, 2)).toBeNull();
+    expect(proposeForecastMargin({ nights: 14, error: 0.75 }, 2)).toBe(1.5);
   });
 });

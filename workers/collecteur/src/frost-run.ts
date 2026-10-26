@@ -10,13 +10,17 @@
  * journal est la seule vérité, et ce qui part est exactement ce qui y est écrit.
  */
 import {
+  DEFAULT_FORECAST_MARGIN,
   exteriorLowerBound,
   nightErrors,
   predictVerandaMinimum,
+  proposeForecastMargin,
   verandaLowerBound,
 } from "../../../src/lib/domain/frost";
 import {
+  appliedForecastMargin,
   claimMessage,
+  coldForecastError,
   eveningReadings,
   forecastMinima,
   modelScores,
@@ -25,6 +29,7 @@ import {
   plantsOfNight,
   previousNightAlerted,
   recordEvening,
+  recordMarginProposal,
   recordModelMinima,
   recordPlants,
   recordReview,
@@ -37,21 +42,16 @@ import {
   FROST_WATCH,
   frostMail,
   type Mail,
+  marginMail,
   nightMessage,
   type PlantNight,
 } from "./frost-watch";
 import type { Sql } from "./store";
 
-const MARGINS = {
-  veranda: {
-    forecastMargin: FROST_WATCH.forecastMargin,
-    ...FROST_WATCH.veranda,
-  },
-  exterior: {
-    forecastMargin: FROST_WATCH.forecastMargin,
-    ...FROST_WATCH.exterior,
-  },
-};
+/** La marge de prévision en vigueur : validée, sinon celle de départ. */
+async function forecastMargin(sql: Sql): Promise<number> {
+  return (await appliedForecastMargin(sql)) ?? DEFAULT_FORECAST_MARGIN;
+}
 
 export async function evaluateEvening(
   sql: Sql,
@@ -71,6 +71,12 @@ export async function evaluateEvening(
       `Veille de gel du ${night} : aucune prévision pour la nuit.`,
     );
   }
+
+  const margin = await forecastMargin(sql);
+  const MARGINS = {
+    veranda: { forecastMargin: margin, ...FROST_WATCH.veranda },
+    exterior: { forecastMargin: margin, ...FROST_WATCH.exterior },
+  };
 
   // La véranda se prédit dès que ses relevés sont là, même sans plante
   // dedans : le bilan du matin continue d'en calibrer le modèle.
@@ -227,4 +233,27 @@ export async function reviewNight(sql: Sql, night: string): Promise<void> {
     minVeranda: entry.minVeranda,
     ...errors,
   });
+}
+
+/**
+ * Le matin, après le bilan : propose une marge de prévision si l'erreur
+ * mesurée la justifie. Rend le mail qui l'annonce à la première proposition
+ * seulement — les matins suivants la mettent à jour sans rien envoyer.
+ */
+export async function proposeMargin(sql: Sql): Promise<Mail | null> {
+  const stats = await coldForecastError(sql);
+  const current = await forecastMargin(sql);
+  const proposed = proposeForecastMargin(stats, current);
+
+  if (proposed === null) {
+    return null;
+  }
+
+  const created = await recordMarginProposal(sql, {
+    valeur: proposed,
+    nuits: stats.nights,
+    erreur: stats.error,
+  });
+
+  return created ? marginMail(current, proposed, stats) : null;
 }

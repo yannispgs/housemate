@@ -5,6 +5,7 @@
  * réglages du foyer, dont les écrans de détail ne sont pas encore conçus.
  */
 import { useEffect, useState } from "react";
+import type { MarginView } from "@/lib/ui/frost";
 import {
   dataThemeFor,
   parseThemeMode,
@@ -15,6 +16,7 @@ import {
 } from "@/lib/ui/theme";
 import { ChevronRightIcon } from "../icons";
 import { Panel, Screen } from "../Screen";
+import { VeilleGelPanel } from "../VeilleGelPanel";
 
 const PANEL_LABEL =
   "text-[11.5px] leading-none font-semibold uppercase tracking-[.11em] text-ink-muted";
@@ -117,8 +119,13 @@ export interface SettingsRow {
 export function SettingsScreen({
   rows,
   signOut,
+  marge,
+  appliquerMarge,
 }: Readonly<{
   rows: readonly SettingsRow[];
+  /** La marge de la veille gel ; absente hors d'un foyer. */
+  marge?: MarginView | null;
+  appliquerMarge?: (proposition: string) => Promise<string | null>;
   /** Server action de déconnexion. */
   signOut: () => Promise<void>;
 }>) {
@@ -195,6 +202,8 @@ export function SettingsScreen({
             par le récap ou restent à l'écran.
           </span>
         </Panel>
+
+        {marge && <VeilleGelPanel marge={marge} appliquer={appliquerMarge} />}
 
         <Panel className="px-[18px] py-1.5">
           {rows.map((row, index) => (
