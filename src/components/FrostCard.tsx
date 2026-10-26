@@ -30,6 +30,13 @@ export interface FrostActions {
 const PILULE =
   "inline-flex min-h-11 flex-none cursor-pointer items-center rounded-full border border-border bg-surface px-[18px] font-display text-[14px] text-ink hover:bg-grid disabled:opacity-60";
 
+/**
+ * « Déplacer » vaut pour une plante : plus discret que « Chauffer », qui vaut
+ * pour toute la véranda. Même cible tactile, sans bordure ni fond.
+ */
+const DISCRET =
+  "inline-flex min-h-11 flex-none cursor-pointer items-center rounded-full bg-transparent px-3 text-[13.5px] font-semibold text-ink-secondary hover:bg-grid hover:text-ink";
+
 const AUTRE = "__autre__";
 
 const TEINTE: Record<FrostLevel, string> = {
@@ -254,7 +261,7 @@ export function FrostCard({
                   {vers === null && ouverte !== plante.ficheId && (
                     <button
                       type="button"
-                      className={PILULE}
+                      className={DISCRET}
                       onClick={() => setOuverte(plante.ficheId)}
                     >
                       Déplacer
