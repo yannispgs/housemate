@@ -35,6 +35,12 @@ export type Attribut =
       readonly valeur: string;
     }
   | { readonly libelle: string; readonly type: "date"; readonly valeur: string }
+  /** Une température en °C : les seuils de gel d'une plante (§ 12.2). */
+  | {
+      readonly libelle: string;
+      readonly type: "temperature";
+      readonly valeur: number;
+    }
   | {
       readonly libelle: string;
       readonly type: "duree";
@@ -207,22 +213,63 @@ const potOuTerre = z
   .optional()
   .transform((v): PotOuTerre | null => v || null);
 
-/** Ce qu'on dit d'une plante, à la création comme sur sa fiche. */
-export const planteSaisie = z.object({
+/**
+ * Un seuil de gel en °C, au dixième : facultatif, vide = non renseigné. La
+ * virgule et le vrai signe moins sont acceptés.
+ */
+const seuil = z.preprocess(
+  v =>
+    typeof v === "string"
+      ? v.trim().replace(",", ".").replace("−", "-") || null
+      : (v ?? null),
+  z.coerce
+    .number({ error: "Une température est attendue." })
+    .min(-50, "−50 °C au moins.")
+    .max(50, "50 °C au plus.")
+    .transform(v => Math.round(v * 10) / 10)
+    .nullable(),
+);
+
+const champsPlante = {
   potOuTerre,
   emplacement: texteFacultatif,
-});
+  seuilDegats: seuil,
+  seuilMort: seuil,
+};
+
+/** La mort ne vient pas avant les dégâts. */
+function seuilsCoherents(
+  s: { seuilDegats: number | null; seuilMort: number | null },
+  ctx: z.RefinementCtx,
+): void {
+  if (
+    s.seuilDegats !== null &&
+    s.seuilMort !== null &&
+    s.seuilMort > s.seuilDegats
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Le seuil de mort est sous celui des dégâts.",
+      path: ["seuilMort"],
+    });
+  }
+}
+
+/** Ce qu'on dit d'une plante, à la création comme sur sa fiche. */
+export const planteSaisie = z.object(champsPlante).superRefine(seuilsCoherents);
 
 /* ------------------------------------------------------------------------ */
 /* Fiche vierge                                                             */
 /* ------------------------------------------------------------------------ */
 
-export const ficheSaisie = z.object({
-  nature: z.enum(NATURES, { error: "Nature inconnue." }),
-  titre,
-  categorie: texteFacultatif,
-  ...planteSaisie.shape,
-});
+export const ficheSaisie = z
+  .object({
+    nature: z.enum(NATURES, { error: "Nature inconnue." }),
+    titre,
+    categorie: texteFacultatif,
+    ...champsPlante,
+  })
+  .superRefine(seuilsCoherents);
 
 /** Renommer une fiche (§ 4.2, décision du 25/10/2026). */
 export const titreSaisie = z.object({ titre });

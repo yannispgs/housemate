@@ -15,6 +15,7 @@ import {
   marquesSuggerees,
   nouvelleEcheance,
   nouvelleGarantie,
+  planteSaisie,
   remplacementSaisie,
   remplacementValide,
   SUGGESTIONS_MAX,
@@ -50,6 +51,8 @@ describe("fiche vierge", () => {
         categorie: null,
         potOuTerre: null,
         emplacement: null,
+        seuilDegats: null,
+        seuilMort: null,
       },
     });
   });
@@ -69,6 +72,55 @@ describe("fiche vierge", () => {
     expect(
       lire(ficheSaisie, { nature: "plante", titre: "x", potOuTerre: "En bac" }),
     ).toMatchObject({ ok: false, erreurs: { potOuTerre: "Choix inconnu." } });
+  });
+
+  it("lit les seuils de gel, au dixième, virgule et signe moins compris (§ 12.2)", () => {
+    expect(
+      lire(planteSaisie, {
+        seuilDegats: " −2,46 ",
+        seuilMort: "-10",
+      }),
+    ).toMatchObject({
+      ok: true,
+      valeur: { seuilDegats: -2.5, seuilMort: -10 },
+    });
+    expect(
+      lire(planteSaisie, { seuilDegats: "", seuilMort: "-5" }),
+    ).toMatchObject({
+      ok: true,
+      valeur: { seuilDegats: null, seuilMort: -5 },
+    });
+    expect(lire(planteSaisie, { seuilDegats: "gel" })).toMatchObject({
+      ok: false,
+      erreurs: { seuilDegats: "Une température est attendue." },
+    });
+    expect(lire(planteSaisie, { seuilDegats: "-60" })).toMatchObject({
+      ok: false,
+      erreurs: { seuilDegats: "−50 °C au moins." },
+    });
+    expect(lire(planteSaisie, { seuilMort: "51" })).toMatchObject({
+      ok: false,
+      erreurs: { seuilMort: "50 °C au plus." },
+    });
+  });
+
+  it("refuse un seuil de mort au-dessus de celui des dégâts", () => {
+    const erreurs = {
+      ok: false,
+      erreurs: { seuilMort: "Le seuil de mort est sous celui des dégâts." },
+    };
+
+    expect(
+      lire(planteSaisie, { seuilDegats: "-5", seuilMort: "0" }),
+    ).toMatchObject(erreurs);
+    expect(
+      lire(ficheSaisie, {
+        nature: "plante",
+        titre: "x",
+        seuilDegats: "-5",
+        seuilMort: "0",
+      }),
+    ).toMatchObject(erreurs);
   });
 
   it("renomme : même règle que le nom à la création", () => {

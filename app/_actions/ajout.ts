@@ -105,16 +105,19 @@ export async function ajouterFiche(
     return { etape: "saisie", erreurs: saisie.erreurs };
   }
 
-  const { potOuTerre, emplacement, ...fiche } = saisie.valeur;
+  const { potOuTerre, emplacement, seuilDegats, seuilMort, ...fiche } =
+    saisie.valeur;
   const ficheId = await enMonNom(async tx =>
     creerFiche(tx, {
       ...fiche,
       categorie: await categorie(tx, fiche.categorie),
-      // En pot ou en terre, et l'emplacement : d'une plante seulement (§ 12.4).
+      // La section « Plantation » : d'une plante seulement (§ 12.2, § 12.4).
       attributs:
         fiche.nature === "plante"
           ? attributsPlante({
               pot: potOuTerre,
+              seuilDegats,
+              seuilMort,
               emplacement: emplacementConnu(
                 emplacement,
                 emplacementsProposes(await listerEmplacements(tx)),
