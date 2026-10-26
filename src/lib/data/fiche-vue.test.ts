@@ -4,6 +4,8 @@ import { valeurAffichee } from "@/lib/data/fiche-vue";
 describe("valeurAffichee", () => {
   it.each([
     [{ libelle: "Marque", type: "texte", valeur: "Terraillon" }, "Terraillon"],
+    [{ libelle: "Seuil", type: "temperature", valeur: -2.5 }, "−2,5 °C"],
+    [{ libelle: "Seuil", type: "temperature", valeur: 0 }, "0 °C"],
     [
       { libelle: "Date d'achat", type: "date", valeur: "2026-10-13" },
       "13 octobre 2026",
