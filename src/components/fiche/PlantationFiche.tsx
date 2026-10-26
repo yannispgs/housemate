@@ -14,6 +14,10 @@ import { ChampsPlante } from "../forms/ChampsPlante";
 import { PencilIcon } from "../icons";
 import { Panel, SectionLabel } from "../Screen";
 
+/** Un champ texte du formulaire ; vide s'il manque (ou n'est pas du texte). */
+const texte = (valeur: FormDataEntryValue | null) =>
+  typeof valeur === "string" ? valeur : "";
+
 export function PlantationFiche({
   ficheId,
   situation,
@@ -53,8 +57,8 @@ export function PlantationFiche({
             demarrer(async () => {
               const probleme = await situer(
                 ficheId,
-                String(champs.get("potOuTerre") ?? ""),
-                String(champs.get("emplacement") ?? ""),
+                texte(champs.get("potOuTerre")),
+                texte(champs.get("emplacement")),
               );
 
               if (probleme === null) {
