@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import { mailFor } from "./frost-run";
 import type { PendingMessage } from "./frost-store";
 import {
+  assessPlants,
   blendForecasts,
   celsius,
   frostMail,
-  messageFor,
-  undecidedMail,
+  type NightFacts,
+  nightMessage,
+  type PlantNight,
+  type WatchedPlant,
 } from "./frost-watch";
 
 const tonight = [
@@ -105,15 +108,89 @@ describe("blendForecasts", () => {
   });
 });
 
-describe("messageFor", () => {
-  it("ouvre l'épisode par une alerte, le prolonge par des rappels", () => {
-    expect(messageFor(true, false)).toBe("alerte");
-    expect(messageFor(true, true)).toBe("rappel");
+const plant = (
+  title: string,
+  location: WatchedPlant["location"],
+  damageThreshold: number | null,
+  deathThreshold: number | null = null,
+): WatchedPlant => ({
+  id: title,
+  title,
+  location,
+  damageThreshold,
+  deathThreshold,
+});
+
+const CITRONNIER = plant("Le citronnier", "Véranda", 0, -5);
+const LAURIER = plant("Le laurier rose", "Extérieur", -5, -10);
+const ROSIER = plant("Le rosier", "Extérieur", -20, -25);
+const SANS_SEUIL = plant("Le figuier", "Extérieur", null);
+
+describe("assessPlants", () => {
+  const night = {
+    forecastMinimum: -1,
+    exterior: { estimate: -1, lowerBound: -7.5 },
+    veranda: { estimate: 3, lowerBound: 1.5 },
+  };
+
+  it("juge chaque plante au pire cas de son emplacement", () => {
+    const levels = assessPlants([CITRONNIER, LAURIER, ROSIER], night).map(p => [
+      p.title,
+      p.lowerBound,
+      p.level,
+    ]);
+
+    expect(levels).toEqual([
+      // 1,5 °C : à moins de 2 °C au-dessus de 0.
+      ["Le citronnier", 1.5, "vigilance"],
+      ["Le laurier rose", -7.5, "alerte"],
+      ["Le rosier", -7.5, null],
+    ]);
   });
 
-  it("se tait quand il ne gèle pas, même au lendemain d'une alerte", () => {
-    expect(messageFor(false, false)).toBeNull();
-    expect(messageFor(false, true)).toBeNull();
+  it("garde une plante sans seuil, sans niveau", () => {
+    expect(assessPlants([SANS_SEUIL], night)[0]).toMatchObject({
+      estimate: -1,
+      level: null,
+    });
+  });
+
+  it("dit la véranda indisponible sans relevés, si la nuit peut l'atteindre", () => {
+    const blind = { ...night, veranda: null };
+
+    expect(assessPlants([CITRONNIER], blind)[0]).toMatchObject({
+      estimate: null,
+      lowerBound: null,
+      level: "indisponible",
+    });
+    // −1 annoncé, seuil à −10 : plus de 5 °C au-dessus, rien à craindre.
+    expect(
+      assessPlants([plant("Le palmier", "Véranda", -10)], blind)[0]?.level,
+    ).toBeNull();
+    // Dehors n'a pas besoin des relevés.
+    expect(assessPlants([LAURIER], blind)[0]?.level).toBe("alerte");
+  });
+});
+
+describe("nightMessage", () => {
+  const at = (level: PlantNight["level"]): PlantNight => ({
+    ...LAURIER,
+    estimate: null,
+    lowerBound: null,
+    level,
+  });
+
+  it("ouvre l'épisode par une alerte, le prolonge par des rappels", () => {
+    expect(nightMessage([at("vigilance"), at("alerte")], false)).toBe("alerte");
+    expect(nightMessage([at("alerte"), at("indisponible")], true)).toBe(
+      "rappel",
+    );
+  });
+
+  it("dit l'impossibilité, et se tait pour la seule vigilance", () => {
+    expect(nightMessage([at("indisponible")], true)).toBe("indisponible");
+    expect(nightMessage([at("vigilance"), at(null)], true)).toBeNull();
+    expect(nightMessage([], false)).toBeNull();
   });
 });
 
@@ -124,47 +201,102 @@ describe("celsius", () => {
   });
 });
 
-const facts = {
-  exteriorAt20h: 1.5,
+const VERANDA = {
+  estimate: 2.1,
+  extrapolation: "low",
   verandaAt20h: 4.2,
+  exteriorAt20h: 1.5,
+} as const;
+
+const facts: NightFacts = {
   forecast: { minimum: -3, method: "moyenne de 5 modèles sur 5" },
-  prediction: { estimate: 2.1, margin: 1.1, extrapolation: "low" as const },
-  decision: { alert: true, lowerBound: -4, extrapolation: "low" as const },
+  veranda: VERANDA,
+  missing: [],
 };
 
+const nightOf = (
+  base: WatchedPlant,
+  estimate: number | null,
+  lowerBound: number | null,
+  level: PlantNight["level"],
+): PlantNight => ({ ...base, estimate, lowerBound, level });
+
 describe("frostMail", () => {
-  it("dit quoi faire, et sur quels chiffres", () => {
-    const mail = frostMail("alerte", facts);
+  const plants = [
+    nightOf(CITRONNIER, 2.1, -6, "alerte"),
+    nightOf(LAURIER, -3, -9.5, "alerte"),
+    nightOf(ROSIER, -3, -9.5, null),
+    nightOf(plant("Le romarin", "Extérieur", -10), -3, -9.5, "vigilance"),
+    nightOf(SANS_SEUIL, -3, -9.5, null),
+  ];
+
+  it("groupe par emplacement, et dit quoi faire", () => {
+    const mail = frostMail("alerte", facts, plants);
 
     expect(mail.subject).toBe(
-      "Gel possible dans la véranda cette nuit : chauffer",
+      "Gel possible cette nuit : Le citronnier et Le laurier rose",
     );
-    expect(mail.text).toContain("Chauffer ce soir.");
-    expect(mail.text).toContain("Minimum attendu dans la véranda : 2,1 °C");
-    expect(mail.text).toContain("Pire cas retenu : −4,0 °C");
-    expect(mail.text).toContain("−3,0 °C (moyenne de 5 modèles sur 5)");
-    expect(mail.text).toContain("marge est doublée");
+    expect(mail.text).toBe(
+      [
+        "Il peut geler cette nuit. Protéger ce soir : Le citronnier et Le laurier rose.",
+        "",
+        "Véranda : chauffer",
+        "Minimum attendu : 2,1 °C. Relevés de 20 h : véranda 4,2 °C, extérieur 1,5 °C.",
+        "- Le citronnier : pire cas −6,0 °C, 6,0 °C sous son seuil de dégâts (0,0 °C) ; sous son seuil de mort (−5,0 °C).",
+        "Le modèle de la véranda n'a encore jamais vu de gel : sa marge est doublée ce soir.",
+        "",
+        "Dehors : protéger",
+        "Minimum annoncé : −3,0 °C, et jusqu'à 1,5 °C de moins au ras du sol.",
+        "- Le laurier rose : pire cas −9,5 °C, 4,5 °C sous son seuil de dégâts (−5,0 °C) ; mort à −10,0 °C.",
+        "- Le romarin (à surveiller) : pire cas −9,5 °C, 0,5 °C au-dessus de son seuil de dégâts (−10,0 °C).",
+        "",
+        "Dehors, la nuit descendra à −3,0 °C (moyenne de 5 modèles sur 5).",
+        "Pas suivies, faute de seuil de dégâts sur leur fiche : Le figuier.",
+        "",
+        "Tant que l'épisode dure, un rappel court arrivera chaque soir.",
+      ].join("\n"),
+    );
   });
 
-  it("fait court pour un rappel", () => {
-    const mail = frostMail("rappel", {
-      ...facts,
-      prediction: { ...facts.prediction, extrapolation: "none" },
-      decision: { ...facts.decision, extrapolation: "none" },
-    });
+  it("fait court pour un rappel, et ne montre que les emplacements concernés", () => {
+    const mail = frostMail(
+      "rappel",
+      { ...facts, veranda: { ...VERANDA, extrapolation: "none" } },
+      [nightOf(CITRONNIER, 0.5, 0, "alerte"), nightOf(ROSIER, -3, -9, null)],
+    );
 
-    expect(mail.subject).toBe("Véranda : chauffer encore cette nuit");
-    expect(mail.text.startsWith("L'épisode froid continue.")).toBe(true);
+    expect(mail.subject).toBe("Gel encore cette nuit : Le citronnier");
+    expect(mail.text).toContain(
+      "L'épisode froid continue. Protéger encore ce soir : Le citronnier.",
+    );
+    expect(mail.text).toContain("au niveau de son seuil de dégâts (0,0 °C)");
+    expect(mail.text).not.toContain("Dehors :");
     expect(mail.text).not.toContain("marge est doublée");
+    expect(mail.text).not.toContain("rappel court");
+    expect(mail.text).not.toContain("Pas suivies");
   });
-});
 
-describe("undecidedMail", () => {
-  it("nomme ce qui manque", () => {
-    const mail = undecidedMail(["le relevé de la véranda"], facts.forecast);
+  it("dit ce qu'il n'a pas pu estimer, à côté de ce qu'il a pu", () => {
+    const mail = frostMail(
+      "indisponible",
+      {
+        ...facts,
+        veranda: null,
+        missing: ["le relevé de la véranda", "le relevé extérieur"],
+      },
+      [
+        nightOf(CITRONNIER, null, null, "indisponible"),
+        nightOf(LAURIER, -3, -4, "vigilance"),
+      ],
+    );
 
     expect(mail.subject).toBe("Veille de gel impossible ce soir");
-    expect(mail.text).toContain("Il manque le relevé de la véranda");
+    expect(mail.text).toContain("Véranda : impossible d'estimer");
+    expect(mail.text).toContain(
+      "Il manque le relevé de la véranda et le relevé extérieur : impossible d'estimer le minimum de la véranda.",
+    );
+    expect(mail.text).toContain("- Le citronnier (seuil de dégâts 0,0 °C)");
+    expect(mail.text).toContain("Dehors : à surveiller");
   });
 });
 
@@ -182,41 +314,32 @@ describe("mailFor", () => {
     extrapolation: "none",
   };
 
-  it("rebâtit l'alerte à partir de la ligne du journal", () => {
-    const mail = mailFor(pending);
+  const blind = (over: Partial<PendingMessage>) =>
+    mailFor({ ...pending, message: "indisponible", ...over }, [
+      nightOf(CITRONNIER, null, null, "indisponible"),
+    ]);
 
-    expect(mail.subject).toContain("chauffer");
-    expect(mail.text).toContain("Pire cas retenu : −4,0 °C");
+  it("rebâtit le mail à partir de la ligne du journal et de ses plantes", () => {
+    const mail = mailFor(pending, [nightOf(CITRONNIER, 2.1, -4, "alerte")]);
+
+    expect(mail.subject).toBe("Gel possible cette nuit : Le citronnier");
+    expect(mail.text).toContain(
+      "Minimum attendu : 2,1 °C. Relevés de 20 h : véranda 4,2 °C, extérieur 1,5 °C.",
+    );
+    expect(mail.text).toContain("- Le citronnier : pire cas −4,0 °C");
   });
 
   it("nomme le seul capteur muet", () => {
-    const withoutExterior = mailFor({
-      ...pending,
-      message: "indisponible",
-      exteriorAt20h: null,
-    });
-    const withoutVeranda = mailFor({
-      ...pending,
-      message: "indisponible",
-      verandaAt20h: null,
-    });
-
-    expect(withoutExterior.text).toContain("Il manque le relevé extérieur :");
-    expect(withoutVeranda.text).toContain(
+    expect(blind({ exteriorAt20h: null }).text).toContain(
+      "Il manque le relevé extérieur :",
+    );
+    expect(blind({ verandaAt20h: null }).text).toContain(
       "Il manque le relevé de la véranda :",
     );
   });
 
-  it("se replie sur l'impossibilité si la ligne est incomplète", () => {
-    const mail = mailFor({ ...pending, estimate: null });
-
-    expect(mail.subject).toBe("Veille de gel impossible ce soir");
-  });
-
-  it("dit l'impossibilité quand un relevé manquait", () => {
-    const mail = mailFor({
-      ...pending,
-      message: "indisponible",
+  it("dit l'impossibilité quand les deux relevés manquaient", () => {
+    const mail = blind({
       verandaAt20h: null,
       exteriorAt20h: null,
       estimate: null,

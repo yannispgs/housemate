@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  decideFrostAlert,
+  exteriorLowerBound,
+  frostLevel,
   nightErrors,
   predictVerandaMinimum,
+  verandaLowerBound,
 } from "@/lib/domain/frost";
 
 // Nuits fictives : aucun relevé réel du foyer dans ce dépôt public.
@@ -61,57 +63,49 @@ describe("predictVerandaMinimum", () => {
   });
 });
 
-describe("decideFrostAlert", () => {
-  it("se tait quand même le pire cas reste au-dessus du seuil", () => {
-    const decision = decideFrostAlert({
-      prediction: predictVerandaMinimum(MILD),
-      damageThreshold: 0,
-      ...MARGINS,
-    });
-
+describe("verandaLowerBound", () => {
+  it("retire toutes les marges de l'estimation", () => {
     // 6,7 − 1,1 − 1 − 3
-    expect(decision).toEqual({
-      alert: false,
-      lowerBound: 1.6,
-      extrapolation: "none",
-    });
+    expect(verandaLowerBound(predictVerandaMinimum(MILD), MARGINS)).toBe(1.6);
+    // Extrapolation : marge du modèle doublée.
+    expect(verandaLowerBound(predictVerandaMinimum(FREEZING), MARGINS)).toBe(
+      -6.8,
+    );
   });
 
-  it("alerte sur le pire cas, et dit qu'il extrapole", () => {
-    const decision = decideFrostAlert({
-      prediction: predictVerandaMinimum(FREEZING),
-      damageThreshold: 0,
-      ...MARGINS,
-    });
+  it("n'écrit jamais « −0 »", () => {
+    const bound = verandaLowerBound(
+      { estimate: 5.1, margin: 1.1, extrapolation: "none" },
+      { forecastMargin: 1, radiativeMargin: 3 },
+    );
 
-    expect(decision).toEqual({
-      alert: true,
-      lowerBound: -6.8,
-      extrapolation: "low",
-    });
+    expect(Object.is(bound, -0)).toBe(false);
+    expect(bound).toBe(0);
+  });
+});
+
+describe("exteriorLowerBound", () => {
+  it("retire de la prévision les marges et le froid du sol", () => {
+    expect(
+      exteriorLowerBound(1, {
+        forecastMargin: 2,
+        radiativeMargin: 3,
+        groundMargin: 1.5,
+      }),
+    ).toBe(-5.5);
+  });
+});
+
+describe("frostLevel", () => {
+  it("⚠️ décide sur le pire cas, au seuil de dégâts compris", () => {
+    expect(frostLevel(0, 0)).toBe("alerte");
+    expect(frostLevel(-6, -5)).toBe("alerte");
   });
 
-  it("⚠️ décide sur la borne basse, pas sur l'estimation centrale", () => {
-    // Estimation à 6,7 °C, bien au-dessus de 0 : c'est la marge qui déclenche.
-    const decision = decideFrostAlert({
-      prediction: predictVerandaMinimum(MILD),
-      damageThreshold: 0,
-      forecastMargin: 3,
-      radiativeMargin: 3,
-    });
-
-    expect(decision.alert).toBe(true);
-  });
-
-  it("alerte quand la borne basse touche exactement le seuil", () => {
-    const decision = decideFrostAlert({
-      prediction: { estimate: 5.1, margin: 1.1, extrapolation: "none" },
-      damageThreshold: 0,
-      forecastMargin: 1,
-      radiativeMargin: 3,
-    });
-
-    expect(decision).toMatchObject({ alert: true, lowerBound: 0 });
+  it("met en vigilance jusqu'à 2 °C au-dessus du seuil", () => {
+    expect(frostLevel(0.1, 0)).toBe("vigilance");
+    expect(frostLevel(-3, -5)).toBe("vigilance");
+    expect(frostLevel(2.1, 0)).toBeNull();
   });
 });
 
