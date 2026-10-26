@@ -91,6 +91,7 @@ interface EcheanceSql {
   preavis_jours: number | null;
   tenue: Tenure;
   importance: Importance;
+  fiche_id: string | null;
   fiche_titre: string | null;
   destinataire: string;
   pour_moi: boolean;
@@ -108,7 +109,8 @@ export async function listerEcheances(tx: Tx): Promise<EcheanceRow[]> {
       case when e.fiche_id is null then e.categorie else f.categorie end
         as categorie,
       e.recurrence, e.tolerance_jours,
-      e.preavis_jours, e.tenue, e.importance, f.titre as fiche_titre,
+      e.preavis_jours, e.tenue, e.importance, e.fiche_id::text,
+      f.titre as fiche_titre,
       case
         when e.destinataire_membre is null and e.destinataire_groupe is null
           then 'Foyer'
@@ -154,6 +156,7 @@ export async function listerEcheances(tx: Tx): Promise<EcheanceRow[]> {
     preavisJours: row.preavis_jours,
     tenue: row.tenue,
     importance: row.importance,
+    ficheId: row.fiche_id,
     ficheTitre: row.fiche_titre,
     destinataire: row.destinataire,
     pourMoi: row.pour_moi,
@@ -572,6 +575,7 @@ export async function lirePlanEntretien(
 export interface ConsommableRow extends Consommable {
   readonly id: string;
   readonly intitule: string;
+  readonly ficheId: string;
   readonly ficheTitre: string;
   readonly categorie: string | null;
   /** Sa tenue effective : la sienne, sinon celle de son objet. */
@@ -591,6 +595,7 @@ export async function listerConsommables(tx: Tx): Promise<ConsommableRow[]> {
     {
       id: string;
       intitule: string;
+      fiche_id: string;
       fiche_titre: string;
       categorie: string | null;
       tenue: TenueConsommable;
@@ -602,7 +607,7 @@ export async function listerConsommables(tx: Tx): Promise<ConsommableRow[]> {
       releves: { le: string; valeur: number }[];
     }[]
   >`
-    select c.id::text, c.intitule, f.titre as fiche_titre, f.categorie,
+    select c.id::text, c.intitule, c.fiche_id::text, f.titre as fiche_titre, f.categorie,
       coalesce(c.tenue, f.tenue_entretien) as tenue,
       f.seuil_entretien::float8 as seuil,
       c.duree_compteur, c.duree_nombre, c.duree_unite,
@@ -625,6 +630,7 @@ export async function listerConsommables(tx: Tx): Promise<ConsommableRow[]> {
   return rows.map(c => ({
     id: c.id,
     intitule: c.intitule,
+    ficheId: c.fiche_id,
     ficheTitre: c.fiche_titre,
     categorie: c.categorie,
     tenue: c.tenue,

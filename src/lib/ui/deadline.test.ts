@@ -33,6 +33,7 @@ describe("plantsProgress", () => {
     instruction: "",
     guideUrl: "",
     doneOn,
+    ficheId: null,
   });
 
   it("compte les plantes faites", () => {

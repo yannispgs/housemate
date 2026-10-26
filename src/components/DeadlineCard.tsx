@@ -9,6 +9,7 @@
  * un guide de coupe ajouté) vit dans la carte tant qu'aucune donnée n'est
  * branchée.
  */
+import Link from "next/link";
 import { useState } from "react";
 import {
   type CategoryIcon,
@@ -411,6 +412,15 @@ function PlantLine({
               setEditing(false);
             }}
           />
+          {/* Le nom ouvre déjà la ligne : le lien vers la fiche vient ici. */}
+          {plant.ficheId !== null && (
+            <Link
+              href={`/fiches/${plant.ficheId}`}
+              className="self-start text-[13.5px] text-ink-muted underline hover:text-ink"
+            >
+              Voir la fiche
+            </Link>
+          )}
         </div>
       )}
     </div>
@@ -672,12 +682,14 @@ export function DeadlineCard({
                 Reporter
               </button>
             )}
-            <button
-              type="button"
-              className="inline-flex min-h-11 cursor-pointer items-center bg-transparent px-2 text-[13.5px] leading-none text-ink-muted underline hover:text-ink"
-            >
-              Voir la fiche
-            </button>
+            {deadline.ficheId !== null && (
+              <Link
+                href={`/fiches/${deadline.ficheId}`}
+                className="inline-flex min-h-11 items-center px-2 text-[13.5px] leading-none text-ink-muted underline hover:text-ink"
+              >
+                Voir la fiche
+              </Link>
+            )}
           </div>
         </div>
       )}

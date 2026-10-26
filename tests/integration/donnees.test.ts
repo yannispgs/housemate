@@ -150,6 +150,7 @@ describe("lecture au nom d'un membre", () => {
     ).find(e => e.titre === "Entretien");
 
     expect(vueParMoi).toMatchObject({
+      ficheId: fiche,
       ficheTitre: "La chaudière",
       recurrence: { kind: "once", on: fromISO("2026-10-20") },
       destinataire: "Moi",
@@ -704,6 +705,7 @@ describe("plan d'entretien (§ 5.3)", () => {
       {
         id: expect.any(String),
         intitule: "Courroie",
+        ficheId: active,
         ficheTitre: "La voiture",
         categorie: null,
         tenue: "souple",

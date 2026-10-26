@@ -29,6 +29,7 @@ const echeance = (overrides: Partial<EcheanceRow>): EcheanceRow => ({
   preavisJours: 7,
   tenue: "souple",
   importance: "normal",
+  ficheId: null,
   ficheTitre: null,
   destinataire: "Foyer",
   pourMoi: true,
@@ -519,6 +520,7 @@ describe("consommables à l'accueil et dans À venir (§ 5.3)", () => {
   const conso = (champs: Partial<ConsommableRow>): ConsommableRow => ({
     id: "c",
     intitule: "Vidange",
+    ficheId: "f",
     ficheTitre: "La voiture",
     categorie: "Véhicule",
     tenue: "ferme",
