@@ -6,6 +6,7 @@ import {
   blendForecasts,
   celsius,
   frostMail,
+  marginMail,
   type NightFacts,
   nightMessage,
   type PlantNight,
@@ -351,6 +352,24 @@ describe("mailFor", () => {
 
     expect(mail.text).toContain(
       "Il manque le relevé de la véranda et le relevé extérieur",
+    );
+  });
+});
+
+describe("marginMail", () => {
+  it("dit sur quoi repose la proposition, et où la valider", () => {
+    const mail = marginMail(2, 1.2, { nights: 14, error: 0.6 });
+
+    expect(mail.subject).toBe(
+      "Veille gel : une nouvelle marge de prévision à valider",
+    );
+    expect(mail.text).toBe(
+      [
+        "Sur les 14 dernières nuits froides, la prévision s'est trompée de 0,6 °C en moyenne quadratique.",
+        "La veille propose de passer sa marge de prévision de 2,0 °C à 1,2 °C.",
+        "",
+        "Rien ne change sans validation : Réglages, section « Veille gel ».",
+      ].join("\n"),
     );
   });
 });

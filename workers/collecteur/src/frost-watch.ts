@@ -17,13 +17,8 @@ import {
  * viennent des fiches des plantes (§ 12.2).
  */
 export const FROST_WATCH = {
-  /**
-   * Erreur de la prévision extérieure : inconnue tant que le journal n'a pas
-   * mesuré quelques nuits froides. Le protocole la situe entre 0,4 et 2 °C ;
-   * on part du haut. Un modèle frileux coûte un chauffage inutile, un modèle
-   * téméraire coûte la plante.
-   */
-  forecastMargin: 2,
+  // La marge de prévision n'est pas ici : mesurée puis validée, elle se lit en
+  // base (`meteo.marges_prevision`), `DEFAULT_FORECAST_MARGIN` à défaut.
   veranda: {
     /**
      * Marge radiative, gardée entière au démarrage bien qu'elle soit faible
@@ -457,6 +452,23 @@ export function frostMail(
       ...(kind === "alerte"
         ? ["", "Tant que l'épisode dure, un rappel court arrivera chaque soir."]
         : []),
+    ].join("\n"),
+  };
+}
+
+/** Le mail court qui annonce une marge à valider (décision du 26/10/2026). */
+export function marginMail(
+  current: number,
+  proposed: number,
+  stats: { readonly nights: number; readonly error: number },
+): Mail {
+  return {
+    subject: "Veille gel : une nouvelle marge de prévision à valider",
+    text: [
+      `Sur les ${stats.nights} dernières nuits froides, la prévision s'est trompée de ${celsius(stats.error)} en moyenne quadratique.`,
+      `La veille propose de passer sa marge de prévision de ${celsius(current)} à ${celsius(proposed)}.`,
+      "",
+      "Rien ne change sans validation : Réglages, section « Veille gel ».",
     ].join("\n"),
   };
 }

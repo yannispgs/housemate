@@ -5,6 +5,7 @@ import { z } from "zod";
 import { emplacementConnu, emplacementsProposes } from "@/lib/data/saisie";
 import { enMonNom } from "@/lib/data/server";
 import {
+  appliquerMargePrevision,
   declarerNuitChauffee,
   deplacerPlante,
   listerEmplacements,
@@ -73,6 +74,26 @@ export async function chauffer(chauffee: boolean): Promise<string | null> {
   }
 
   revalidatePath("/");
+
+  return null;
+}
+
+/**
+ * « Appliquer » la marge de prévision proposée (§ 12.8, décision du
+ * 26/10/2026) : rien ne change sans ce geste. Rend `null` si c'est fait.
+ */
+export async function appliquerMarge(
+  proposition: string,
+): Promise<string | null> {
+  const fait =
+    /^\d{1,18}$/.test(proposition) &&
+    (await enMonNom(tx => appliquerMargePrevision(tx, proposition)));
+
+  if (!fait) {
+    return "Cette proposition n'est plus en attente.";
+  }
+
+  revalidatePath("/reglages");
 
   return null;
 }

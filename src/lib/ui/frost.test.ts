@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { destinationProposee, type FrostRow, frostCard } from "@/lib/ui/frost";
+import {
+  destinationProposee,
+  type FrostRow,
+  frostCard,
+  marginView,
+} from "@/lib/ui/frost";
 
 const ligne = (over: Partial<FrostRow>): FrostRow => ({
   nuit: "2026-12-14",
@@ -104,5 +109,41 @@ describe("destinationProposee", () => {
       "Salon",
     );
     expect(destinationProposee("Véranda", ["Extérieur", "Véranda"])).toBe("");
+  });
+});
+
+describe("marginView", () => {
+  it("part du réglage de départ, et montre la proposition", () => {
+    expect(
+      marginView({
+        actuelle: null,
+        appliqueeLe: null,
+        proposition: { id: "3", valeur: 1.2, nuits: 14, erreur: 0.6 },
+      }),
+    ).toEqual({
+      actuelle: deg("2 °C"),
+      origine: "Réglage de départ, en attendant 10 nuits froides mesurées.",
+      proposition: {
+        id: "3",
+        valeur: deg("1,2 °C"),
+        base: deg(
+          "D'après 14 nuits froides : la prévision s'est trompée de 0,6 °C en moyenne quadratique. La marge en couvre deux fois l'erreur.",
+        ),
+      },
+    });
+  });
+
+  it("dit quand la marge en vigueur a été appliquée", () => {
+    expect(
+      marginView({
+        actuelle: 1.3,
+        appliqueeLe: new Date("2026-11-20T08:15:00Z"),
+        proposition: null,
+      }),
+    ).toEqual({
+      actuelle: deg("1,3 °C"),
+      origine: "Appliquée le 20 novembre 2026.",
+      proposition: null,
+    });
   });
 });

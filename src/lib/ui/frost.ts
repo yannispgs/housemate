@@ -4,6 +4,7 @@
  * Extérieur puis Véranda. Logique pure.
  */
 import { celsius } from "@/lib/data/fiche-vue";
+import { DEFAULT_FORECAST_MARGIN, MARGIN_PROPOSAL } from "@/lib/domain/frost";
 import type { FrostRange } from "@/lib/ui/deadline";
 
 export type FrostLocation = "Extérieur" | "Véranda";
@@ -145,4 +146,55 @@ export function destinationProposee(
   }
 
   return emplacements.find(e => e !== depuis && e !== "Extérieur") ?? "";
+}
+
+/** La marge de prévision telle que la base la rend (`app.marge_prevision`). */
+export interface MarginRow {
+  readonly actuelle: number | null;
+  readonly appliqueeLe: Date | null;
+  readonly proposition: {
+    readonly id: string;
+    readonly valeur: number;
+    readonly nuits: number;
+    readonly erreur: number;
+  } | null;
+}
+
+export interface MarginView {
+  readonly actuelle: string;
+  /** D'où elle vient : appliquée, ou le réglage de départ. */
+  readonly origine: string;
+  readonly proposition: {
+    readonly id: string;
+    readonly valeur: string;
+    readonly base: string;
+  } | null;
+}
+
+const JOUR = new Intl.DateTimeFormat("fr-FR", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "Europe/Paris",
+});
+
+/** Le panneau « Veille gel » des réglages (SPEC § 12.8, décisions du 26/10/2026). */
+export function marginView(row: MarginRow): MarginView {
+  const p = row.proposition;
+
+  return {
+    actuelle: celsius(row.actuelle ?? DEFAULT_FORECAST_MARGIN),
+    origine:
+      row.appliqueeLe === null
+        ? `Réglage de départ, en attendant ${MARGIN_PROPOSAL.minNights} nuits froides mesurées.`
+        : `Appliquée le ${JOUR.format(row.appliqueeLe)}.`,
+    proposition:
+      p === null
+        ? null
+        : {
+            id: p.id,
+            valeur: celsius(p.valeur),
+            base: `D'après ${p.nuits} nuits froides : la prévision s'est trompée de ${celsius(p.erreur)} en moyenne quadratique. La marge en couvre deux fois l'erreur.`,
+          },
+  };
 }
