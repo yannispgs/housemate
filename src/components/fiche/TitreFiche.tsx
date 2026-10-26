@@ -6,7 +6,7 @@
  * annule. ⚠️ Provisoire : pas encore dessiné dans Claude Design.
  */
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { renommer } from "../../../app/_actions/fiche";
 import { CHAMP } from "../forms/Champ";
 import { CheckIcon, PencilIcon } from "../icons";
@@ -23,6 +23,14 @@ export function TitreFiche({
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, demarrer] = useTransition();
   const router = useRouter();
+  const champ = useRef<HTMLInputElement>(null);
+
+  // Le champ s'ouvre sur le crayon : on y place le curseur.
+  useEffect(() => {
+    if (edition) {
+      champ.current?.focus();
+    }
+  }, [edition]);
 
   const fermer = () => {
     setEdition(false);
@@ -65,8 +73,7 @@ export function TitreFiche({
     <span className="flex flex-col gap-1.5">
       <span className="flex items-center gap-1">
         <input
-          // biome-ignore lint/a11y/noAutofocus: le champ s'ouvre à la demande, sur le crayon.
-          autoFocus
+          ref={champ}
           aria-label="Nom de la fiche"
           value={brouillon}
           maxLength={120}
