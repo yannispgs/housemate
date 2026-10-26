@@ -10,10 +10,9 @@
  */
 import type postgres from "postgres";
 import {
-  avecAttribut,
+  avecPlantation,
   LIBELLE_EMPLACEMENT,
-  LIBELLE_POT,
-  type SituationPlante,
+  type Plantation,
 } from "@/lib/data/plantes";
 import { parseRecurrence } from "@/lib/data/recurrence-json";
 import type {
@@ -331,14 +330,14 @@ export async function renommerFiche(
 }
 
 /**
- * En pot ou en terre, et l'emplacement d'une plante visible (§ 12.4) : les
- * deux attributs, remplacés à leur place ou retirés s'ils sont vides. Rend
+ * En pot ou en terre, l'emplacement et les seuils de gel d'une plante visible
+ * (§ 12.2, § 12.4) : remplacés à leur place ou retirés s'ils sont vides. Rend
  * `false` si la fiche n'est pas une plante visible.
  */
 export async function modifierPlante(
   tx: Tx,
   id: string,
-  situation: SituationPlante,
+  plante: Plantation,
 ): Promise<boolean> {
   const [fiche] = await tx<{ attributs: Attribut[] }[]>`
     select attributs from app.fiches
@@ -349,11 +348,7 @@ export async function modifierPlante(
     return false;
   }
 
-  const attributs = avecAttribut(
-    avecAttribut(fiche.attributs, LIBELLE_POT, situation.pot),
-    LIBELLE_EMPLACEMENT,
-    situation.emplacement,
-  );
+  const attributs = avecPlantation(fiche.attributs, plante);
   await tx`
     update app.fiches
     set attributs = ${tx.json(attributs as unknown as postgres.JSONValue)}

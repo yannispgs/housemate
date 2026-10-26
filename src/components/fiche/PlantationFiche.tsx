@@ -1,13 +1,15 @@
 "use client";
 
 /**
- * En pot ou en terre, et l'emplacement d'une plante, sur sa fiche (SPEC
- * § 12.4) : lus d'un coup d'œil, modifiables avec le même crayon que le titre.
+ * En pot ou en terre, l'emplacement et les seuils de gel d'une plante, sur sa
+ * fiche (SPEC § 12.2, § 12.4) : lus d'un coup d'œil, modifiables avec le même
+ * crayon que le titre. Sans seuil de dégâts, la veille gel ne la suit pas.
  * ⚠️ Provisoire : pas encore dessiné dans Claude Design.
  */
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import type { SituationPlante } from "@/lib/data/plantes";
+import { celsius } from "@/lib/data/fiche-vue";
+import type { Plantation } from "@/lib/data/plantes";
 import { situer } from "../../../app/_actions/fiche";
 import { BOUTON, BOUTON_SECONDAIRE } from "../forms/Champ";
 import { ChampsPlante } from "../forms/ChampsPlante";
@@ -18,13 +20,16 @@ import { Panel, SectionLabel } from "../Screen";
 const texte = (valeur: FormDataEntryValue | null) =>
   typeof valeur === "string" ? valeur : "";
 
+const enCelsius = (valeur: number | null) =>
+  valeur === null ? null : celsius(valeur);
+
 export function PlantationFiche({
   ficheId,
-  situation,
+  plantation,
   emplacements,
 }: Readonly<{
   ficheId: string;
-  situation: SituationPlante;
+  plantation: Plantation;
   emplacements: readonly string[];
 }>) {
   const [edition, setEdition] = useState(false);
@@ -55,11 +60,12 @@ export function PlantationFiche({
             event.preventDefault();
             const champs = new FormData(event.currentTarget);
             demarrer(async () => {
-              const probleme = await situer(
-                ficheId,
-                texte(champs.get("potOuTerre")),
-                texte(champs.get("emplacement")),
-              );
+              const probleme = await situer(ficheId, {
+                potOuTerre: texte(champs.get("potOuTerre")),
+                emplacement: texte(champs.get("emplacement")),
+                seuilDegats: texte(champs.get("seuilDegats")),
+                seuilMort: texte(champs.get("seuilMort")),
+              });
 
               if (probleme === null) {
                 setEdition(false);
@@ -71,7 +77,7 @@ export function PlantationFiche({
             });
           }}
         >
-          <ChampsPlante emplacements={emplacements} situation={situation} />
+          <ChampsPlante emplacements={emplacements} plantation={plantation} />
           {erreur && (
             <span className="text-[13px] text-ink-critical">{erreur}</span>
           )}
@@ -95,8 +101,10 @@ export function PlantationFiche({
         <dl className="m-0 flex flex-col gap-2.5">
           {(
             [
-              ["Pot ou terre", situation.pot],
-              ["Emplacement", situation.emplacement],
+              ["Pot ou terre", plantation.pot],
+              ["Emplacement", plantation.emplacement],
+              ["Seuil de dégâts", enCelsius(plantation.seuilDegats)],
+              ["Seuil de mort", enCelsius(plantation.seuilMort)],
             ] as const
           ).map(([libelle, valeur]) => (
             <div key={libelle} className="flex flex-col gap-0.5">

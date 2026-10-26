@@ -108,6 +108,13 @@ async function echeanceDe(
   });
 }
 
+const VIERGE = {
+  pot: null,
+  emplacement: null,
+  seuilDegats: null,
+  seuilMort: null,
+} as const;
+
 describe("lecture au nom d'un membre", () => {
   it("liste les fiches du foyer, et seulement elles", async () => {
     await commeMembre(
@@ -398,16 +405,18 @@ describe("ajouts", () => {
         await modifierPlante(tx, plante, {
           pot: "En pot",
           emplacement: "Salon",
+          seuilDegats: -2.5,
+          seuilMort: null,
         }),
       ).toBe(true);
       // Ce n'est pas une plante : rien ne change.
       expect(
-        await modifierPlante(tx, garage, { pot: "En pot", emplacement: null }),
+        await modifierPlante(tx, garage, { ...VIERGE, pot: "En pot" }),
       ).toBe(false);
     });
     expect(
       await commeMembre(sql(), voisin.compte, tx =>
-        modifierPlante(tx, plante, { pot: null, emplacement: null }),
+        modifierPlante(tx, plante, VIERGE),
       ),
     ).toBe(false);
 
@@ -421,6 +430,7 @@ describe("ajouts", () => {
       { libelle: "Espèce", type: "texte", valeur: "Citrus limon" },
       { libelle: "Emplacement", type: "texte", valeur: "Salon" },
       { libelle: "Pot ou terre", type: "texte", valeur: "En pot" },
+      { libelle: "Seuil de dégâts", type: "temperature", valeur: -2.5 },
     ]);
     expect(emplacements).toEqual(["Salon"]);
     expect(deLeurCote).not.toContain("Salon");

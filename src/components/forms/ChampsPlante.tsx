@@ -1,42 +1,81 @@
 "use client";
 
 /**
- * En pot ou en terre, et l'emplacement d'une plante (SPEC § 12.4) : à la
- * création comme sur la fiche. L'emplacement se choisit dans la liste du
- * foyer, ou se saisit (« Autre pièce… ») : la liste s'enrichit à l'usage.
+ * En pot ou en terre, l'emplacement et les seuils de gel d'une plante (SPEC
+ * § 12.2, § 12.4) : à la création comme sur la fiche. L'emplacement se
+ * choisit dans la liste du foyer, ou se saisit (« Autre pièce… ») : la liste
+ * s'enrichit à l'usage. Les seuils se saisissent à la main, sans suggestion
+ * d'après l'espèce (décision du 25/10/2026).
  * ⚠️ Provisoire : pas encore dessiné dans Claude Design.
  */
 import { useState } from "react";
-import { POT_OU_TERRE, type SituationPlante } from "@/lib/data/plantes";
+import { type Plantation, POT_OU_TERRE } from "@/lib/data/plantes";
 import { CHAMP, Champ, LISTE } from "./Champ";
 
 const AUTRE = "__autre__";
 
+const VIERGE: Plantation = {
+  pot: null,
+  emplacement: null,
+  seuilDegats: null,
+  seuilMort: null,
+};
+
+/** Un seuil de gel en °C ; le clavier numérique du téléphone a le signe moins. */
+function ChampSeuil({
+  nom,
+  libelle,
+  aide,
+  valeur,
+  erreur,
+}: Readonly<{
+  nom: string;
+  libelle: string;
+  aide: string;
+  valeur: number | null;
+  erreur?: string;
+}>) {
+  return (
+    <Champ libelle={libelle} aide={aide} erreur={erreur}>
+      <input
+        name={nom}
+        type="number"
+        step="0.1"
+        min={-50}
+        max={50}
+        defaultValue={valeur ?? ""}
+        placeholder="°C"
+        className={CHAMP}
+      />
+    </Champ>
+  );
+}
+
 export function ChampsPlante({
   emplacements,
-  situation = { pot: null, emplacement: null },
+  plantation = VIERGE,
   erreurs = {},
 }: Readonly<{
   emplacements: readonly string[];
-  situation?: SituationPlante;
+  plantation?: Plantation;
   erreurs?: Readonly<Record<string, string>>;
 }>) {
-  const [choix, setChoix] = useState(situation.emplacement ?? "");
+  const [choix, setChoix] = useState(plantation.emplacement ?? "");
   const autre = choix === AUTRE;
   // Un emplacement d'une autre plante supprimée n'est plus proposé : il
   // reste choisi tant qu'on ne le change pas.
   const proposes =
-    situation.emplacement === null ||
-    emplacements.includes(situation.emplacement)
+    plantation.emplacement === null ||
+    emplacements.includes(plantation.emplacement)
       ? emplacements
-      : [...emplacements, situation.emplacement];
+      : [...emplacements, plantation.emplacement];
 
   return (
     <>
       <Champ libelle="Pot ou terre" erreur={erreurs.potOuTerre}>
         <select
           name="potOuTerre"
-          defaultValue={situation.pot ?? ""}
+          defaultValue={plantation.pot ?? ""}
           className={LISTE}
         >
           <option value="">Non renseigné</option>
@@ -74,6 +113,20 @@ export function ChampsPlante({
           />
         )}
       </Champ>
+      <ChampSeuil
+        nom="seuilDegats"
+        libelle="Seuil de dégâts (°C)"
+        aide="Sous cette température, la plante souffre : la veille gel prévient la veille au soir. Vide, elle ne la suit pas."
+        valeur={plantation.seuilDegats}
+        erreur={erreurs.seuilDegats}
+      />
+      <ChampSeuil
+        nom="seuilMort"
+        libelle="Seuil de mort (°C)"
+        aide="Sous cette température, la plante risque d'y rester."
+        valeur={plantation.seuilMort}
+        erreur={erreurs.seuilMort}
+      />
     </>
   );
 }

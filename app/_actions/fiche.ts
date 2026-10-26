@@ -55,17 +55,25 @@ export async function renommer(
   return null;
 }
 
+/** Les champs de la section « Plantation », tels que saisis. */
+export interface ChampsPlantation {
+  readonly potOuTerre: string;
+  readonly emplacement: string;
+  readonly seuilDegats: string;
+  readonly seuilMort: string;
+}
+
 /**
- * En pot ou en terre, et l'emplacement d'une plante (§ 12.4). Un emplacement
- * qui ne diffère d'un connu que par la casse est ramené à celui-ci.
+ * En pot ou en terre, l'emplacement et les seuils de gel d'une plante
+ * (§ 12.2, § 12.4). Un emplacement qui ne diffère d'un connu que par la casse
+ * est ramené à celui-ci.
  */
 export async function situer(
   ficheId: string,
-  potOuTerre: string,
-  emplacement: string,
+  champs: ChampsPlantation,
 ): Promise<string | null> {
   const id = z.uuid().safeParse(ficheId);
-  const saisie = lire(planteSaisie, { potOuTerre, emplacement });
+  const saisie = lire(planteSaisie, { ...champs });
 
   if (!id.success) {
     return INTROUVABLE;
@@ -78,6 +86,8 @@ export async function situer(
   const fait = await enMonNom(async tx =>
     modifierPlante(tx, id.data, {
       pot: saisie.valeur.potOuTerre,
+      seuilDegats: saisie.valeur.seuilDegats,
+      seuilMort: saisie.valeur.seuilMort,
       emplacement: emplacementConnu(
         saisie.valeur.emplacement,
         emplacementsProposes(await listerEmplacements(tx)),

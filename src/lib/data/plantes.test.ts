@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   attributsPlante,
   avecAttribut,
+  avecPlantation,
   correspond,
   criteresPlantes,
   labelsPlante,
+  plantation,
   situationPlante,
 } from "@/lib/data/plantes";
 import type { Attribut } from "@/lib/data/saisie";
@@ -70,12 +72,55 @@ describe("avecAttribut", () => {
     expect(avecAttribut(ATTRIBUTS, "Pot ou terre", null)).toEqual(ATTRIBUTS);
   });
 
+  const VIERGE = {
+    pot: null,
+    emplacement: null,
+    seuilDegats: null,
+    seuilMort: null,
+  };
+
   it("donne les attributs d'une plante nouvelle", () => {
-    expect(attributsPlante({ pot: "En pot", emplacement: "Véranda" })).toEqual([
+    expect(
+      attributsPlante({
+        pot: "En pot",
+        emplacement: "Véranda",
+        seuilDegats: 0,
+        seuilMort: -5,
+      }),
+    ).toEqual([
       texte("Pot ou terre", "En pot"),
       texte("Emplacement", "Véranda"),
+      { libelle: "Seuil de dégâts", type: "temperature", valeur: 0 },
+      { libelle: "Seuil de mort", type: "temperature", valeur: -5 },
     ]);
-    expect(attributsPlante({ pot: null, emplacement: null })).toEqual([]);
+    expect(attributsPlante(VIERGE)).toEqual([]);
+  });
+
+  it("modifie la plantation sans toucher au reste", () => {
+    const avant = [
+      texte("Espèce", "Citrus"),
+      { libelle: "Seuil de dégâts", type: "temperature", valeur: 0 },
+    ] as const;
+
+    expect(avecPlantation(avant, { ...VIERGE, seuilMort: -5 })).toEqual([
+      texte("Espèce", "Citrus"),
+      { libelle: "Seuil de mort", type: "temperature", valeur: -5 },
+    ]);
+  });
+
+  it("relit la plantation ; un seuil qui n'est pas une température est ignoré", () => {
+    expect(
+      plantation([
+        texte("Emplacement", "Extérieur"),
+        { libelle: "Seuil de dégâts", type: "temperature", valeur: -5 },
+        texte("Seuil de mort", "-10"),
+      ]),
+    ).toEqual({
+      pot: null,
+      emplacement: "Extérieur",
+      seuilDegats: -5,
+      seuilMort: null,
+    });
   });
 });
 
