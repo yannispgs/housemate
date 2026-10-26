@@ -65,6 +65,9 @@ beforeEach(async () => {
   await owner`delete from app.liste_blanche`;
   await owner`delete from app.groupe_membres`;
   await owner`delete from app.groupes`;
+  await owner`delete from app.resumes_envoyes`;
+  await owner`delete from app.reglages_resumes`;
+  await owner`delete from app.adresses`;
   await owner`delete from app.membres`;
   await owner`delete from app.foyers`;
   nous = await createFoyer("Nous", "nous");
@@ -141,6 +144,9 @@ describe("le rôle anonymous", () => {
     "consommables",
     "remplacements",
     "releves",
+    "adresses",
+    "reglages_resumes",
+    "resumes_envoyes",
   ])("n'a aucun accès à app.%s", async table => {
     await expect(
       asAnonymous(tx => tx`select 1 from ${tx("app")}.${tx(table)}`),

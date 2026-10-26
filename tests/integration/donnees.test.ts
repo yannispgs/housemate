@@ -176,6 +176,45 @@ describe("lecture au nom d'un membre", () => {
       "Mon cœur",
     );
   });
+
+  it("sait ce qui me concerne : à moi, à mon groupe, ou au foyer", async () => {
+    const [groupe] = await owner`
+      insert into app.groupes (foyer_id) values (${moi.foyer}) returning id`;
+    await owner`
+      insert into app.groupe_membres (groupe_id, membre_id)
+      values (${groupe?.id as string}, ${conjoint.id})`;
+    await echeanceDe(moi, { titre: "Pour tous" });
+    await echeanceDe(moi, { titre: "Pour moi", destinataire: moi.id });
+    await commeMembre(
+      sql(),
+      moi.compte,
+      tx =>
+        tx`insert into app.echeances
+             (titre, recurrence, tenue, destinataire_groupe)
+           values ('Pour le groupe',
+             ${tx.json({ kind: "once", on: "2026-10-20" })}, 'souple',
+             ${groupe?.id as string})`,
+    );
+
+    const pourMoi = async (m: Membre) =>
+      Object.fromEntries(
+        (await commeMembre(sql(), m.compte, listerEcheances)).map(e => [
+          e.titre,
+          e.pourMoi,
+        ]),
+      );
+
+    expect(await pourMoi(moi)).toEqual({
+      "Pour tous": true,
+      "Pour moi": true,
+      "Pour le groupe": false,
+    });
+    expect(await pourMoi(conjoint)).toEqual({
+      "Pour tous": true,
+      "Pour moi": false,
+      "Pour le groupe": true,
+    });
+  });
 });
 
 describe("complétions", () => {
