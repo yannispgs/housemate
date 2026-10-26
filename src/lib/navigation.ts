@@ -29,8 +29,8 @@ export const DEADLINE_TABS: readonly Destination[] = [
 export const SETTINGS: Destination = { href: "/reglages", label: "Réglages" };
 
 /**
- * Le domaine actif. Réglages n'appartient à aucun : le toggle y reste sur
- * Échéances, comme dans la maquette.
+ * Le domaine actif. Réglages n'appartient à aucun : le toggle y est caché,
+ * mais ses onglets restent ceux des échéances.
  */
 export function domainOf(pathname: string): Domain {
   return isActive("/inventaire", pathname) ? "fiches" : "echeances";
