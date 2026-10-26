@@ -9,7 +9,7 @@
 
 -- Les plantes que la veille peut suivre : celles de l'extérieur et de la
 -- véranda, non archivées. « Autre pièce » n'est pas suivie (décision du
--- 25/10/2026). Le rôle de la veille ne voit que ces cinq colonnes, rien
+-- 25/10/2026). Le rôle de la veille ne voit que ces six colonnes, rien
 -- d'autre des fiches.
 --
 -- ⚠️ Un seul foyer : la vue les lit toutes, sans filtre de foyer. Un second
@@ -17,15 +17,16 @@
 --
 -- Les libellés et les deux emplacements sont ceux de `src/lib/data/plantes.ts`
 -- (§ 12.4) ; le test d'intégration de la veille passe par eux. Une fiche
--- privée (§ 7) n'est visible que de son auteur : elle n'est pas suivie, son
--- nom n'a pas à partir dans un mail.
+-- privée (§ 7) n'est visible que de son autrice : elle est suivie, mais son
+-- alerte ne va qu'à elle (décision du 26/10/2026) — `reservee_a` le dit.
 create view meteo.plantes_suivies as
 select
   f.id,
   f.titre,
   e.valeur as emplacement,
   s.degats as seuil_degats,
-  s.mort as seuil_mort
+  s.mort as seuil_mort,
+  case when f.prive then f.cree_par end as reservee_a
 from app.fiches f
 cross join lateral (
   select a->>'valeur' as valeur
@@ -44,7 +45,6 @@ cross join lateral (
 ) s
 where f.nature = 'plante'
   and f.archivee_le is null
-  and not f.prive
   and e.valeur in ('Extérieur', 'Véranda');
 
 -- Le seuil n'est plus celui de la nuit, mais de chaque plante : vide pour les
@@ -63,6 +63,8 @@ create table meteo.nuits_gel_plantes (
   -- Vide : la plante n'est pas suivie faute de seuil, et le mail le dit.
   seuil_degats numeric(4, 1),
   seuil_mort numeric(4, 1),
+  -- Le membre à qui l'alerte est réservée (fiche privée) ; vide : à tous.
+  reservee_a uuid,
   -- Le minimum attendu à son emplacement, et le pire cas retenu ; leur écart
   -- est la somme des marges appliquées ce soir-là. Vides si on n'a pas pu
   -- estimer (capteur de la véranda muet).

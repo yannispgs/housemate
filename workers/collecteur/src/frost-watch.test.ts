@@ -119,6 +119,7 @@ const plant = (
   location,
   damageThreshold,
   deathThreshold,
+  reservedTo: null,
 });
 
 const CITRONNIER = plant("Le citronnier", "Véranda", 0, -5);

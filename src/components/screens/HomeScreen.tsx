@@ -2,13 +2,16 @@
 
 /**
  * Accueil : ce qui demande attention maintenant, et rien d'autre (handoff de
- * design, § A). Une carte par échéance ; la faire la retire de l'écran.
+ * design, § A). Une carte par échéance ; la faire la retire de l'écran. Les
+ * soirs de gel, la carte « Gel cette nuit » passe devant (SPEC § 12.8).
  */
 import Link from "next/link";
 import { useState } from "react";
 import { homeTitle } from "@/lib/ui/dates";
 import { type DeadlineView, doneTodayText } from "@/lib/ui/deadline";
+import type { FrostCardView } from "@/lib/ui/frost";
 import { DeadlineCard } from "../DeadlineCard";
+import { type FrostActions, FrostCard } from "../FrostCard";
 import { CheckIcon } from "../icons";
 import { Screen } from "../Screen";
 import { type AsideContent, DeadlinesAside } from "./Aside";
@@ -53,6 +56,13 @@ export interface HomeActions {
     le: string,
     compteur: string,
   ) => Promise<string | null>;
+  readonly veille?: FrostActions;
+}
+
+/** La nuit de gel en cours, et où l'on peut déplacer une plante. */
+export interface HomeFrost {
+  readonly card: FrostCardView;
+  readonly emplacements: readonly string[];
 }
 
 export function HomeScreen({
@@ -61,6 +71,7 @@ export function HomeScreen({
   nextUp,
   aside,
   actions,
+  frost = null,
 }: Readonly<{
   deadlines: readonly DeadlineView[];
   /** Date figée des données de démonstration, sinon `null`. */
@@ -68,6 +79,7 @@ export function HomeScreen({
   nextUp: string | null;
   aside: AsideContent | null;
   actions?: HomeActions;
+  frost?: HomeFrost | null;
 }>) {
   const today = useToday(fixedToday);
   const [done, setDone] = useState<readonly string[]>([]);
@@ -133,10 +145,20 @@ export function HomeScreen({
       // Pas de sous-titre tant qu'il reste des tâches : le décompte ferait
       // doublon avec la liste.
       subtitle={
-        remaining.length === 0 ? "Plus rien pour aujourd'hui." : undefined
+        remaining.length === 0 && frost === null
+          ? "Plus rien pour aujourd'hui."
+          : undefined
       }
       aside={aside && <DeadlinesAside content={aside} />}
     >
+      {frost && (
+        <FrostCard
+          card={frost.card}
+          emplacements={frost.emplacements}
+          actions={actions?.veille}
+        />
+      )}
+
       {remaining.length > 0 && (
         <div className="flex flex-col gap-2.5">
           {remaining.map(deadline => (
@@ -160,7 +182,9 @@ export function HomeScreen({
         </p>
       )}
 
-      {remaining.length === 0 && <EmptyState nextUp={nextUp} />}
+      {remaining.length === 0 && frost === null && (
+        <EmptyState nextUp={nextUp} />
+      )}
 
       {done.length > 0 && remaining.length > 0 && (
         <div className="flex items-center gap-[9px] px-1 pt-1 md:p-0">

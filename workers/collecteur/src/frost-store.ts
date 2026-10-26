@@ -155,7 +155,8 @@ export async function watchedPlants(sql: Sql): Promise<WatchedPlant[]> {
     select
       id::text as id, titre as title, emplacement as location,
       seuil_degats::float8 as "damageThreshold",
-      seuil_mort::float8 as "deathThreshold"
+      seuil_mort::float8 as "deathThreshold",
+      reservee_a::text as "reservedTo"
     from meteo.plantes_suivies
     order by emplacement desc, titre, id
   `);
@@ -170,7 +171,7 @@ export async function recordPlants(
   await sql`
     insert into meteo.nuits_gel_plantes (
       nuit, fiche_id, titre, emplacement, seuil_degats, seuil_mort,
-      estimation, borne_basse, niveau
+      reservee_a, estimation, borne_basse, niveau
     )
     select ${night}::date, p.*
     from unnest(
@@ -179,6 +180,7 @@ export async function recordPlants(
       ${plants.map(plant => plant.location)}::text[],
       ${plants.map(plant => plant.damageThreshold)}::numeric[],
       ${plants.map(plant => plant.deathThreshold)}::numeric[],
+      ${plants.map(plant => plant.reservedTo)}::uuid[],
       ${plants.map(plant => plant.estimate)}::numeric[],
       ${plants.map(plant => plant.lowerBound)}::numeric[],
       ${plants.map(plant => plant.level)}::text[]
@@ -197,6 +199,7 @@ export async function plantsOfNight(
       fiche_id::text as id, titre as title, emplacement as location,
       seuil_degats::float8 as "damageThreshold",
       seuil_mort::float8 as "deathThreshold",
+      reservee_a::text as "reservedTo",
       estimation::float8 as estimate,
       borne_basse::float8 as "lowerBound",
       niveau as level

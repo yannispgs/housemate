@@ -2,6 +2,13 @@ import postgres from "postgres";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { attributsPlante } from "@/lib/data/plantes";
 import {
+  commeMembre,
+  declarerNuitChauffee,
+  deplacerPlante,
+  lireVeilleGel,
+  type Tx,
+} from "@/lib/data/store";
+import {
   evaluateEvening,
   reviewNight,
   sendPending,
@@ -23,6 +30,7 @@ afterAll(async () => {
 
 let foyer: string;
 let auteur: string;
+let compte: string;
 
 beforeEach(async () => {
   await owner`delete from meteo.nuits_gel_plantes`;
@@ -39,9 +47,10 @@ beforeEach(async () => {
   const [nous] = await owner`
     insert into app.foyers (nom) values ('Nous') returning id`;
   foyer = nous?.id as string;
+  compte = `veille-${crypto.randomUUID()}`;
   const [moi] = await owner`
     insert into app.membres (foyer_id, auth_user_id)
-    values (${foyer}, ${`veille-${crypto.randomUUID()}`}) returning id`;
+    values (${foyer}, ${compte}) returning id`;
   auteur = moi?.id as string;
 });
 
@@ -247,9 +256,8 @@ describe("evaluateEvening", () => {
     expect(await journal()).toMatchObject({ alerte: false, message: null });
   });
 
-  it("ne suit ni « Autre pièce », ni une fiche privée, ni une archivée", async () => {
+  it("ne suit ni « Autre pièce », ni une fiche archivée", async () => {
     await plante("Le ficus", "Salon", 10);
-    await plante("Le bonsaï", "Extérieur", 10, { prive: true });
     const archivee = await plante("Le basilic", "Extérieur", 10);
     await owner`update app.fiches set archivee_le = now() where id = ${archivee}`;
     await coldEvening();
@@ -257,6 +265,19 @@ describe("evaluateEvening", () => {
     await asWatch(sql => evaluateEvening(sql, NIGHT, EVENING));
 
     expect(await plantes()).toEqual([]);
+  });
+
+  it("suit une fiche privée, réservée à son autrice", async () => {
+    await plante("Le bonsaï", "Extérieur", 10, { prive: true });
+    await coldEvening();
+
+    await asWatch(sql => evaluateEvening(sql, NIGHT, EVENING));
+
+    const [ligne] = await owner`
+      select reservee_a::text as reservee_a, niveau
+      from meteo.nuits_gel_plantes where nuit = ${NIGHT}`;
+
+    expect(ligne).toEqual({ reservee_a: auteur, niveau: "alerte" });
   });
 
   it("alerte dehors même quand la véranda est muette", async () => {
@@ -395,6 +416,23 @@ describe("sendPending", () => {
     expect((await journal())?.envoyee_le).toBeNull();
   });
 
+  it("ne cite pas une plante privée dans le mail commun", async () => {
+    await plante("Le bonsaï", "Extérieur", 10, { prive: true });
+    await coldEvening();
+    await asWatch(sql => evaluateEvening(sql, NIGHT, EVENING));
+    let calls = 0;
+
+    await asWatch(sql =>
+      sendPending(sql, NIGHT, async () => {
+        calls += 1;
+      }),
+    );
+
+    // L'alerte est au journal, mais rien ne part à l'adresse commune.
+    expect((await journal())?.message).toBe("alerte");
+    expect(calls).toBe(0);
+  });
+
   it("n'envoie rien une nuit sans message", async () => {
     await owner`
       insert into meteo.nuits_gel (nuit, seuil_degats, alerte)
@@ -448,7 +486,7 @@ describe("reviewNight", () => {
 });
 
 describe("les droits de la veille", () => {
-  it("ne voit des fiches que les plantes suivies, et cinq colonnes", async () => {
+  it("ne voit des fiches que les plantes suivies, et six colonnes", async () => {
     await plante("Le citronnier", "Véranda", 0);
 
     const vues = await asWatch(
@@ -461,7 +499,7 @@ describe("les droits de la veille", () => {
         emplacement: "Véranda",
       }),
     ]);
-    expect(Object.keys((vues as object[])[0] ?? {})).toHaveLength(5);
+    expect(Object.keys((vues as object[])[0] ?? {})).toHaveLength(6);
     await expect(
       owner.begin(async tx => {
         await tx`set local role meteo_veille`;
@@ -492,5 +530,124 @@ describe("les droits de la veille", () => {
         await tx`update meteo.nuits_gel set alerte = false`;
       }),
     ).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("la carte de l'accueil", () => {
+  // La nuit du 14 : 21 h, puis 8 h le lendemain, à Paris (UTC+1).
+  const SOIR = new Date("2026-12-14T20:00:00Z");
+  const MATIN = new Date("2026-12-15T07:00:00Z");
+  const JOUR = new Date("2026-12-15T13:00:00Z");
+
+  const commeMoi = <T>(run: (tx: Tx) => Promise<T>) =>
+    commeMembre(owner, compte, run);
+
+  async function nuitDeGel() {
+    await plante("Le citronnier", "Véranda", 0, { seuilMort: -5 });
+    await plante("Le laurier rose", "Extérieur", -5);
+    await plante("Le rosier", "Extérieur", -20);
+    await coldEvening();
+    await asWatch(sql => evaluateEvening(sql, NIGHT, EVENING));
+  }
+
+  it("montre les plantes de la nuit en cours, du soir au matin", async () => {
+    await nuitDeGel();
+
+    const soir = await commeMoi(tx => lireVeilleGel(tx, SOIR));
+
+    // Le rosier n'a pas de niveau : il n'apparaît pas.
+    expect(soir).toEqual([
+      {
+        nuit: NIGHT,
+        chauffee: false,
+        ficheId: expect.any(String),
+        titre: "Le citronnier",
+        emplacementDuSoir: "Véranda",
+        emplacement: "Véranda",
+        niveau: "alerte",
+        estimation: 1.1,
+        borneBasse: -6.1,
+        seuilDegats: 0,
+        seuilMort: -5,
+      },
+      expect.objectContaining({ titre: "Le laurier rose", niveau: "alerte" }),
+    ]);
+    expect(await commeMoi(tx => lireVeilleGel(tx, MATIN))).toHaveLength(2);
+    expect(await commeMoi(tx => lireVeilleGel(tx, JOUR))).toEqual([]);
+  });
+
+  it("ne montre une plante privée qu'à son autrice", async () => {
+    const autre = `veille-${crypto.randomUUID()}`;
+    const [membre] = await owner`
+      insert into app.membres (foyer_id, auth_user_id)
+      values (${foyer}, ${autre}) returning id`;
+    const attributs = attributsPlante({
+      pot: "En pot",
+      emplacement: "Extérieur",
+      seuilDegats: 5,
+      seuilMort: null,
+    });
+    await owner`
+      insert into app.fiches (foyer_id, nature, titre, attributs, prive, cree_par)
+      values (${foyer}, 'plante', 'Le basilic',
+        ${owner.json(attributs as unknown as postgres.JSONValue)}, true,
+        ${membre?.id as string})`;
+    await coldEvening();
+    await asWatch(sql => evaluateEvening(sql, NIGHT, EVENING));
+
+    const titres = async (qui: string) =>
+      (await commeMembre(owner, qui, tx => lireVeilleGel(tx, SOIR))).map(
+        p => p.titre,
+      );
+
+    expect(await titres(autre)).toEqual(["Le basilic"]);
+    expect(await titres(compte)).toEqual([]);
+  });
+
+  it("déplace une plante : son emplacement change, la carte le voit", async () => {
+    await nuitDeGel();
+    const [laurier] = (await commeMoi(tx => lireVeilleGel(tx, SOIR))).filter(
+      p => p.titre === "Le laurier rose",
+    );
+
+    expect(
+      await commeMoi(tx =>
+        deplacerPlante(tx, laurier?.ficheId as string, "Véranda"),
+      ),
+    ).toBe(true);
+    expect(
+      (await commeMoi(tx => lireVeilleGel(tx, SOIR))).find(
+        p => p.titre === "Le laurier rose",
+      ),
+    ).toMatchObject({ emplacementDuSoir: "Extérieur", emplacement: "Véranda" });
+    // Une fiche inconnue (ou qui n'est pas une plante) : rien ne change.
+    expect(
+      await commeMoi(tx => deplacerPlante(tx, crypto.randomUUID(), "Salon")),
+    ).toBe(false);
+  });
+
+  it("déclare la nuit chauffée, et se ravise, seulement la nuit", async () => {
+    await nuitDeGel();
+    const chauffee = async () =>
+      (
+        await owner`select chauffee from meteo.nuits_gel where nuit = ${NIGHT}`
+      )[0]?.chauffee;
+
+    expect(await commeMoi(tx => declarerNuitChauffee(tx, SOIR, true))).toBe(
+      true,
+    );
+    expect(await chauffee()).toBe(true);
+    expect((await commeMoi(tx => lireVeilleGel(tx, SOIR)))[0]?.chauffee).toBe(
+      true,
+    );
+    expect(await commeMoi(tx => declarerNuitChauffee(tx, MATIN, false))).toBe(
+      true,
+    );
+    expect(await chauffee()).toBe(false);
+    // En journée, il n'y a pas de nuit en cours.
+    expect(await commeMoi(tx => declarerNuitChauffee(tx, JOUR, true))).toBe(
+      false,
+    );
+    expect(await chauffee()).toBe(false);
   });
 });

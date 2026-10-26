@@ -12,6 +12,7 @@
  * c'est ce qui rend les captures comparables.
  */
 import type { DeadlineView } from "@/lib/ui/deadline";
+import { type FrostCardView, frostCard } from "@/lib/ui/frost";
 import type { RecordView } from "@/lib/ui/inventory";
 import type { UpcomingItem, UpcomingRow } from "@/lib/ui/upcoming";
 
@@ -43,33 +44,6 @@ const history = (...entries: [string, string][]) =>
   entries.map(([date, text]) => ({ date, text }));
 
 export const DEMO_DEADLINES: readonly DeadlineView[] = [
-  deadline({
-    id: "gel",
-    title: "Gel en véranda cette nuit",
-    state: "due",
-    when: "ce soir",
-    recipient: "Foyer",
-    verb: "Chauffage lancé",
-    note: "notifiée",
-    importance: "critique",
-    tenure: "ferme",
-    tone: "critical",
-    icon: "frost",
-    frostRange: {
-      lowerBound: -3.5,
-      estimate: -2,
-      margin: 1.5,
-      damageThreshold: 0,
-      deathThreshold: -5,
-      explanation:
-        "La fourchette entière passe sous le seuil de dégâts, sans atteindre celui de mort. Deux à trois heures de chauffage suffisent à passer la nuit.",
-    },
-    history: history(
-      ["9 mars", "épisode précédent · chauffage 4 h, minimum relevé −3 °C"],
-      ["21 févr.", "chauffage 2 h · aucun dégât constaté"],
-      ["seuils", "citronnier : dégâts 0 °C, mort −5 °C"],
-    ),
-  }),
   deadline({
     id: "ct",
     title: "Contrôle technique — la voiture",
@@ -178,6 +152,48 @@ export const DEMO_DEADLINES: readonly DeadlineView[] = [
 ];
 
 /** Ce que l'accueil vide annonce, faute de mieux. */
+/**
+ * Un soir de gel (SPEC § 12.8) : le laurier rose en alerte dehors, le
+ * citronnier à surveiller dans la véranda.
+ */
+export const DEMO_FROST: {
+  readonly card: FrostCardView;
+  readonly emplacements: readonly string[];
+} | null = (() => {
+  const nuit = {
+    nuit: DEMO_TODAY,
+    chauffee: false,
+  } as const;
+  const card = frostCard([
+    {
+      ...nuit,
+      ficheId: "laurier",
+      titre: "Le laurier rose",
+      emplacementDuSoir: "Extérieur",
+      emplacement: "Extérieur",
+      niveau: "alerte",
+      estimation: -1,
+      borneBasse: -7.5,
+      seuilDegats: -5,
+      seuilMort: -10,
+    },
+    {
+      ...nuit,
+      ficheId: "citronnier",
+      titre: "Le citronnier",
+      emplacementDuSoir: "Véranda",
+      emplacement: "Véranda",
+      niveau: "vigilance",
+      estimation: 7.3,
+      borneBasse: 1.2,
+      seuilDegats: 0,
+      seuilMort: -5,
+    },
+  ]);
+
+  return card && { card, emplacements: ["Extérieur", "Véranda", "Salon"] };
+})();
+
 export const DEMO_NEXT_UP =
   "Le prochain rendez-vous est le 1er octobre : rentrer le citronnier sous abri. Il apparaîtra ici quand son préavis s'ouvrira.";
 
@@ -204,12 +220,6 @@ const upcoming = (
  * devenu important. Les vraies données passeront par le domaine.
  */
 export const DEMO_UPCOMING: readonly UpcomingItem[] = [
-  upcoming(
-    "2026-09-13",
-    "Gel en véranda cette nuit",
-    "Citronnier des 4 saisons",
-    { importance: "critique", tenure: "ferme" },
-  ),
   upcoming(
     "2026-09-13",
     "Fleurs fanées du rosier grimpant",

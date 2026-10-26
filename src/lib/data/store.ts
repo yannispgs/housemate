@@ -10,6 +10,7 @@
  */
 import type postgres from "postgres";
 import {
+  avecAttribut,
   avecPlantation,
   LIBELLE_EMPLACEMENT,
   type Plantation,
@@ -30,6 +31,7 @@ import {
 import { fromISO, type PlainDate, toISO } from "@/lib/domain/plain-date";
 import type { Duration } from "@/lib/domain/recurrence";
 import type { Importance, Tenure } from "@/lib/ui/deadline";
+import type { FrostRow } from "@/lib/ui/frost";
 
 export type Tx = postgres.TransactionSql;
 
@@ -355,6 +357,66 @@ export async function modifierPlante(
     where id = ${id}`;
 
   return true;
+}
+
+/**
+ * « Déplacer » depuis la carte de gel (§ 12.8, décision du 26/10/2026) : le
+ * seul emplacement change, jusqu'au prochain changement. Rend `false` si la
+ * fiche n'est pas une plante visible.
+ */
+export async function deplacerPlante(
+  tx: Tx,
+  id: string,
+  emplacement: string,
+): Promise<boolean> {
+  const [fiche] = await tx<{ attributs: Attribut[] }[]>`
+    select attributs from app.fiches
+    where id = ${id} and nature = 'plante' and archivee_le is null
+    for update`;
+
+  if (fiche === undefined) {
+    return false;
+  }
+
+  const attributs = avecAttribut(
+    fiche.attributs,
+    LIBELLE_EMPLACEMENT,
+    emplacement,
+  );
+  await tx`
+    update app.fiches
+    set attributs = ${tx.json(attributs as unknown as postgres.JSONValue)}
+    where id = ${id}`;
+
+  return true;
+}
+
+/** La nuit en cours (de 20 h au bilan du matin), plantes visibles seulement. */
+export async function lireVeilleGel(
+  tx: Tx,
+  instant: Date,
+): Promise<FrostRow[]> {
+  return tx<FrostRow[]>`
+    select
+      to_char(nuit, 'YYYY-MM-DD') as nuit, chauffee, fiche_id::text as "ficheId",
+      titre, emplacement_du_soir as "emplacementDuSoir", emplacement, niveau,
+      estimation::float8 as estimation, borne_basse::float8 as "borneBasse",
+      seuil_degats::float8 as "seuilDegats", seuil_mort::float8 as "seuilMort"
+    from app.veille_gel_en_cours(${instant})
+    order by titre, fiche_id`;
+}
+
+/** « Chauffer » la véranda cette nuit, ou se raviser. */
+export async function declarerNuitChauffee(
+  tx: Tx,
+  instant: Date,
+  chauffee: boolean,
+): Promise<boolean> {
+  const [row] = await tx<{ fait: boolean }[]>`
+    select app.declarer_nuit_chauffee(${instant}, ${chauffee}) as fait`;
+
+  /* c8 ignore next -- repli inatteignable : un select rend toujours sa ligne. */
+  return row?.fait ?? false;
 }
 
 /** Une fiche visible de la personne connectée, ou `null`. */
