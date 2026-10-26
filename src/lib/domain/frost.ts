@@ -1,5 +1,6 @@
 /**
- * L'alerte de gel en véranda (SPEC § 12.2 et § 12.8), en calcul pur.
+ * L'alerte de gel (SPEC § 12.2 et § 12.8), en calcul pur : dans la véranda,
+ * et dehors (décisions du 25/10/2026).
  *
  * La chaîne : la prévision donne le minimum EXTÉRIEUR de la nuit ; le relevé
  * de 20 h donne l'avance de la véranda sur l'extérieur ; le modèle calibré en
@@ -94,53 +95,70 @@ export function predictVerandaMinimum({
   };
 }
 
-export interface FrostDecisionInputs {
-  readonly prediction: VerandaPrediction;
-  /** Seuil de dégâts de la plante abritée la plus fragile (SPEC § 12.2). */
-  readonly damageThreshold: number;
+export interface WatchMargins {
   /**
    * Erreur de la prévision extérieure, mesurée par le journal du soir
    * (protocole § 5 bis). Tant qu'elle n'est pas mesurée, c'est à l'appelant
    * de la fixer : aucune valeur par défaut ne ferait semblant de la connaître.
    */
   readonly forecastMargin: number;
-  /**
-   * Marge radiative : une feuille descend sous l'air par nuit claire. Bien plus
-   * faible sous verre, mais gardée entière au démarrage (SPEC § 12.2).
-   */
+  /** Marge radiative : une feuille descend sous l'air par nuit claire. */
   readonly radiativeMargin: number;
 }
 
-export interface FrostDecision {
-  readonly alert: boolean;
-  /** Le pire cas retenu pour décider. */
-  readonly lowerBound: number;
-  readonly extrapolation: Extrapolation;
+/**
+ * Le pire cas dans la véranda : l'estimation du modèle, moins toutes les
+ * marges. Elles s'additionnent : c'est l'hypothèse prudente tant qu'on ne sait
+ * pas si les erreurs de prévision et de modèle sont indépendantes.
+ */
+export function verandaLowerBound(
+  prediction: VerandaPrediction,
+  { forecastMargin, radiativeMargin }: WatchMargins,
+): number {
+  return round1(
+    prediction.estimate - prediction.margin - forecastMargin - radiativeMargin,
+  );
+}
+
+export interface ExteriorMargins extends WatchMargins {
+  /**
+   * Marge du sol (décision du 25/10/2026) : la prévision vaut à 2 m, une
+   * plante dehors vit plus bas, là où l'air froid s'accumule.
+   */
+  readonly groundMargin: number;
+}
+
+/** Le pire cas dehors : la prévision elle-même, moins les marges. */
+export function exteriorLowerBound(
+  forecastMinimum: number,
+  { forecastMargin, radiativeMargin, groundMargin }: ExteriorMargins,
+): number {
+  return round1(
+    forecastMinimum - forecastMargin - radiativeMargin - groundMargin,
+  );
 }
 
 /**
- * Faut-il chauffer la véranda cette nuit ?
- *
- * Les marges s'additionnent : c'est l'hypothèse prudente tant qu'on ne sait
- * pas si les erreurs de prévision et de modèle sont indépendantes. Le seuil
- * est le seuil de DÉGÂTS, jamais celui de mort — alerter au seuil de mort,
- * c'est alerter trop tard.
+ * La vigilance (décision du 25/10/2026) : un pire cas à moins de 2 °C au-dessus
+ * du seuil de dégâts. La plante est citée, sans déclencher de mail à elle seule.
  */
-export function decideFrostAlert({
-  prediction,
-  damageThreshold,
-  forecastMargin,
-  radiativeMargin,
-}: FrostDecisionInputs): FrostDecision {
-  const lowerBound = round1(
-    prediction.estimate - prediction.margin - forecastMargin - radiativeMargin,
-  );
+export const VIGILANCE_GAP = 2;
 
-  return {
-    alert: lowerBound <= damageThreshold,
-    lowerBound,
-    extrapolation: prediction.extrapolation,
-  };
+export type FrostLevel = "alerte" | "vigilance";
+
+/**
+ * Le niveau d'une plante cette nuit. Le seuil est celui de DÉGÂTS, jamais
+ * celui de mort — alerter au seuil de mort, c'est alerter trop tard.
+ */
+export function frostLevel(
+  lowerBound: number,
+  damageThreshold: number,
+): FrostLevel | null {
+  if (lowerBound <= damageThreshold) {
+    return "alerte";
+  }
+
+  return lowerBound <= damageThreshold + VIGILANCE_GAP ? "vigilance" : null;
 }
 
 export interface MorningOutcome {

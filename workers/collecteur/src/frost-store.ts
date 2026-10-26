@@ -7,7 +7,13 @@
  * Les bornes de la nuit se calculent EN BASE, à l'heure de Paris : « de 20 h à
  * 9 h » garde son sens les nuits de changement d'heure.
  */
-import type { ModelMinimum, ModelScore, WeightedModel } from "./frost-watch";
+import type {
+  ModelMinimum,
+  ModelScore,
+  PlantNight,
+  WatchedPlant,
+  WeightedModel,
+} from "./frost-watch";
 import type { Sql } from "./store";
 
 async function rows<T>(query: Promise<unknown>): Promise<T[]> {
@@ -110,7 +116,6 @@ export interface EveningEntry {
   readonly modelMargin: number | null;
   readonly forecastMargin: number | null;
   readonly radiativeMargin: number | null;
-  readonly damageThreshold: number;
   readonly lowerBound: number | null;
   readonly extrapolation: string | null;
   readonly alert: boolean;
@@ -119,26 +124,86 @@ export interface EveningEntry {
 
 /**
  * La ligne du soir. Écrite une fois : un second déclenchement de 20 h la
- * trouve déjà là et n'y touche pas.
+ * trouve déjà là, n'y touche pas, et le dit (`false`).
  */
 export async function recordEvening(
   sql: Sql,
   entry: EveningEntry,
-): Promise<void> {
-  await sql`
+): Promise<boolean> {
+  const inserted = await rows<{ nuit: string }>(sql`
     insert into meteo.nuits_gel (
       nuit, exterieur_20h, veranda_20h, prevision_min, prevision_methode,
       estimation, marge_modele, marge_prevision, marge_radiative,
-      seuil_degats, borne_basse, extrapolation, alerte, message
+      borne_basse, extrapolation, alerte, message
     ) values (
       ${entry.night}::date, ${entry.exteriorAt20h}, ${entry.verandaAt20h},
       ${entry.forecastMinimum}, ${entry.forecastMethod}, ${entry.estimate},
       ${entry.modelMargin}, ${entry.forecastMargin}, ${entry.radiativeMargin},
-      ${entry.damageThreshold}, ${entry.lowerBound}, ${entry.extrapolation},
-      ${entry.alert}, ${entry.message}
+      ${entry.lowerBound}, ${entry.extrapolation}, ${entry.alert},
+      ${entry.message}
     )
     on conflict (nuit) do nothing
+    returning nuit
+  `);
+
+  return inserted.length > 0;
+}
+
+/** Les plantes de l'extérieur et de la véranda, telles que leurs fiches les décrivent. */
+export async function watchedPlants(sql: Sql): Promise<WatchedPlant[]> {
+  return rows<WatchedPlant>(sql`
+    select
+      id::text as id, titre as title, emplacement as location,
+      seuil_degats::float8 as "damageThreshold",
+      seuil_mort::float8 as "deathThreshold"
+    from meteo.plantes_suivies
+    order by emplacement desc, titre, id
+  `);
+}
+
+/** Chaque plante ce soir : sa photo, son pire cas, son niveau. */
+export async function recordPlants(
+  sql: Sql,
+  night: string,
+  plants: readonly PlantNight[],
+): Promise<void> {
+  await sql`
+    insert into meteo.nuits_gel_plantes (
+      nuit, fiche_id, titre, emplacement, seuil_degats, seuil_mort,
+      estimation, borne_basse, niveau
+    )
+    select ${night}::date, p.*
+    from unnest(
+      ${plants.map(plant => plant.id)}::uuid[],
+      ${plants.map(plant => plant.title)}::text[],
+      ${plants.map(plant => plant.location)}::text[],
+      ${plants.map(plant => plant.damageThreshold)}::numeric[],
+      ${plants.map(plant => plant.deathThreshold)}::numeric[],
+      ${plants.map(plant => plant.estimate)}::numeric[],
+      ${plants.map(plant => plant.lowerBound)}::numeric[],
+      ${plants.map(plant => plant.level)}::text[]
+    ) as p
+    on conflict do nothing
   `;
+}
+
+/** Les plantes de la nuit, telles qu'inscrites au journal à 20 h. */
+export async function plantsOfNight(
+  sql: Sql,
+  night: string,
+): Promise<PlantNight[]> {
+  return rows<PlantNight>(sql`
+    select
+      fiche_id::text as id, titre as title, emplacement as location,
+      seuil_degats::float8 as "damageThreshold",
+      seuil_mort::float8 as "deathThreshold",
+      estimation::float8 as estimate,
+      borne_basse::float8 as "lowerBound",
+      niveau as level
+    from meteo.nuits_gel_plantes
+    where nuit = ${night}::date
+    order by emplacement desc, titre, fiche_id
+  `);
 }
 
 export interface PendingMessage {

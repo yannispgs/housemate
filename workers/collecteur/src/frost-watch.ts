@@ -1,41 +1,47 @@
 /**
- * Veille de gel en véranda (SPEC § 12.8) : ce qui se décide autour du calcul
- * pur de `src/lib/domain/frost.ts` — quelle prévision retenir, quel message
- * envoyer, et avec quels mots. Aucune entrée-sortie ici.
+ * Veille de gel par plante et par emplacement (SPEC § 12.8, décisions du
+ * 25/10/2026) : ce qui se décide autour du calcul pur de
+ * `src/lib/domain/frost.ts` — quelle prévision retenir, quel niveau pour
+ * chaque plante, quel message envoyer, et avec quels mots. Aucune
+ * entrée-sortie ici.
  */
-import type {
-  FrostDecision,
-  VerandaPrediction,
+import {
+  type Extrapolation,
+  type FrostLevel,
+  frostLevel,
 } from "../../../src/lib/domain/frost";
 
 /**
  * Les réglages du démarrage. Chacun est une décision, pas une mesure — la
- * mesure viendra du journal du soir (`meteo.nuits_gel`).
+ * mesure viendra du journal du soir (`meteo.nuits_gel`). Les seuils, eux,
+ * viennent des fiches des plantes (§ 12.2).
  */
-export const VERANDA_WATCH = {
-  /**
-   * Seuil de dégâts du citronnier, la plante abritée la plus fragile (SPEC
-   * § 12.2). Il viendra des fiches quand elles existeront ; d'ici là, c'est
-   * le seul sujet hiverné en véranda.
-   */
-  damageThreshold: 0,
+export const FROST_WATCH = {
   /**
    * Erreur de la prévision extérieure : inconnue tant que le journal n'a pas
    * mesuré quelques nuits froides. Le protocole la situe entre 0,4 et 2 °C ;
    * on part du haut. Un modèle frileux coûte un chauffage inutile, un modèle
-   * téméraire coûte l'agrume.
+   * téméraire coûte la plante.
    */
   forecastMargin: 2,
+  veranda: {
+    /**
+     * Marge radiative, gardée entière au démarrage bien qu'elle soit faible
+     * sous verre (SPEC § 12.2) : c'est un des premiers réglages à resserrer.
+     */
+    radiativeMargin: 3,
+  },
+  exterior: {
+    radiativeMargin: 3,
+    /** Pour toutes les plantes dehors, en pot comme en terre. */
+    groundMargin: 1.5,
+  },
   /**
-   * Marge radiative, gardée entière au démarrage bien qu'elle soit faible sous
-   * verre (SPEC § 12.2) : c'est un des premiers réglages à resserrer.
+   * Sans relevé du soir, la véranda ne s'estime pas. On le dit quand même si
+   * la nuit annoncée passe à moins de 5 °C au-dessus du seuil d'une de ses
+   * plantes : un silence ne vaut pas « pas de gel ».
    */
-  radiativeMargin: 3,
-  /**
-   * Sans relevé du soir, on ne peut pas décider. On le dit quand même si la
-   * nuit peut être froide : un silence ne vaut pas « pas de gel ».
-   */
-  undecidedBelow: 5,
+  undecidedWithin: 5,
 } as const;
 
 export interface ModelMinimum {
@@ -176,20 +182,87 @@ export function blendForecasts(
 
 export type FrostMessage = "alerte" | "rappel" | "indisponible";
 
+export type Location = "Extérieur" | "Véranda";
+
+/** Une plante suivie, telle que sa fiche la décrit ce soir. */
+export interface WatchedPlant {
+  readonly id: string;
+  readonly title: string;
+  readonly location: Location;
+  /** Vide : pas suivie, faute de seuil. Le mail le dit. */
+  readonly damageThreshold: number | null;
+  readonly deathThreshold: number | null;
+}
+
+export type PlantLevel = FrostLevel | "indisponible";
+
+/** Ce que la nuit réserve à une plante. */
+export interface PlantNight extends WatchedPlant {
+  /** Minimum attendu à son emplacement ; vide s'il ne s'estime pas. */
+  readonly estimate: number | null;
+  readonly lowerBound: number | null;
+  readonly level: PlantLevel | null;
+}
+
+/** Le minimum attendu à un emplacement, et le pire cas retenu. */
+export interface LocationEstimate {
+  readonly estimate: number;
+  readonly lowerBound: number;
+}
+
+export interface NightEstimates {
+  readonly forecastMinimum: number;
+  readonly exterior: LocationEstimate;
+  /** Vide quand un relevé de 20 h manque. */
+  readonly veranda: LocationEstimate | null;
+}
+
+/** Une passe par plante, avec l'estimation de son emplacement. */
+export function assessPlants(
+  plants: readonly WatchedPlant[],
+  night: NightEstimates,
+): PlantNight[] {
+  return plants.map(plant => {
+    const here = plant.location === "Véranda" ? night.veranda : night.exterior;
+    const threshold = plant.damageThreshold;
+    const assessed = {
+      ...plant,
+      estimate: here?.estimate ?? null,
+      lowerBound: here?.lowerBound ?? null,
+    };
+
+    if (threshold === null) {
+      return { ...assessed, level: null };
+    }
+
+    if (here === null) {
+      const possible =
+        night.forecastMinimum <= threshold + FROST_WATCH.undecidedWithin;
+
+      return { ...assessed, level: possible ? "indisponible" : null };
+    }
+
+    return { ...assessed, level: frostLevel(here.lowerBound, threshold) };
+  });
+}
+
 /**
- * Une alerte pleine ouvre l'épisode, puis un rappel léger chaque soir tant
- * qu'il dure (SPEC § 12.8 b) : la décision de chauffer se reprend tous les
- * soirs, mais cinq alertes pleines d'affilée finissent ignorées.
+ * Le message de la nuit : une alerte pleine ouvre l'épisode, puis un rappel
+ * léger chaque soir tant qu'il dure (SPEC § 12.8 b) — la décision de protéger
+ * se reprend tous les soirs, mais cinq alertes pleines d'affilée finissent
+ * ignorées. La vigilance seule ne fait pas partir de mail.
  */
-export function messageFor(
-  alert: boolean,
+export function nightMessage(
+  plants: readonly PlantNight[],
   previousNightAlerted: boolean,
 ): FrostMessage | null {
-  if (!alert) {
-    return null;
+  if (plants.some(plant => plant.level === "alerte")) {
+    return previousNightAlerted ? "rappel" : "alerte";
   }
 
-  return previousNightAlerted ? "rappel" : "alerte";
+  return plants.some(plant => plant.level === "indisponible")
+    ? "indisponible"
+    : null;
 }
 
 const CELSIUS = new Intl.NumberFormat("fr-FR", {
@@ -208,12 +281,18 @@ export interface ForecastSummary {
   readonly method: string;
 }
 
-export interface EveningFacts {
-  readonly exteriorAt20h: number;
-  readonly verandaAt20h: number;
+/** Ce que le journal sait de la nuit, en dehors des plantes. */
+export interface NightFacts {
   readonly forecast: ForecastSummary;
-  readonly prediction: VerandaPrediction;
-  readonly decision: FrostDecision;
+  /** La prédiction de la véranda et ses relevés ; vide s'il en manque un. */
+  readonly veranda: {
+    readonly estimate: number;
+    readonly extrapolation: Extrapolation;
+    readonly verandaAt20h: number;
+    readonly exteriorAt20h: number;
+  } | null;
+  /** Les relevés de 20 h qui manquent, en clair. */
+  readonly missing: readonly string[];
 }
 
 export interface Mail {
@@ -221,63 +300,161 @@ export interface Mail {
   readonly text: string;
 }
 
-function extrapolationNote(decision: FrostDecision): string[] {
-  if (decision.extrapolation !== "low") {
+function list(titles: readonly string[]): string {
+  if (titles.length <= 1) {
+    return titles.join("");
+  }
+
+  return `${titles.slice(0, -1).join(", ")} et ${titles.at(-1)}`;
+}
+
+/** « 1,2 °C sous son seuil de dégâts (0,0 °C) », ou au-dessus. */
+function gap(lowerBound: number, threshold: number): string {
+  const seuil = `son seuil de dégâts (${celsius(threshold)})`;
+
+  if (lowerBound === threshold) {
+    return `au niveau de ${seuil}`;
+  }
+
+  const by = celsius(Math.abs(lowerBound - threshold));
+
+  return lowerBound < threshold
+    ? `${by} sous ${seuil}`
+    : `${by} au-dessus de ${seuil}`;
+}
+
+function death(plant: PlantNight, lowerBound: number): string {
+  if (plant.deathThreshold === null) {
+    return "";
+  }
+
+  return lowerBound <= plant.deathThreshold
+    ? ` ; sous son seuil de mort (${celsius(plant.deathThreshold)})`
+    : ` ; mort à ${celsius(plant.deathThreshold)}`;
+}
+
+function plantLine(plant: PlantNight): string {
+  const { lowerBound, damageThreshold } = plant;
+
+  /* c8 ignore next 3 -- une plante sans seuil n'a pas de niveau, donc pas de ligne. */
+  if (damageThreshold === null) {
+    return `- ${plant.title}`;
+  }
+
+  if (lowerBound === null) {
+    return `- ${plant.title} (seuil de dégâts ${celsius(damageThreshold)})`;
+  }
+
+  const watch = plant.level === "vigilance" ? " (à surveiller)" : "";
+
+  return `- ${plant.title}${watch} : pire cas ${celsius(lowerBound)}, ${gap(lowerBound, damageThreshold)}${death(plant, lowerBound)}.`;
+}
+
+const PLACES = {
+  Véranda: { name: "Véranda", act: "chauffer" },
+  Extérieur: { name: "Dehors", act: "protéger" },
+} as const;
+
+function locationSection(
+  location: Location,
+  plants: readonly PlantNight[],
+  facts: NightFacts,
+): string[] {
+  const here = plants.filter(
+    plant => plant.location === location && plant.level !== null,
+  );
+
+  if (here.length === 0) {
     return [];
   }
 
-  return [
-    "",
-    "Le modèle de la véranda n'a encore jamais vu de gel : sa marge est doublée ce soir.",
-  ];
-}
+  const place = PLACES[location];
+  const undecided = here.some(plant => plant.level === "indisponible");
+  let heading = `${place.name} : à surveiller`;
 
-/** Le texte d'une alerte ou d'un rappel. */
-export function frostMail(
-  kind: "alerte" | "rappel",
-  facts: EveningFacts,
-): Mail {
-  const { prediction, decision, forecast } = facts;
-  const figures = [
-    `Minimum attendu dans la véranda : ${celsius(prediction.estimate)}`,
-    `Pire cas retenu : ${celsius(decision.lowerBound)}, pour un seuil de dégâts du citronnier à ${celsius(VERANDA_WATCH.damageThreshold)}.`,
-    "",
-    `Dehors, la nuit descendra à ${celsius(forecast.minimum)} (${forecast.method}).`,
-    `Relevés de 20 h : véranda ${celsius(facts.verandaAt20h)}, extérieur ${celsius(facts.exteriorAt20h)}.`,
-    ...extrapolationNote(decision),
-  ];
-
-  if (kind === "rappel") {
-    return {
-      subject: "Véranda : chauffer encore cette nuit",
-      text: ["L'épisode froid continue.", "", ...figures].join("\n"),
-    };
+  if (undecided) {
+    heading = `${place.name} : impossible d'estimer`;
+  } else if (here.some(plant => plant.level === "alerte")) {
+    heading = `${place.name} : ${place.act}`;
   }
 
-  return {
-    subject: "Gel possible dans la véranda cette nuit : chauffer",
-    text: [
-      "Il peut geler cette nuit dans la véranda. Chauffer ce soir.",
-      "",
-      ...figures,
-      "",
-      "Tant que l'épisode dure, un rappel court arrivera chaque soir.",
-    ].join("\n"),
-  };
+  const lines = [heading];
+
+  if (undecided) {
+    lines.push(
+      `Il manque ${list(facts.missing)} : impossible d'estimer le minimum de la véranda. La vérifier avant la nuit.`,
+    );
+  } else if (location === "Véranda" && facts.veranda !== null) {
+    lines.push(
+      `Minimum attendu : ${celsius(facts.veranda.estimate)}. Relevés de 20 h : véranda ${celsius(facts.veranda.verandaAt20h)}, extérieur ${celsius(facts.veranda.exteriorAt20h)}.`,
+    );
+  } else {
+    lines.push(
+      `Minimum annoncé : ${celsius(facts.forecast.minimum)}, et jusqu'à ${celsius(FROST_WATCH.exterior.groundMargin)} de moins au ras du sol.`,
+    );
+  }
+
+  lines.push(...here.map(plantLine));
+
+  if (location === "Véranda" && facts.veranda?.extrapolation === "low") {
+    lines.push(
+      "Le modèle de la véranda n'a encore jamais vu de gel : sa marge est doublée ce soir.",
+    );
+  }
+
+  return ["", ...lines];
 }
 
-/** Le texte envoyé quand on n'a pas pu décider une nuit qui peut geler. */
-export function undecidedMail(
-  missing: readonly string[],
-  forecast: ForecastSummary,
+const INTRO: Record<FrostMessage, string> = {
+  alerte: "Il peut geler cette nuit. Protéger ce soir :",
+  rappel: "L'épisode froid continue. Protéger encore ce soir :",
+  indisponible: "La veille de gel n'a pas pu tout estimer ce soir.",
+};
+
+function subjectFor(kind: FrostMessage, alerted: readonly string[]): string {
+  if (kind === "indisponible") {
+    return "Veille de gel impossible ce soir";
+  }
+
+  return kind === "alerte"
+    ? `Gel possible cette nuit : ${list(alerted)}`
+    : `Gel encore cette nuit : ${list(alerted)}`;
+}
+
+/**
+ * Le mail de la nuit, groupé : une section par emplacement, les plantes en
+ * alerte et celles à surveiller, et celles qu'on ne suit pas faute de seuil.
+ */
+export function frostMail(
+  kind: FrostMessage,
+  facts: NightFacts,
+  plants: readonly PlantNight[],
 ): Mail {
+  const alerted = plants
+    .filter(plant => plant.level === "alerte")
+    .map(plant => plant.title);
+  const untracked = plants
+    .filter(plant => plant.damageThreshold === null)
+    .map(plant => plant.title);
+  const intro =
+    kind === "indisponible" ? INTRO[kind] : `${INTRO[kind]} ${list(alerted)}.`;
+
   return {
-    subject: "Veille de gel impossible ce soir",
+    subject: subjectFor(kind, alerted),
     text: [
-      `Il manque ${missing.join(" et ")} : impossible d'estimer le minimum de la véranda.`,
+      intro,
+      ...locationSection("Véranda", plants, facts),
+      ...locationSection("Extérieur", plants, facts),
       "",
-      `Dehors, la nuit descendra à ${celsius(forecast.minimum)} (${forecast.method}).`,
-      "Vérifier la véranda avant la nuit.",
+      `Dehors, la nuit descendra à ${celsius(facts.forecast.minimum)} (${facts.forecast.method}).`,
+      ...(untracked.length > 0
+        ? [
+            `Pas suivies, faute de seuil de dégâts sur leur fiche : ${list(untracked)}.`,
+          ]
+        : []),
+      ...(kind === "alerte"
+        ? ["", "Tant que l'épisode dure, un rappel court arrivera chaque soir."]
+        : []),
     ].join("\n"),
   };
 }
