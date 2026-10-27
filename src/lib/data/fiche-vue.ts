@@ -15,6 +15,11 @@ export function celsius(valeur: number): string {
   return `${DEGRES.format(valeur).replace("-", "−")}\u00a0°C`;
 }
 
+const EUROS = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "EUR",
+});
+
 const UNITES = {
   month: ["mois", "mois"],
   year: ["an", "ans"],
@@ -28,6 +33,8 @@ export function valeurAffichee(attribut: Attribut): string {
       return celsius(attribut.valeur);
     case "date":
       return LONG.format(new Date(`${attribut.valeur}T00:00:00Z`));
+    case "montant":
+      return EUROS.format(attribut.valeur);
     case "duree": {
       const [un, plusieurs] = UNITES[attribut.valeur.unit];
 

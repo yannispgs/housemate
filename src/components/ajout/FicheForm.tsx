@@ -4,9 +4,10 @@
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
 import { ETAT_AJOUT } from "@/lib/data/ajout-etat";
-import { NATURE_LABELS, NATURES } from "@/lib/data/views";
+import { NATURE_LABELS, NATURES, type Nature } from "@/lib/data/views";
 import { ajouterFiche } from "../../../app/_actions/ajout";
 import { BOUTON, CHAMP, Champ, LISTE } from "../forms/Champ";
+import { ChampsInfos } from "../forms/ChampsInfos";
 import { ChampsPlante } from "../forms/ChampsPlante";
 import { ChoixCategorie } from "../forms/ChoixCategorie";
 import { useEnvoi } from "../forms/envoi";
@@ -14,13 +15,15 @@ import { useEnvoi } from "../forms/envoi";
 export function FicheForm({
   categories,
   emplacements,
+  marques,
 }: Readonly<{
   categories: readonly string[];
   emplacements: readonly string[];
+  marques: readonly string[];
 }>) {
   const [etat, agir, enCours] = useActionState(ajouterFiche, ETAT_AJOUT);
   const envoyer = useEnvoi(agir);
-  const [nature, setNature] = useState<string>("equipement");
+  const [nature, setNature] = useState<Nature>("equipement");
   const router = useRouter();
   const erreurs = etat.etape === "saisie" ? (etat.erreurs ?? {}) : {};
 
@@ -36,7 +39,7 @@ export function FicheForm({
         <select
           name="nature"
           value={nature}
-          onChange={event => setNature(event.target.value)}
+          onChange={event => setNature(event.target.value as Nature)}
           className={LISTE}
         >
           {NATURES.map(nature => (
@@ -53,6 +56,7 @@ export function FicheForm({
       {nature === "plante" && (
         <ChampsPlante emplacements={emplacements} erreurs={erreurs} />
       )}
+      <ChampsInfos nature={nature} erreurs={erreurs} marques={marques} />
       <button type="submit" className={BOUTON} disabled={enCours}>
         Créer la fiche
       </button>
