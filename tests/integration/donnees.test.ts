@@ -19,6 +19,7 @@ import {
   creerEcheance,
   creerFiche,
   creerGarantie,
+  deriver,
   lireFiche,
   lireFoyer,
   lirePieceJointe,
@@ -30,8 +31,10 @@ import {
   listerFiches,
   listerMarques,
   modifierDureeDeVie,
+  modifierInfos,
   modifierPlante,
   modifierTenueConsommable,
+  natureDeFiche,
   noterReleve,
   noterRemplacement,
   reglerEntretien,
@@ -1110,5 +1113,185 @@ describe("catégories (§ 5.4)", () => {
     expect(await commeMembre(sql(), conjoint.compte, listerMarques)).toEqual([
       "Bosch",
     ]);
+  });
+});
+
+describe("infos de base (§ 4.1)", () => {
+  const achat = (date: string, ans: number): Attribut[] => [
+    { libelle: "Marque", type: "texte", valeur: "Samsung" },
+    { libelle: "Date d'achat", type: "date", valeur: date },
+    {
+      libelle: "Durée de garantie",
+      type: "duree",
+      valeur: { count: ans, unit: "year" },
+    },
+  ];
+
+  /** Les échéances de la fiche, archivées comprises. */
+  const echeancesDeFiche = (ficheId: string) =>
+    owner`
+      select titre, recurrence, preavis_jours, importance, tenue,
+        archivee_le is not null as archivee
+      from app.echeances where fiche_id = ${ficheId} order by cree_le`;
+
+  it("dérive la fin de garantie, la déplace, puis la retire", async () => {
+    const tele = await commeMembre(sql(), moi.compte, async tx => {
+      const id = await creerFiche(tx, {
+        nature: "equipement",
+        titre: "La télé",
+        categorie: null,
+        attributs: [{ libelle: "Couleur", type: "texte", valeur: "Noire" }],
+      });
+      await deriver(tx, id);
+
+      return id;
+    });
+
+    expect(await echeancesDeFiche(tele)).toEqual([]);
+
+    await commeMembre(sql(), conjoint.compte, async tx => {
+      expect(await natureDeFiche(tx, tele)).toBe("equipement");
+      expect(await modifierInfos(tx, tele, achat("2025-03-12", 2))).toBe(true);
+    });
+
+    expect(await echeancesDeFiche(tele)).toEqual([
+      {
+        titre: "Fin de garantie — La télé",
+        recurrence: {
+          kind: "derived",
+          sourceDate: "2025-03-12",
+          offset: { count: 2, unit: "year" },
+          source: "Date d'achat",
+        },
+        preavis_jours: 30,
+        importance: "memoire",
+        tenue: "souple",
+        archivee: false,
+      },
+    ]);
+    // Les autres attributs sont gardés, après les infos.
+    expect(
+      (await commeMembre(sql(), moi.compte, tx => lireFiche(tx, tele)))
+        ?.attributs,
+    ).toEqual([
+      ...achat("2025-03-12", 2),
+      { libelle: "Couleur", type: "texte", valeur: "Noire" },
+    ]);
+
+    // Un préavis réglé à la main reste ; la date et le nom suivent la fiche.
+    await owner`update app.echeances set preavis_jours = 60 where fiche_id = ${tele}`;
+    await commeMembre(sql(), moi.compte, async tx => {
+      await modifierInfos(tx, tele, achat("2025-04-01", 3));
+      await renommerFiche(tx, tele, "La télé du salon");
+      await deriver(tx, tele);
+    });
+
+    expect(await echeancesDeFiche(tele)).toEqual([
+      expect.objectContaining({
+        titre: "Fin de garantie — La télé du salon",
+        recurrence: expect.objectContaining({
+          sourceDate: "2025-04-01",
+          offset: { count: 3, unit: "year" },
+        }),
+        preavis_jours: 60,
+        archivee: false,
+      }),
+    ]);
+
+    // Plus de durée : plus de garantie à suivre.
+    await commeMembre(sql(), moi.compte, tx =>
+      modifierInfos(tx, tele, achat("2025-04-01", 3).slice(0, 2)),
+    );
+
+    expect((await echeancesDeFiche(tele)).map(e => e.archivee)).toEqual([true]);
+  });
+
+  it("reconnaît une fin de garantie créée avant qu'elle nomme sa source", async () => {
+    const balance = await commeMembre(sql(), moi.compte, async tx => {
+      const id = await creerFiche(tx, {
+        nature: "equipement",
+        titre: "Balance",
+        categorie: null,
+        attributs: achat("2026-10-01", 2),
+      });
+      await creerEcheance(tx, {
+        titre: "Fin de garantie — Balance",
+        categorie: null,
+        recurrence: {
+          kind: "derived",
+          sourceDate: "2026-10-01",
+          offset: { count: 2, unit: "year" },
+        },
+        toleranceJours: 0,
+        preavisJours: 30,
+        tenue: "souple",
+        importance: "memoire",
+        ficheId: id,
+        derniereFois: null,
+      });
+
+      return id;
+    });
+
+    await commeMembre(sql(), moi.compte, tx =>
+      modifierInfos(tx, balance, achat("2026-09-15", 2)),
+    );
+
+    expect(await echeancesDeFiche(balance)).toEqual([
+      expect.objectContaining({
+        recurrence: expect.objectContaining({
+          sourceDate: "2026-09-15",
+          source: "Date d'achat",
+        }),
+        archivee: false,
+      }),
+    ]);
+  });
+
+  it("fait renouveler un document", async () => {
+    const passeport = await commeMembre(sql(), moi.compte, async tx => {
+      const id = await creerFiche(tx, {
+        nature: "document",
+        titre: "Le passeport",
+        categorie: null,
+        attributs: [
+          { libelle: "Date d'expiration", type: "date", valeur: "2031-05-01" },
+        ],
+      });
+      await deriver(tx, id);
+
+      return id;
+    });
+
+    expect(await echeancesDeFiche(passeport)).toEqual([
+      expect.objectContaining({
+        titre: "Renouveler — Le passeport",
+        recurrence: {
+          kind: "once",
+          on: "2031-05-01",
+          source: "Date d'expiration",
+        },
+        preavis_jours: 90,
+        tenue: "ferme",
+        importance: "important",
+      }),
+    ]);
+  });
+
+  it("ne touche pas à la fiche d'un autre foyer", async () => {
+    const tele = await commeMembre(sql(), moi.compte, tx =>
+      creerFiche(tx, {
+        nature: "equipement",
+        titre: "La télé",
+        categorie: null,
+        attributs: [],
+      }),
+    );
+
+    await commeMembre(sql(), voisin.compte, async tx => {
+      expect(await natureDeFiche(tx, tele)).toBeNull();
+      expect(await modifierInfos(tx, tele, achat("2025-03-12", 2))).toBe(false);
+    });
+    expect(await echeancesDeFiche(tele)).toEqual([]);
   });
 });

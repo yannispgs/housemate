@@ -41,6 +41,12 @@ export type Attribut =
       readonly type: "temperature";
       readonly valeur: number;
     }
+  /** Un montant en euros, centimes compris (§ 4.1, décision du 27/10/2026). */
+  | {
+      readonly libelle: string;
+      readonly type: "montant";
+      readonly valeur: number;
+    }
   | {
       readonly libelle: string;
       readonly type: "duree";
@@ -412,6 +418,13 @@ export function remplacementValide(
 export const GARANTIE_PAR_DEFAUT = { count: 2, unit: "year" } as const;
 export const PREAVIS_GARANTIE_JOURS = 30;
 
+/** La source d'une fin de garantie : l'échéance la suit (§ 5.2). */
+export const LIBELLE_DATE_ACHAT = "Date d'achat";
+export const LIBELLE_DUREE_GARANTIE = "Durée de garantie";
+
+/** Le titre d'une fin de garantie, à la création comme quand elle suit sa fiche. */
+export const titreGarantie = (titre: string) => `Fin de garantie — ${titre}`;
+
 export const garantieSaisie = z.object({
   titre,
   marque: texteFacultatif,
@@ -441,8 +454,8 @@ export function nouvelleGarantie(s: GarantieSaisie): {
     ...(s.modele
       ? [{ libelle: "Modèle", type: "texte", valeur: s.modele } as const]
       : []),
-    { libelle: "Date d'achat", type: "date", valeur: s.dateAchat },
-    { libelle: "Durée de garantie", type: "duree", valeur: duree },
+    { libelle: LIBELLE_DATE_ACHAT, type: "date", valeur: s.dateAchat },
+    { libelle: LIBELLE_DUREE_GARANTIE, type: "duree", valeur: duree },
   ];
 
   return {
@@ -455,14 +468,15 @@ export function nouvelleGarantie(s: GarantieSaisie): {
     // Une garantie : souple, pour mémoire, sans « Reporter » (§ 3.8d), et
     // dérivée de la date d'achat (§ 5.2).
     echeance: {
-      titre: `Fin de garantie — ${s.titre}`,
+      titre: titreGarantie(s.titre),
       // Liée à l'objet : elle en hérite la catégorie (§ 5.4).
       categorie: null,
-      recurrence: serializeRecurrence({
+      recurrence: {
         kind: "derived",
-        sourceDate: fromISO(s.dateAchat),
+        sourceDate: s.dateAchat,
         offset: duree,
-      }),
+        source: LIBELLE_DATE_ACHAT,
+      },
       toleranceJours: 0,
       preavisJours: PREAVIS_GARANTIE_JOURS,
       tenue: "souple",

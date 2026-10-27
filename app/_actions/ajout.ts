@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { EtatAjout } from "@/lib/data/ajout-etat";
+import { avecMarqueConnue, lireInfos } from "@/lib/data/infos";
 import { attributsPlante } from "@/lib/data/plantes";
 import {
   achatValide,
@@ -24,6 +25,7 @@ import {
   creerEcheance,
   creerFiche,
   creerGarantie,
+  deriver,
   listerCategories,
   listerEmplacements,
   listerMarques,
@@ -99,21 +101,33 @@ export async function ajouterFiche(
   _precedent: EtatAjout,
   formulaire: FormData,
 ): Promise<EtatAjout> {
-  const saisie = lire(ficheSaisie, champs(formulaire));
+  const saisis = champs(formulaire);
+  const saisie = lire(ficheSaisie, saisis);
 
   if (!saisie.ok) {
     return { etape: "saisie", erreurs: saisie.erreurs };
   }
 
+  // Les infos de base de sa nature (§ 4.1, décisions du 27/10/2026).
+  const infos = lireInfos(saisie.valeur.nature, saisis);
+
+  if (!infos.ok) {
+    return { etape: "saisie", erreurs: infos.erreurs };
+  }
+
   const { potOuTerre, emplacement, seuilDegats, seuilMort, ...fiche } =
     saisie.valeur;
-  const ficheId = await enMonNom(async tx =>
-    creerFiche(tx, {
+  const ficheId = await enMonNom(async tx => {
+    const id = await creerFiche(tx, {
       ...fiche,
       categorie: await categorie(tx, fiche.categorie),
-      // La section « Plantation » : d'une plante seulement (§ 12.2, § 12.4).
-      attributs:
-        fiche.nature === "plante"
+      attributs: [
+        ...avecMarqueConnue(
+          infos.valeur,
+          marquesConnues(await listerMarques(tx)),
+        ),
+        // La section « Plantation » : d'une plante seulement (§ 12.2, § 12.4).
+        ...(fiche.nature === "plante"
           ? attributsPlante({
               pot: potOuTerre,
               seuilDegats,
@@ -123,9 +137,14 @@ export async function ajouterFiche(
                 emplacementsProposes(await listerEmplacements(tx)),
               ),
             })
-          : [],
-    }),
-  );
+          : []),
+      ],
+    });
+    // Une date d'achat et une garantie, une expiration : leur échéance.
+    await deriver(tx, id);
+
+    return id;
+  });
   rafraichir();
 
   return { etape: "creee", ficheId };

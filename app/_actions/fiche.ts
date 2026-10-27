@@ -2,17 +2,23 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { avecMarqueConnue, lireInfos } from "@/lib/data/infos";
 import {
   emplacementConnu,
   emplacementsProposes,
   lire,
+  marquesConnues,
   planteSaisie,
   titreSaisie,
 } from "@/lib/data/saisie";
 import { enMonNom } from "@/lib/data/server";
 import {
+  deriver,
   listerEmplacements,
+  listerMarques,
+  modifierInfos,
   modifierPlante,
+  natureDeFiche,
   renommerFiche,
 } from "@/lib/data/store";
 
@@ -44,9 +50,18 @@ export async function renommer(
     return Object.values(saisie.erreurs)[0] ?? "Saisie invalide.";
   }
 
-  if (
-    !(await enMonNom(tx => renommerFiche(tx, id.data, saisie.valeur.titre)))
-  ) {
+  const fait = await enMonNom(async tx => {
+    const renommee = await renommerFiche(tx, id.data, saisie.valeur.titre);
+
+    // Une échéance dérivée porte le nom de sa fiche : elle le suit.
+    if (renommee) {
+      await deriver(tx, id.data);
+    }
+
+    return renommee;
+  });
+
+  if (!fait) {
     return INTROUVABLE;
   }
 
@@ -102,4 +117,48 @@ export async function situer(
   rafraichir(id.data);
 
   return null;
+}
+
+/**
+ * Les infos de base d'une fiche (§ 4.1, décisions du 27/10/2026), et les
+ * échéances qui en dérivent. Rend `null` si c'est enregistré, sinon les
+ * erreurs par champ (`formulaire` : la fiche elle-même).
+ */
+export async function renseigner(
+  ficheId: string,
+  saisie: Readonly<Record<string, string>>,
+): Promise<Readonly<Record<string, string>> | null> {
+  const id = z.uuid().safeParse(ficheId);
+
+  if (!id.success) {
+    return { formulaire: INTROUVABLE };
+  }
+
+  const erreurs = await enMonNom(async tx => {
+    const nature = await natureDeFiche(tx, id.data);
+
+    if (nature === null) {
+      return { formulaire: INTROUVABLE };
+    }
+
+    const lu = lireInfos(nature, saisie);
+
+    if (!lu.ok) {
+      return lu.erreurs;
+    }
+
+    await modifierInfos(
+      tx,
+      id.data,
+      avecMarqueConnue(lu.valeur, marquesConnues(await listerMarques(tx))),
+    );
+
+    return null;
+  });
+
+  if (erreurs === null) {
+    rafraichir(id.data);
+  }
+
+  return erreurs;
 }

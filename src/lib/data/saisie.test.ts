@@ -289,6 +289,8 @@ describe("garantie — la fiche de l'objet et sa fin de garantie", () => {
         kind: "derived",
         sourceDate: "2026-10-13",
         offset: { count: 2, unit: "year" },
+        // Elle suit la date d'achat de sa fiche.
+        source: "Date d'achat",
       },
       toleranceJours: 0,
       preavisJours: 30,

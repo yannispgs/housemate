@@ -9,6 +9,7 @@
  * porte.
  */
 import type postgres from "postgres";
+import { avecInfos, echeancesDerivees } from "@/lib/data/infos";
 import {
   avecAttribut,
   avecPlantation,
@@ -16,12 +17,18 @@ import {
   type Plantation,
 } from "@/lib/data/plantes";
 import { parseRecurrence } from "@/lib/data/recurrence-json";
-import type {
-  Attribut,
-  NouvelleEcheance,
-  NouvelleFiche,
+import {
+  type Attribut,
+  LIBELLE_DATE_ACHAT,
+  type NouvelleEcheance,
+  type NouvelleFiche,
 } from "@/lib/data/saisie";
-import type { CompletionRow, EcheanceRow, FicheRow } from "@/lib/data/views";
+import type {
+  CompletionRow,
+  EcheanceRow,
+  FicheRow,
+  Nature,
+} from "@/lib/data/views";
 import {
   type Consommable,
   PART_DU_PREAVIS,
@@ -468,6 +475,102 @@ export async function appliquerMargePrevision(
 
   /* c8 ignore next -- repli inatteignable : un select rend toujours sa ligne. */
   return row?.fait ?? false;
+}
+
+/** La nature d'une fiche visible, ou `null`. */
+export async function natureDeFiche(
+  tx: Tx,
+  id: string,
+): Promise<Nature | null> {
+  const [fiche] = await tx<{ nature: Nature }[]>`
+    select nature from app.fiches where id = ${id}`;
+
+  return fiche?.nature ?? null;
+}
+
+/**
+ * Les infos de base d'une fiche visible (§ 4.1, décisions du 27/10/2026) :
+ * celles de sa nature remplacées, les autres attributs gardés, puis ses
+ * échéances dérivées remises d'accord. Rend `false` si la fiche n'est pas
+ * visible.
+ */
+export async function modifierInfos(
+  tx: Tx,
+  id: string,
+  infos: readonly Attribut[],
+): Promise<boolean> {
+  const [fiche] = await tx<{ nature: Nature; attributs: Attribut[] }[]>`
+    select nature, attributs from app.fiches where id = ${id} for update`;
+
+  if (fiche === undefined) {
+    return false;
+  }
+
+  const attributs = avecInfos(fiche.attributs, fiche.nature, infos);
+  await tx`
+    update app.fiches
+    set attributs = ${tx.json(attributs as unknown as postgres.JSONValue)}
+    where id = ${id}`;
+  await deriver(tx, id);
+
+  return true;
+}
+
+/**
+ * Les échéances dérivées d'une fiche (§ 5.2), remises d'accord avec ses
+ * attributs et son titre : déplacées si leur source a changé, créées si elle
+ * vient d'être remplie, archivées si elle a été vidée. Leurs réglages propres
+ * (préavis, importance) ne bougent pas.
+ */
+export async function deriver(tx: Tx, ficheId: string): Promise<void> {
+  const [fiche] = await tx<
+    { nature: Nature; titre: string; attributs: Attribut[] }[]
+  >`select nature, titre, attributs from app.fiches where id = ${ficheId}`;
+
+  /* c8 ignore next 3 -- appelée juste après avoir lu ou créé la fiche. */
+  if (fiche === undefined) {
+    return;
+  }
+
+  // Une fin de garantie créée avant le 27/10/2026 ne nomme pas sa source :
+  // c'est la date d'achat, et son titre la reconnaît.
+  const existantes = await tx<{ id: string; source: string }[]>`
+    select id::text, coalesce(recurrence->>'source', ${LIBELLE_DATE_ACHAT}) as source
+    from app.echeances
+    where fiche_id = ${ficheId} and archivee_le is null
+      and (recurrence ? 'source' or (
+        recurrence->>'kind' = 'derived' and titre like 'Fin de garantie — %'))`;
+  const voulues = echeancesDerivees(fiche.nature, fiche.titre, fiche.attributs);
+
+  for (const voulue of voulues) {
+    const { source, ...echeance } = voulue;
+    const existante = existantes.find(e => e.source === source);
+
+    if (existante === undefined) {
+      await creerEcheance(tx, {
+        ...echeance,
+        categorie: null,
+        ficheId,
+        derniereFois: null,
+      });
+    } else {
+      await tx`
+        update app.echeances set
+          titre = ${echeance.titre},
+          recurrence = ${tx.json(echeance.recurrence as postgres.JSONValue)}
+        where id = ${existante.id}`;
+    }
+  }
+
+  const gardees = new Set(voulues.map(v => v.source));
+
+  for (const existante of existantes) {
+    if (!gardees.has(existante.source)) {
+      await tx`
+        update app.echeances set archivee_le = now()
+        where id = ${existante.id}`;
+    }
+  }
 }
 
 /** Une fiche visible de la personne connectée, ou `null`. */

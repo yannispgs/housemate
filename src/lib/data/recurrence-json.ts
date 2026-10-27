@@ -21,7 +21,13 @@ const duration = z.object({
 });
 
 export const recurrenceJson = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("once"), on: isoDate }),
+  // `source` : l'attribut de la fiche dont l'échéance est le calcul (§ 5.2,
+  // décision du 27/10/2026) ; elle le suit quand il change.
+  z.object({
+    kind: z.literal("once"),
+    on: isoDate,
+    source: z.string().optional(),
+  }),
   z.object({
     kind: z.literal("interval"),
     anchor: isoDate,
@@ -38,6 +44,7 @@ export const recurrenceJson = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("derived"),
     sourceDate: isoDate,
+    source: z.string().optional(),
     offset: z.object({
       count: z
         .number()

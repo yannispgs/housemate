@@ -34,6 +34,7 @@ describe("valeurAffichee", () => {
       },
       "6 mois",
     ],
+    [{ libelle: "Montant", type: "montant", valeur: 12.5 }, "12,50\u00a0€"],
   ] as const)("%o → %s", (attribut, texte) => {
     expect(valeurAffichee(attribut)).toBe(texte);
   });
