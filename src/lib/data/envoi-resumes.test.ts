@@ -18,6 +18,7 @@ const aFaire: EcheanceRow = {
   preavisJours: 7,
   tenue: "souple",
   importance: "normal",
+  ficheId: null,
   ficheTitre: null,
   destinataire: "Foyer",
   pourMoi: true,
