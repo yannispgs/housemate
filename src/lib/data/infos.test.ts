@@ -31,7 +31,7 @@ describe("INFOS", () => {
     }
   });
 
-  it("suit le tableau du SPEC, sans la personne ni le lieu", () => {
+  it("suit le tableau du SPEC, sans le lieu", () => {
     expect(INFOS.equipement.map(c => c.libelle)).toEqual([
       "Marque",
       "Modèle",
@@ -44,7 +44,7 @@ describe("INFOS", () => {
       "duree",
       "montant",
     ]);
-    expect(INFOS.personne).toEqual([]);
+    expect(INFOS.personne.map(c => c.type)).toEqual(["jour"]);
     expect(INFOS.lieu).toEqual([]);
   });
 });
@@ -234,5 +234,91 @@ describe("echeancesDerivees", () => {
         { libelle: "Date anniversaire", type: "date", valeur: "2026-03-01" },
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("une date de naissance", () => {
+  const lue = (champs: Record<string, string>) => lireInfos("personne", champs);
+
+  it("se lit avec ou sans l'année", () => {
+    expect(
+      lue({ naissanceJour: "12", naissanceMois: "3", naissanceAnnee: "1958" }),
+    ).toEqual({
+      ok: true,
+      valeur: [
+        {
+          libelle: "Date de naissance",
+          type: "jour",
+          valeur: { jour: 12, mois: 3, annee: 1958 },
+        },
+      ],
+    });
+    expect(lue({ naissanceJour: "29", naissanceMois: "2" })).toEqual({
+      ok: true,
+      valeur: [
+        {
+          libelle: "Date de naissance",
+          type: "jour",
+          valeur: { jour: 29, mois: 2, annee: null },
+        },
+      ],
+    });
+    expect(lue({ naissanceJour: "", naissanceMois: "" })).toEqual({
+      ok: true,
+      valeur: [],
+    });
+  });
+
+  it.each([
+    [{ naissanceJour: "12" }, "Le jour et le mois sont nécessaires."],
+    [{ naissanceMois: "3" }, "Le jour et le mois sont nécessaires."],
+    [{ naissanceAnnee: "1958" }, "Le jour et le mois sont nécessaires."],
+    [{ naissanceJour: "31", naissanceMois: "4" }, "Ce jour n'existe pas."],
+    [
+      { naissanceJour: "29", naissanceMois: "2", naissanceAnnee: "2023" },
+      "Ce jour n'existe pas.",
+    ],
+    [{ naissanceJour: "32", naissanceMois: "1" }, "Un jour entre 1 et 31."],
+    [{ naissanceJour: "1", naissanceMois: "13" }, "Un mois entre 1 et 12."],
+    [
+      { naissanceJour: "1", naissanceMois: "1", naissanceAnnee: "1800" },
+      "Une année entre 1900 et 2100.",
+    ],
+  ])("refuse %o", (champs, message) => {
+    const lu = lue(champs);
+
+    expect(lu.ok).toBe(false);
+    expect(Object.values(lu.ok ? {} : lu.erreurs)).toContain(message);
+  });
+
+  it("pré-remplit le formulaire", () => {
+    expect(
+      valeursInfos(
+        [
+          {
+            libelle: "Date de naissance",
+            type: "jour",
+            valeur: { jour: 12, mois: 3, annee: null },
+          },
+        ],
+        "personne",
+      ),
+    ).toEqual({ naissanceJour: "12", naissanceMois: "3", naissanceAnnee: "" });
+    expect(
+      valeursInfos(
+        [
+          {
+            libelle: "Date de naissance",
+            type: "jour",
+            valeur: { jour: 1, mois: 1, annee: 1990 },
+          },
+        ],
+        "personne",
+      ),
+    ).toEqual({
+      naissanceJour: "1",
+      naissanceMois: "1",
+      naissanceAnnee: "1990",
+    });
   });
 });

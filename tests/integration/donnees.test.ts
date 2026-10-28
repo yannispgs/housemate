@@ -14,16 +14,19 @@ import {
   ajouterConsommable,
   ajouterPieceJointe,
   annulerCompletions,
+  choisirAnniversaire,
   commeMembre,
   completer,
   creerEcheance,
   creerFiche,
   creerGarantie,
   deriver,
+  lireAnniversaire,
   lireFiche,
   lireFoyer,
   lirePieceJointe,
   lirePlanEntretien,
+  lireReglagesAnniversaires,
   listerCategories,
   listerConsommables,
   listerEcheances,
@@ -37,6 +40,7 @@ import {
   natureDeFiche,
   noterReleve,
   noterRemplacement,
+  reglerAnniversaires,
   reglerEntretien,
   remplacerConsommable,
   renommerFiche,
@@ -1293,5 +1297,267 @@ describe("infos de base (§ 4.1)", () => {
       expect(await modifierInfos(tx, tele, achat("2025-03-12", 2))).toBe(false);
     });
     expect(await echeancesDeFiche(tele)).toEqual([]);
+  });
+});
+
+describe("anniversaires, par membre (§ 4.1)", () => {
+  const nee = (jour: number, mois: number): Attribut[] => [
+    {
+      libelle: "Date de naissance",
+      type: "jour",
+      valeur: { jour, mois, annee: 1958 },
+    },
+  ];
+
+  async function personne(attributs: Attribut[]): Promise<string> {
+    return commeMembre(sql(), moi.compte, async tx => {
+      const id = await creerFiche(tx, {
+        nature: "personne",
+        titre: "Mamie",
+        categorie: null,
+        attributs,
+      });
+      await deriver(tx, id);
+
+      return id;
+    });
+  }
+
+  /** Les rappels de la fiche, de tous les membres, archivés compris. */
+  const rappels = (ficheId: string) =>
+    owner`
+      select m.auth_user_id as compte, e.titre, e.recurrence, e.preavis_jours,
+        e.importance, e.tenue, e.prive, e.archivee_le is not null as archivee
+      from app.echeances e join app.membres m on m.id = e.cree_par
+      where e.fiche_id = ${ficheId} order by e.cree_le`;
+
+  const titresVus = async (m: Membre) =>
+    (await commeMembre(sql(), m.compte, listerEcheances)).map(e => e.titre);
+
+  it("ne crée rien sans choix, puis un rappel privé par membre", async () => {
+    const mamie = await personne(nee(12, 3));
+
+    expect(await rappels(mamie)).toEqual([]);
+
+    await commeMembre(sql(), moi.compte, async tx => {
+      expect(await choisirAnniversaire(tx, mamie, "cadeau")).toBe("fait");
+      expect(await lireAnniversaire(tx, mamie)).toBe("cadeau");
+    });
+    await commeMembre(sql(), conjoint.compte, async tx => {
+      expect(await lireAnniversaire(tx, mamie)).toBeNull();
+      expect(await choisirAnniversaire(tx, mamie, "simple")).toBe("fait");
+    });
+
+    expect(await rappels(mamie)).toEqual([
+      {
+        compte: moi.compte,
+        titre: "Cadeau — anniversaire de Mamie",
+        recurrence: { kind: "annual", month: 3, day: 12 },
+        preavis_jours: 60,
+        importance: "normal",
+        tenue: "souple",
+        prive: true,
+        archivee: false,
+      },
+      expect.objectContaining({
+        compte: conjoint.compte,
+        titre: "Anniversaire de Mamie",
+        preavis_jours: 1,
+        importance: "memoire",
+        prive: true,
+      }),
+    ]);
+    expect(await titresVus(moi)).toContain("Cadeau — anniversaire de Mamie");
+    expect(await titresVus(moi)).not.toContain("Anniversaire de Mamie");
+    expect(await titresVus(conjoint)).toContain("Anniversaire de Mamie");
+    expect(await titresVus(conjoint)).not.toContain(
+      "Cadeau — anniversaire de Mamie",
+    );
+  });
+
+  it("change de niveau, puis s'arrête avec « pas de rappel »", async () => {
+    const mamie = await personne(nee(12, 3));
+
+    await commeMembre(sql(), moi.compte, async tx => {
+      await choisirAnniversaire(tx, mamie, "cadeau");
+      await choisirAnniversaire(tx, mamie, "simple");
+    });
+
+    expect(await rappels(mamie)).toEqual([
+      expect.objectContaining({
+        titre: "Anniversaire de Mamie",
+        preavis_jours: 1,
+        importance: "memoire",
+        archivee: false,
+      }),
+    ]);
+
+    await commeMembre(sql(), moi.compte, async tx => {
+      expect(await choisirAnniversaire(tx, mamie, null)).toBe("fait");
+      expect(await lireAnniversaire(tx, mamie)).toBeNull();
+      // Déjà sans rappel : rien à faire.
+      expect(await choisirAnniversaire(tx, mamie, null)).toBe("fait");
+    });
+
+    expect(await rappels(mamie)).toEqual([
+      expect.objectContaining({ archivee: true }),
+    ]);
+  });
+
+  it("refuse sans date, hors d'une personne ou hors du foyer", async () => {
+    const sansDate = await personne([]);
+    const tele = await commeMembre(sql(), moi.compte, tx =>
+      creerFiche(tx, {
+        nature: "equipement",
+        titre: "La télé",
+        categorie: null,
+        attributs: [],
+      }),
+    );
+    const mamie = await personne(nee(12, 3));
+
+    await commeMembre(sql(), moi.compte, async tx => {
+      expect(await choisirAnniversaire(tx, sansDate, "cadeau")).toBe(
+        "sans-date",
+      );
+      expect(await choisirAnniversaire(tx, tele, "cadeau")).toBe("introuvable");
+    });
+    await commeMembre(sql(), voisin.compte, async tx => {
+      expect(await choisirAnniversaire(tx, mamie, "cadeau")).toBe(
+        "introuvable",
+      );
+    });
+
+    expect(await rappels(sansDate)).toEqual([]);
+    expect(await rappels(mamie)).toEqual([]);
+  });
+
+  it("déplace les rappels de tous quand la date ou le nom changent", async () => {
+    const mamie = await personne(nee(12, 3));
+
+    for (const m of [moi, conjoint]) {
+      await commeMembre(sql(), m.compte, tx =>
+        choisirAnniversaire(tx, mamie, m === moi ? "cadeau" : "simple"),
+      );
+    }
+
+    // Le conjoint corrige la date, puis le nom : le rappel privé de l'autre
+    // membre suit, sans qu'il le voie.
+    await commeMembre(sql(), conjoint.compte, async tx => {
+      await modifierInfos(tx, mamie, nee(21, 4));
+      await renommerFiche(tx, mamie, "Mamie Jo");
+      await deriver(tx, mamie);
+    });
+
+    expect(await rappels(mamie)).toEqual([
+      expect.objectContaining({
+        titre: "Cadeau — anniversaire de Mamie Jo",
+        recurrence: { kind: "annual", month: 4, day: 21 },
+        archivee: false,
+      }),
+      expect.objectContaining({
+        titre: "Anniversaire de Mamie Jo",
+        recurrence: { kind: "annual", month: 4, day: 21 },
+        archivee: false,
+      }),
+    ]);
+
+    // Un voisin n'y peut rien, même en appelant la fonction directement.
+    await commeMembre(
+      sql(),
+      voisin.compte,
+      tx => tx`select app.suivre_anniversaires(${mamie}, null, 'x', 'y')`,
+    );
+    expect(await rappels(mamie)).toEqual([
+      expect.objectContaining({ archivee: false }),
+      expect.objectContaining({ archivee: false }),
+    ]);
+
+    // La date retirée : les rappels s'arrêtent, les choix sont oubliés.
+    await commeMembre(sql(), moi.compte, tx => modifierInfos(tx, mamie, []));
+
+    expect(await rappels(mamie)).toEqual([
+      expect.objectContaining({ archivee: true }),
+      expect.objectContaining({ archivee: true }),
+    ]);
+    expect(
+      await commeMembre(sql(), conjoint.compte, tx =>
+        lireAnniversaire(tx, mamie),
+      ),
+    ).toBeNull();
+  });
+
+  it("règle ses délais pour soi, les rappels non retouchés suivent", async () => {
+    const mamie = await personne(nee(12, 3));
+    const papi = await commeMembre(sql(), moi.compte, async tx => {
+      const id = await creerFiche(tx, {
+        nature: "personne",
+        titre: "Papi",
+        categorie: null,
+        attributs: nee(1, 6),
+      });
+      await choisirAnniversaire(tx, id, "cadeau");
+      await choisirAnniversaire(tx, mamie, "cadeau");
+
+      return id;
+    });
+    await commeMembre(sql(), conjoint.compte, tx =>
+      choisirAnniversaire(tx, mamie, "cadeau"),
+    );
+    // Celui de Papi, réglé à la main.
+    await owner`
+      update app.echeances set preavis_jours = 10
+      where fiche_id = ${papi}`;
+
+    await commeMembre(sql(), moi.compte, async tx => {
+      expect(await lireReglagesAnniversaires(tx)).toEqual({
+        cadeau: { preavisJours: 60, importance: "normal" },
+        simple: { preavisJours: 1, importance: "memoire" },
+      });
+      await reglerAnniversaires(tx, {
+        cadeau: { preavisJours: 21, importance: "important" },
+        simple: { preavisJours: 0, importance: "memoire" },
+      });
+      expect((await lireReglagesAnniversaires(tx)).cadeau).toEqual({
+        preavisJours: 21,
+        importance: "important",
+      });
+      // Une seconde fois : la ligne existe, elle est mise à jour.
+      await reglerAnniversaires(tx, {
+        cadeau: { preavisJours: 28, importance: "important" },
+        simple: { preavisJours: 0, importance: "memoire" },
+      });
+    });
+
+    expect(await rappels(mamie)).toEqual([
+      expect.objectContaining({
+        compte: moi.compte,
+        preavis_jours: 28,
+        importance: "important",
+      }),
+      // Ceux du conjoint ne bougent pas.
+      expect.objectContaining({
+        compte: conjoint.compte,
+        preavis_jours: 60,
+        importance: "normal",
+      }),
+    ]);
+    expect(await rappels(papi)).toEqual([
+      expect.objectContaining({ preavis_jours: 10, importance: "normal" }),
+    ]);
+    expect(
+      await commeMembre(sql(), conjoint.compte, lireReglagesAnniversaires),
+    ).toEqual({
+      cadeau: { preavisJours: 60, importance: "normal" },
+      simple: { preavisJours: 1, importance: "memoire" },
+    });
+
+    // Un nouveau choix prend les réglages du moment.
+    await commeMembre(sql(), moi.compte, tx =>
+      choisirAnniversaire(tx, mamie, "simple"),
+    );
+    expect((await rappels(mamie))[0]).toEqual(
+      expect.objectContaining({ preavis_jours: 0, importance: "memoire" }),
+    );
   });
 });

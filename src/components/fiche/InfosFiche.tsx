@@ -11,13 +11,17 @@ import { useState, useTransition } from "react";
 import { valeurAffichee } from "@/lib/data/fiche-vue";
 import type { Attribut } from "@/lib/data/saisie";
 import type { Nature } from "@/lib/data/views";
+import type { PlainDate } from "@/lib/domain/plain-date";
 import { renseigner } from "../../../app/_actions/fiche";
 import { BOUTON, BOUTON_SECONDAIRE } from "../forms/Champ";
 import { ChampsInfos } from "../forms/ChampsInfos";
 import { PencilIcon } from "../icons";
 import { Panel, SectionLabel } from "../Screen";
 
-function Liste({ attributs }: Readonly<{ attributs: readonly Attribut[] }>) {
+function Liste({
+  attributs,
+  aujourdhui,
+}: Readonly<{ attributs: readonly Attribut[]; aujourdhui?: PlainDate }>) {
   return (
     <dl className="m-0 flex flex-col gap-2.5">
       {attributs.map(attribut => (
@@ -26,7 +30,7 @@ function Liste({ attributs }: Readonly<{ attributs: readonly Attribut[] }>) {
             {attribut.libelle}
           </dt>
           <dd className="m-0 text-[15px] text-ink">
-            {valeurAffichee(attribut)}
+            {valeurAffichee(attribut, aujourdhui)}
           </dd>
         </div>
       ))}
@@ -41,6 +45,7 @@ export function InfosFiche({
   valeurs,
   autres,
   marques,
+  aujourdhui,
 }: Readonly<{
   ficheId: string;
   nature: Nature;
@@ -51,6 +56,8 @@ export function InfosFiche({
   /** Les autres attributs, en lecture seule. */
   autres: readonly Attribut[];
   marques: readonly string[];
+  /** Pour l'âge d'une personne née une année connue. */
+  aujourdhui?: PlainDate;
 }>) {
   const [edition, setEdition] = useState(false);
   const [erreurs, setErreurs] = useState<Readonly<Record<string, string>>>({});
@@ -59,7 +66,7 @@ export function InfosFiche({
 
   const lecture =
     infos.length > 0 ? (
-      <Liste attributs={infos} />
+      <Liste attributs={infos} aujourdhui={aujourdhui} />
     ) : (
       <span className="text-[15px] text-ink-muted">Non renseignées</span>
     );

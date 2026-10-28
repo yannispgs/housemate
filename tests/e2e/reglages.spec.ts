@@ -21,6 +21,29 @@ test.describe("réglages", () => {
     ).toBeHidden();
     await expect(panneau).toBeVisible();
   });
+
+  test("montre ses délais d'anniversaire, et les enregistre", async ({
+    page,
+  }) => {
+    await page.goto("/reglages");
+
+    await expect(
+      page.getByLabel("Cadeau : préavis", { exact: true }),
+    ).toHaveValue("2");
+    await expect(
+      page.getByLabel("Cadeau : unité du préavis", { exact: true }),
+    ).toHaveValue("mois");
+    await expect(
+      page.getByLabel("Sans cadeau : importance", { exact: true }),
+    ).toHaveValue("memoire");
+
+    await page.getByLabel("Cadeau : préavis", { exact: true }).fill("3");
+    await page
+      .getByLabel("Cadeau : unité du préavis", { exact: true })
+      .selectOption("semaine");
+    await page.getByRole("button", { name: "Enregistrer" }).click();
+    await expect(page.getByRole("status")).toHaveText("Enregistré.");
+  });
 });
 
 test.describe("réglages : veille gel", () => {

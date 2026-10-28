@@ -9,6 +9,14 @@
  * porte.
  */
 import type postgres from "postgres";
+import {
+  NIVEAUX,
+  type Niveau,
+  REGLAGES_PAR_DEFAUT,
+  type ReglagesAnniversaires,
+  recurrenceAnniversaire,
+  titreAnniversaire,
+} from "@/lib/data/anniversaires";
 import { avecInfos, echeancesDerivees } from "@/lib/data/infos";
 import {
   avecAttribut,
@@ -562,6 +570,10 @@ export async function deriver(tx: Tx, ficheId: string): Promise<void> {
     }
   }
 
+  if (fiche.nature === "personne") {
+    await suivreAnniversaires(tx, ficheId, fiche.titre, fiche.attributs);
+  }
+
   const gardees = new Set(voulues.map(v => v.source));
 
   for (const existante of existantes) {
@@ -571,6 +583,178 @@ export async function deriver(tx: Tx, ficheId: string): Promise<void> {
         where id = ${existante.id}`;
     }
   }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Les anniversaires, par membre (§ 4.1, décisions des 27 et 28/10/2026)    */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * La date ou le nom d'une personne ont changé : les rappels de tous les
+ * membres suivent, même ceux, privés, que la personne connectée ne voit pas.
+ */
+async function suivreAnniversaires(
+  tx: Tx,
+  ficheId: string,
+  nom: string,
+  attributs: readonly Attribut[],
+): Promise<void> {
+  const recurrence = recurrenceAnniversaire(attributs);
+
+  await tx`
+    select app.suivre_anniversaires(${ficheId},
+      ${recurrence === null ? null : tx.json(recurrence as postgres.JSONValue)},
+      ${titreAnniversaire("cadeau", nom)}, ${titreAnniversaire("simple", nom)})`;
+}
+
+/** Les réglages de la personne connectée, ou ceux de départ. */
+export async function lireReglagesAnniversaires(
+  tx: Tx,
+): Promise<ReglagesAnniversaires> {
+  const [row] = await tx<
+    {
+      cadeauPreavisJours: number;
+      cadeauImportance: Importance;
+      simplePreavisJours: number;
+      simpleImportance: Importance;
+    }[]
+  >`
+    select cadeau_preavis_jours as "cadeauPreavisJours",
+      cadeau_importance as "cadeauImportance",
+      simple_preavis_jours as "simplePreavisJours",
+      simple_importance as "simpleImportance"
+    from app.reglages_anniversaires`;
+
+  return row === undefined
+    ? REGLAGES_PAR_DEFAUT
+    : {
+        cadeau: {
+          preavisJours: row.cadeauPreavisJours,
+          importance: row.cadeauImportance,
+        },
+        simple: {
+          preavisJours: row.simplePreavisJours,
+          importance: row.simpleImportance,
+        },
+      };
+}
+
+/**
+ * Enregistrer ses réglages. Ses rappels déjà créés suivent, sauf ceux réglés
+ * à la main : leur préavis ou leur importance ne sont plus ceux d'avant.
+ */
+export async function reglerAnniversaires(
+  tx: Tx,
+  reglages: ReglagesAnniversaires,
+): Promise<void> {
+  const avant = await lireReglagesAnniversaires(tx);
+  const { cadeau, simple } = reglages;
+
+  await tx`
+    insert into app.reglages_anniversaires (cadeau_preavis_jours,
+      cadeau_importance, simple_preavis_jours, simple_importance)
+    values (${cadeau.preavisJours}, ${cadeau.importance},
+      ${simple.preavisJours}, ${simple.importance})
+    on conflict (membre_id) do update set
+      cadeau_preavis_jours = excluded.cadeau_preavis_jours,
+      cadeau_importance = excluded.cadeau_importance,
+      simple_preavis_jours = excluded.simple_preavis_jours,
+      simple_importance = excluded.simple_importance`;
+
+  for (const niveau of NIVEAUX) {
+    await tx`
+      update app.echeances e set
+        preavis_jours = ${reglages[niveau].preavisJours},
+        importance = ${reglages[niveau].importance}
+      from app.anniversaires a
+      where a.echeance_id = e.id and a.niveau = ${niveau}
+        and e.archivee_le is null
+        and e.preavis_jours = ${avant[niveau].preavisJours}
+        and e.importance = ${avant[niveau].importance}`;
+  }
+}
+
+/** Le choix de la personne connectée pour une personne : un niveau ou rien. */
+export async function lireAnniversaire(
+  tx: Tx,
+  ficheId: string,
+): Promise<Niveau | null> {
+  const [row] = await tx<{ niveau: Niveau }[]>`
+    select niveau from app.anniversaires where fiche_id = ${ficheId}`;
+
+  return row?.niveau ?? null;
+}
+
+export type ChoixAnniversaire = "fait" | "introuvable" | "sans-date";
+
+/**
+ * Choisir son rappel pour une personne visible : son échéance, privée, est
+ * créée, changée de niveau (titre, préavis et importance de ses réglages),
+ * ou archivée pour « pas de rappel ».
+ */
+export async function choisirAnniversaire(
+  tx: Tx,
+  ficheId: string,
+  niveau: Niveau | null,
+): Promise<ChoixAnniversaire> {
+  const [fiche] = await tx<{ titre: string; attributs: Attribut[] }[]>`
+    select titre, attributs from app.fiches
+    where id = ${ficheId} and nature = 'personne'`;
+
+  if (fiche === undefined) {
+    return "introuvable";
+  }
+
+  const [actuel] = await tx<{ echeanceId: string }[]>`
+    select echeance_id::text as "echeanceId" from app.anniversaires
+    where fiche_id = ${ficheId}
+    for update`;
+
+  if (niveau === null) {
+    if (actuel !== undefined) {
+      await tx`delete from app.anniversaires where fiche_id = ${ficheId}`;
+      await tx`
+        update app.echeances set archivee_le = now()
+        where id = ${actuel.echeanceId}`;
+    }
+
+    return "fait";
+  }
+
+  const recurrence = recurrenceAnniversaire(fiche.attributs);
+
+  if (recurrence === null) {
+    return "sans-date";
+  }
+
+  const reglage = (await lireReglagesAnniversaires(tx))[niveau];
+  const titre = titreAnniversaire(niveau, fiche.titre);
+
+  if (actuel !== undefined) {
+    await tx`
+      update app.echeances set titre = ${titre},
+        preavis_jours = ${reglage.preavisJours},
+        importance = ${reglage.importance}
+      where id = ${actuel.echeanceId}`;
+    await tx`
+      update app.anniversaires set niveau = ${niveau}
+      where fiche_id = ${ficheId}`;
+
+    return "fait";
+  }
+
+  const [echeance] = await tx`
+    insert into app.echeances (titre, recurrence, tolerance_jours,
+      preavis_jours, tenue, importance, fiche_id, prive)
+    values (${titre}, ${tx.json(recurrence as postgres.JSONValue)}, 0,
+      ${reglage.preavisJours}, 'souple', ${reglage.importance}, ${ficheId},
+      true)
+    returning id::text`;
+  await tx`
+    insert into app.anniversaires (fiche_id, niveau, echeance_id)
+    values (${ficheId}, ${niveau}, ${echeance?.id as string})`;
+
+  return "fait";
 }
 
 /** Une fiche visible de la personne connectée, ou `null`. */

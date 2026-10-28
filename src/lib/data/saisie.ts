@@ -41,6 +41,19 @@ export type Attribut =
       readonly type: "temperature";
       readonly valeur: number;
     }
+  /**
+   * Un jour de l'année, l'année facultative : une date de naissance (§ 4.1,
+   * décision du 27/10/2026). Sans l'année, pas d'âge.
+   */
+  | {
+      readonly libelle: string;
+      readonly type: "jour";
+      readonly valeur: {
+        readonly jour: number;
+        readonly mois: number;
+        readonly annee: number | null;
+      };
+    }
   /** Un montant en euros, centimes compris (§ 4.1, décision du 27/10/2026). */
   | {
       readonly libelle: string;
