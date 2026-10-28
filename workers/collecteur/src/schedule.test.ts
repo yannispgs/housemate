@@ -3,7 +3,6 @@ import {
   parisDate,
   parisHour,
   shouldEvaluateFrost,
-  shouldFetchRainForecasts,
   shouldFetchTemperatureForecasts,
   shouldReadSensors,
   shouldReviewNight,
@@ -46,10 +45,6 @@ describe("prévisions figées une fois par soir", () => {
 
   it("fige les températures à 20 h, avec le relevé du gel", () => {
     expect(hours.filter(shouldFetchTemperatureForecasts)).toEqual([20]);
-  });
-
-  it("fige la pluie à 22 h, l'heure du rappel de crèche", () => {
-    expect(hours.filter(shouldFetchRainForecasts)).toEqual([22]);
   });
 });
 

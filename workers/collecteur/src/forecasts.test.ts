@@ -3,9 +3,7 @@ import {
   metNorwayUrl,
   openMeteoUrl,
   parseMetNorway,
-  parseMetNorwayRain,
   parseOpenMeteo,
-  parseOpenMeteoRain,
 } from "./forecasts";
 
 // Extraits de réponses réelles (27/09/2026), réduits à quelques heures.
@@ -133,119 +131,5 @@ describe("parseMetNorway", () => {
 
   it("refuse une réponse sans série temporelle", () => {
     expect(() => parseMetNorway({}, now)).toThrow(/série temporelle/);
-  });
-});
-
-describe("pluie — le même créneau dans les deux sources", () => {
-  // La pluie de 8 h à 9 h (heure d'été de Paris) = 06:00 → 07:00 UTC.
-  const start = new Date("2026-09-29T06:00:00Z");
-  const end = new Date("2026-09-29T07:00:00Z");
-
-  it("⚠️ Open-Meteo : la valeur datée 9 h couvre l'heure écoulée, 8 h – 9 h", () => {
-    const points = parseOpenMeteoRain({
-      hourly: {
-        time: [end.getTime() / 1000],
-        precipitation_icon_d2: [2.4],
-      },
-    });
-
-    expect(points).toEqual([
-      {
-        source: "open-meteo",
-        model: "icon_d2",
-        issuedAt: null,
-        start,
-        end,
-        millimetres: 2.4,
-      },
-    ]);
-  });
-
-  it("⚠️ Met Norway : la valeur datée 8 h couvre l'heure à venir, 8 h – 9 h", () => {
-    const points = parseMetNorwayRain(
-      {
-        properties: {
-          meta: { updated_at: "2026-09-28T19:40:00Z" },
-          timeseries: [
-            {
-              time: start.toISOString(),
-              data: {
-                next_1_hours: { details: { precipitation_amount: 1.1 } },
-              },
-            },
-          ],
-        },
-      },
-      new Date("2026-09-28T20:00:00Z"),
-    );
-
-    expect(points).toEqual([
-      {
-        source: "met-norway",
-        model: "locationforecast",
-        issuedAt: new Date("2026-09-28T19:40:00Z"),
-        start,
-        end,
-        millimetres: 1.1,
-      },
-    ]);
-  });
-
-  it("ignore les pas de six heures, au-delà du détail horaire", () => {
-    const points = parseMetNorwayRain(
-      {
-        properties: {
-          timeseries: [
-            {
-              time: "2026-10-01T12:00:00Z",
-              data: { next_6_hours: { details: { precipitation_amount: 4 } } },
-            },
-          ],
-        },
-      },
-      new Date("2026-09-28T20:00:00Z"),
-    );
-
-    expect(points).toEqual([]);
-  });
-
-  it("saute une heure sans valeur, au-delà de la portée d'un modèle", () => {
-    const points = parseOpenMeteoRain({
-      hourly: {
-        time: [end.getTime() / 1000, end.getTime() / 1000 + 3600],
-        precipitation_icon_d2: [0.2, null],
-      },
-    });
-
-    expect(points.map(point => point.millimetres)).toEqual([0.2]);
-  });
-
-  it("ignore un pas horaire au-delà de l'horizon de 72 h", () => {
-    const points = parseMetNorwayRain(
-      {
-        properties: {
-          timeseries: [
-            {
-              time: "2026-10-02T06:00:00Z",
-              data: { next_1_hours: { details: { precipitation_amount: 3 } } },
-            },
-          ],
-        },
-      },
-      new Date("2026-09-28T20:00:00Z"),
-    );
-
-    expect(points).toEqual([]);
-  });
-
-  it("ignore un modèle absent de la réponse", () => {
-    expect(
-      parseOpenMeteoRain({ hourly: { time: [end.getTime() / 1000] } }),
-    ).toEqual([]);
-  });
-
-  it("refuse des réponses sans série", () => {
-    expect(() => parseOpenMeteoRain({})).toThrow(/série horaire/);
-    expect(() => parseMetNorwayRain({}, start)).toThrow(/série temporelle/);
   });
 });

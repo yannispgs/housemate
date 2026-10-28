@@ -2,7 +2,6 @@ import postgres from "postgres";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   insertForecasts,
-  insertRainForecasts,
   insertReadings,
   type Sql,
 } from "../../workers/collecteur/src/store";
@@ -19,7 +18,6 @@ afterAll(async () => {
 beforeEach(async () => {
   await owner`delete from meteo.releves`;
   await owner`delete from meteo.previsions`;
-  await owner`delete from meteo.previsions_pluie`;
   await owner`grant meteo_ecriture to current_user`;
 });
 
@@ -116,56 +114,6 @@ describe("insertForecasts", () => {
         t: -4.5,
       },
     ]);
-  });
-});
-
-describe("insertRainForecasts", () => {
-  it("garde le début et la fin de chaque cumul", async () => {
-    const retrievedAt = new Date("2026-09-28T20:00:03Z");
-    const start = new Date("2026-09-29T06:00:00Z");
-    const end = new Date("2026-09-29T07:00:00Z");
-
-    await asCollector(sql =>
-      insertRainForecasts(sql, retrievedAt, [
-        {
-          source: "open-meteo",
-          model: "icon_d2",
-          issuedAt: null,
-          start,
-          end,
-          millimetres: 2.4,
-        },
-      ]),
-    );
-
-    const rows = await owner`
-      select debut, fin, precipitation_mm::float as mm
-      from meteo.previsions_pluie`;
-
-    expect(rows).toEqual([{ debut: start, fin: end, mm: 2.4 }]);
-  });
-
-  it("refuse un cumul négatif", async () => {
-    await expect(
-      asCollector(sql =>
-        insertRainForecasts(sql, new Date(), [
-          {
-            source: "open-meteo",
-            model: "icon_d2",
-            issuedAt: null,
-            start: new Date("2026-09-29T06:00:00Z"),
-            end: new Date("2026-09-29T07:00:00Z"),
-            millimetres: -1,
-          },
-        ]),
-      ),
-    ).rejects.toThrow(/check/);
-  });
-
-  it("n'envoie aucune requête pour une liste vide", async () => {
-    await expect(
-      asCollector(sql => insertRainForecasts(sql, new Date(), [])),
-    ).resolves.toBeUndefined();
   });
 });
 

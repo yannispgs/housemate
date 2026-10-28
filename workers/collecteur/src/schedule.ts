@@ -40,17 +40,6 @@ export function shouldReadSensors(hour: number): boolean {
 export function shouldFetchTemperatureForecasts(hour: number): boolean {
   return hour === 20;
 }
-
-/**
- * La pluie prévue se fige à 22 h, l'heure du rappel de crèche (SPEC § 12.9),
- * pour qu'il décide sur la prévision la plus fraîche. Tous les soirs, pas
- * seulement les veilles de crèche : autant de soirées de plus pour comparer
- * les modèles, pour un appel de plus par jour.
- */
-export function shouldFetchRainForecasts(hour: number): boolean {
-  return hour === 22;
-}
-
 const PARIS_DATE = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Europe/Paris",
   year: "numeric",
