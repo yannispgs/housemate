@@ -3,11 +3,13 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { z } from "zod";
 import { AjouterPiece } from "@/components/ajout/AjouterPiece";
+import { AnniversaireFiche } from "@/components/fiche/AnniversaireFiche";
 import { InfosFiche } from "@/components/fiche/InfosFiche";
 import { PlantationFiche } from "@/components/fiche/PlantationFiche";
 import { TitreFiche } from "@/components/fiche/TitreFiche";
 import { Panel, Screen, SectionLabel } from "@/components/Screen";
 import { demoEnabled } from "@/demo/mode";
+import { recurrenceAnniversaire } from "@/lib/data/anniversaires";
 import { valeurAffichee } from "@/lib/data/fiche-vue";
 import { horsInfos, INFOS, infosDe, valeursInfos } from "@/lib/data/infos";
 import {
@@ -17,7 +19,14 @@ import {
 } from "@/lib/data/plantes";
 import { emplacementsProposes, marquesConnues } from "@/lib/data/saisie";
 import { enMonNom } from "@/lib/data/server";
-import { lireFiche, listerEmplacements, listerMarques } from "@/lib/data/store";
+import {
+  lireAnniversaire,
+  lireFiche,
+  lireReglagesAnniversaires,
+  listerEmplacements,
+  listerMarques,
+} from "@/lib/data/store";
+import { aujourdhuiAParis } from "@/lib/data/today";
 import { NATURE_LABELS } from "@/lib/data/views";
 
 export const metadata: Metadata = { title: "Fiche" };
@@ -37,12 +46,15 @@ export default async function Page({
   }
 
   await connection();
-  const [fiche, emplacements, marques] = await enMonNom(tx =>
-    Promise.all([
-      lireFiche(tx, id.data),
-      listerEmplacements(tx),
-      listerMarques(tx),
-    ]),
+  const [fiche, emplacements, marques, anniversaire, reglages] = await enMonNom(
+    tx =>
+      Promise.all([
+        lireFiche(tx, id.data),
+        listerEmplacements(tx),
+        listerMarques(tx),
+        lireAnniversaire(tx, id.data),
+        lireReglagesAnniversaires(tx),
+      ]),
   );
 
   if (fiche === null) {
@@ -85,6 +97,16 @@ export default async function Page({
           valeurs={valeursInfos(informations, fiche.nature)}
           autres={horsInfos(informations, fiche.nature)}
           marques={marquesConnues(marques)}
+          aujourdhui={aujourdhuiAParis()}
+        />
+      )}
+
+      {fiche.nature === "personne" && (
+        <AnniversaireFiche
+          ficheId={fiche.id}
+          niveau={anniversaire}
+          reglages={reglages}
+          avecDate={recurrenceAnniversaire(fiche.attributs) !== null}
         />
       )}
 

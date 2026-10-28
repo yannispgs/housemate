@@ -4,7 +4,12 @@
  * Réglages (handoff de design, § G) : l'apparence, les notifications, et les
  * réglages du foyer, dont les écrans de détail ne sont pas encore conçus.
  */
-import { type ReactNode, useEffect, useState } from "react";
+import {
+  type ComponentProps,
+  type ReactNode,
+  useEffect,
+  useState,
+} from "react";
 import type { MarginView } from "@/lib/ui/frost";
 import {
   dataThemeFor,
@@ -14,6 +19,7 @@ import {
   THEME_STORAGE_KEY,
   type ThemeMode,
 } from "@/lib/ui/theme";
+import { AnniversairesPanel } from "../AnniversairesPanel";
 import { ChevronRightIcon } from "../icons";
 import { Panel, Screen } from "../Screen";
 import { VeilleGelPanel } from "../VeilleGelPanel";
@@ -122,6 +128,7 @@ export function SettingsScreen({
   signOut,
   marge,
   appliquerMarge,
+  anniversaires,
 }: Readonly<{
   rows: readonly SettingsRow[];
   /** La section Notifications (`NotificationsPanel`). */
@@ -129,6 +136,8 @@ export function SettingsScreen({
   /** La marge de la veille gel ; absente hors d'un foyer. */
   marge?: MarginView | null;
   appliquerMarge?: (proposition: string) => Promise<string | null>;
+  /** Ses délais d'anniversaire ; absents, la section n'est pas montrée. */
+  anniversaires?: ComponentProps<typeof AnniversairesPanel>;
   /** Server action de déconnexion. */
   signOut: () => Promise<void>;
 }>) {
@@ -178,6 +187,8 @@ export function SettingsScreen({
         {notifications}
 
         {marge && <VeilleGelPanel marge={marge} appliquer={appliquerMarge} />}
+
+        {anniversaires && <AnniversairesPanel {...anniversaires} />}
 
         <Panel className="px-[18px] py-1.5">
           {rows.map((row, index) => (

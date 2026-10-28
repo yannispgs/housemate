@@ -5,12 +5,17 @@ import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { SettingsScreen } from "@/components/screens/SettingsScreen";
 import { DEMO_MARGIN } from "@/demo/data";
 import { demoEnabled } from "@/demo/mode";
+import { REGLAGES_PAR_DEFAUT as ANNIVERSAIRES_PAR_DEFAUT } from "@/lib/data/anniversaires";
 import { REGLAGES_PAR_DEFAUT } from "@/lib/data/resumes";
 import { lireReglagesResumes } from "@/lib/data/resumes-store";
 import { enMonNom } from "@/lib/data/server";
-import { lireMargePrevision } from "@/lib/data/store";
+import {
+  lireMargePrevision,
+  lireReglagesAnniversaires,
+} from "@/lib/data/store";
 import { clePubliqueVapid } from "@/lib/data/web-push";
 import { marginView } from "@/lib/ui/frost";
+import { reglerRappels } from "../_actions/anniversaires";
 import {
   abonnerAppareil,
   desabonnerAppareil,
@@ -20,6 +25,13 @@ import { appliquerMarge } from "../_actions/veille";
 import { deconnexion } from "../connexion/actions";
 
 export const metadata: Metadata = { title: "Réglages" };
+
+/** En démonstration, rien n'est enregistré. */
+async function reglerEnDemo(): Promise<null> {
+  "use server";
+
+  return null;
+}
 
 export default async function Page() {
   const demo = demoEnabled();
@@ -50,6 +62,10 @@ export default async function Page() {
         }
         rows={rows}
         marge={DEMO_MARGIN}
+        anniversaires={{
+          reglages: ANNIVERSAIRES_PAR_DEFAUT,
+          regler: reglerEnDemo,
+        }}
       />
     );
   }
@@ -57,8 +73,13 @@ export default async function Page() {
   // Lus à chaque visite, au nom de la personne connectée : une proposition
   // de marge peut arriver chaque matin.
   await connection();
-  const reglages = await enMonNom(lireReglagesResumes);
-  const marge = await enMonNom(tx => lireMargePrevision(tx));
+  const [reglages, marge, anniversaires] = await enMonNom(tx =>
+    Promise.all([
+      lireReglagesResumes(tx),
+      lireMargePrevision(tx),
+      lireReglagesAnniversaires(tx),
+    ]),
+  );
 
   return (
     <SettingsScreen
@@ -79,6 +100,7 @@ export default async function Page() {
       rows={rows}
       marge={marge && marginView(marge)}
       appliquerMarge={appliquerMarge}
+      anniversaires={{ reglages: anniversaires, regler: reglerRappels }}
     />
   );
 }

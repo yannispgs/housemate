@@ -10,6 +10,72 @@ import type { Nature } from "@/lib/data/views";
 import { CHAMP, Champ, DATE, LISTE, NOMBRE } from "./Champ";
 import { ChampMarque } from "./ChampMarque";
 
+const MOIS = Array.from({ length: 12 }, (_, i) =>
+  new Intl.DateTimeFormat("fr-FR", { month: "long", timeZone: "UTC" }).format(
+    new Date(Date.UTC(2000, i, 1)),
+  ),
+);
+
+/** Un jour et un mois, l'année en plus si on la connaît. */
+function Jour({
+  cle,
+  libelle,
+  valeurs,
+  erreurs,
+}: Readonly<{
+  cle: string;
+  libelle: string;
+  valeurs: Readonly<Record<string, string>>;
+  erreurs: Readonly<Record<string, string>>;
+}>) {
+  return (
+    <Champ
+      libelle={libelle}
+      erreur={
+        erreurs[`${cle}Jour`] ?? erreurs[`${cle}Mois`] ?? erreurs[`${cle}Annee`]
+      }
+    >
+      <span className="flex gap-2.5">
+        <input
+          name={`${cle}Jour`}
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={31}
+          placeholder="Jour"
+          defaultValue={valeurs[`${cle}Jour`]}
+          className={NOMBRE}
+          aria-label={`${libelle} : jour`}
+        />
+        <select
+          name={`${cle}Mois`}
+          defaultValue={valeurs[`${cle}Mois`] ?? ""}
+          className={`${LISTE} flex-1`}
+          aria-label={`${libelle} : mois`}
+        >
+          <option value="">Mois</option>
+          {MOIS.map((nom, i) => (
+            <option key={nom} value={i + 1}>
+              {nom}
+            </option>
+          ))}
+        </select>
+        <input
+          name={`${cle}Annee`}
+          type="number"
+          inputMode="numeric"
+          min={1900}
+          max={2100}
+          placeholder="Année"
+          defaultValue={valeurs[`${cle}Annee`]}
+          className={`${NOMBRE} w-24`}
+          aria-label={`${libelle} : année, facultative`}
+        />
+      </span>
+    </Champ>
+  );
+}
+
 function Saisie({
   champ,
   valeurs,
@@ -30,6 +96,12 @@ function Saisie({
         erreur={erreurs.marque}
         initiale={valeurs.marque}
       />
+    );
+  }
+
+  if (type === "jour") {
+    return (
+      <Jour cle={cle} libelle={libelle} valeurs={valeurs} erreurs={erreurs} />
     );
   }
 
