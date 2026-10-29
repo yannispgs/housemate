@@ -283,6 +283,7 @@ const consommable = (
 ): ConsommableRow => ({
   id: "c",
   intitule: "Filtre à air",
+  ficheId: "f",
   ficheTitre: "La voiture",
   categorie: "Véhicule",
   tenue: "souple",
