@@ -22,6 +22,7 @@ const importante: EcheanceRow = {
   preavisJours: 7,
   tenue: "souple",
   importance: "important",
+  ficheId: null,
   ficheTitre: null,
   destinataire: "Foyer",
   pourMoi: true,

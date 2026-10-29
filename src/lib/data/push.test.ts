@@ -25,6 +25,7 @@ const echeance = (overrides: Partial<EcheanceRow>): EcheanceRow => ({
   preavisJours: 7,
   tenue: "souple",
   importance: "normal",
+  ficheId: null,
   ficheTitre: null,
   destinataire: "Foyer",
   pourMoi: true,
@@ -40,6 +41,7 @@ const consommable = (
 ): ConsommableRow => ({
   id: "c",
   intitule: "Filtre à air",
+  ficheId: "f",
   ficheTitre: "La voiture",
   categorie: "Véhicule",
   tenue: "souple",
