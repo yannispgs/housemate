@@ -402,43 +402,7 @@ export const echeanceSaisie = z.preprocess(
         delais.add(leadKey(rappel));
       }
 
-      const periode = precisionDe(s);
-
-      if (
-        periode === "jour" &&
-        s.motif !== "sinceCompletion" &&
-        s.date === null
-      ) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["date"],
-          message: "Indique une date.",
-        });
-      }
-
-      if (periode === "mois" && s.mois === undefined) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["mois"],
-          message: "Indique le mois.",
-        });
-      }
-
-      if (periode === "saison" && s.saison === undefined) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["saison"],
-          message: "Indique la saison.",
-        });
-      }
-
-      if (periode !== "jour" && s.motif === "once" && s.annee === undefined) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["annee"],
-          message: "Indique l'année.",
-        });
-      }
+      verifierPeriode(s, ctx);
 
       if (
         (s.motif === "interval" || s.motif === "sinceCompletion") &&
@@ -454,6 +418,46 @@ export const echeanceSaisie = z.preprocess(
 );
 
 export type EcheanceSaisie = z.infer<typeof echeanceSaisie>;
+
+/**
+ * Une date pour un jour précis ; le mois ou la saison sinon, et l'année pour
+ * une seule fois.
+ */
+function verifierPeriode(s: EcheanceSaisie, ctx: z.RefinementCtx): void {
+  const periode = precisionDe(s);
+
+  if (periode === "jour" && s.motif !== "sinceCompletion" && s.date === null) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["date"],
+      message: "Indique une date.",
+    });
+  }
+
+  if (periode === "mois" && s.mois === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["mois"],
+      message: "Indique le mois.",
+    });
+  }
+
+  if (periode === "saison" && s.saison === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["saison"],
+      message: "Indique la saison.",
+    });
+  }
+
+  if (periode !== "jour" && s.motif === "once" && s.annee === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["annee"],
+      message: "Indique l'année.",
+    });
+  }
+}
 
 /** Seules « une seule fois » et « chaque année » se donnent par période. */
 function precisionDe(
