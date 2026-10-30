@@ -26,14 +26,17 @@ import {
   listerCategories,
   listerConsommables,
   listerEcheances,
+  listerEmplacements,
   listerFiches,
   listerMarques,
   modifierDureeDeVie,
+  modifierPlante,
   modifierTenueConsommable,
   noterReleve,
   noterRemplacement,
   reglerEntretien,
   remplacerConsommable,
+  renommerFiche,
   volumePiecesJointes,
 } from "@/lib/data/store";
 import { homeDeadlines, recap, upcomingItems } from "@/lib/data/views";
@@ -382,6 +385,85 @@ describe("ajouts", () => {
     expect(
       await commeMembre(sql(), moi.compte, tx => lireFiche(tx, id)),
     ).toMatchObject({ titre: "Le garage", categorie: null, attributs: [] });
+  });
+
+  it("renomme une fiche, au nom de tout le foyer mais pas d'un autre", async () => {
+    const id = await commeMembre(sql(), moi.compte, tx =>
+      creerFiche(tx, {
+        nature: "lieu",
+        titre: "Garage",
+        categorie: null,
+        attributs: [],
+      }),
+    );
+
+    expect(
+      await commeMembre(sql(), conjoint.compte, tx =>
+        renommerFiche(tx, id, "Le garage"),
+      ),
+    ).toBe(true);
+    expect(
+      await commeMembre(sql(), voisin.compte, tx =>
+        renommerFiche(tx, id, "Piraté"),
+      ),
+    ).toBe(false);
+    expect(
+      (await commeMembre(sql(), moi.compte, tx => lireFiche(tx, id)))?.titre,
+    ).toBe("Le garage");
+  });
+
+  it("situe une plante : en pot ou en terre, et son emplacement (§ 12.4)", async () => {
+    const [plante, garage] = await commeMembre(sql(), moi.compte, tx =>
+      Promise.all([
+        creerFiche(tx, {
+          nature: "plante",
+          titre: "Le citronnier",
+          categorie: null,
+          attributs: [
+            { libelle: "Espèce", type: "texte", valeur: "Citrus limon" },
+            { libelle: "Emplacement", type: "texte", valeur: "Extérieur" },
+          ],
+        }),
+        creerFiche(tx, {
+          nature: "lieu",
+          titre: "Garage",
+          categorie: null,
+          attributs: [],
+        }),
+      ]),
+    );
+
+    await commeMembre(sql(), conjoint.compte, async tx => {
+      expect(
+        await modifierPlante(tx, plante, {
+          pot: "En pot",
+          emplacement: "Salon",
+        }),
+      ).toBe(true);
+      // Ce n'est pas une plante : rien ne change.
+      expect(
+        await modifierPlante(tx, garage, { pot: "En pot", emplacement: null }),
+      ).toBe(false);
+    });
+    expect(
+      await commeMembre(sql(), voisin.compte, tx =>
+        modifierPlante(tx, plante, { pot: null, emplacement: null }),
+      ),
+    ).toBe(false);
+
+    const [fiches, emplacements, deLeurCote] = await Promise.all([
+      commeMembre(sql(), moi.compte, listerFiches),
+      commeMembre(sql(), moi.compte, listerEmplacements),
+      commeMembre(sql(), voisin.compte, listerEmplacements),
+    ]);
+
+    expect(fiches.find(f => f.id === plante)?.attributs).toEqual([
+      { libelle: "Espèce", type: "texte", valeur: "Citrus limon" },
+      { libelle: "Emplacement", type: "texte", valeur: "Salon" },
+      { libelle: "Pot ou terre", type: "texte", valeur: "En pot" },
+    ]);
+    expect(emplacements).toEqual(["Salon"]);
+    expect(deLeurCote).not.toContain("Salon");
   });
 
   it("crée une échéance « depuis la dernière fois » avec sa dernière fois", async () => {

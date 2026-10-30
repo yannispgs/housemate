@@ -2,6 +2,12 @@
  * L'inventaire : les fiches du foyer, groupées par catégorie (handoff de
  * design, § F). Logique pure.
  */
+import {
+  type CriterePlante,
+  correspond,
+  criteresPlantes,
+  type SituationPlante,
+} from "@/lib/data/plantes";
 
 export type RecordNature =
   | "Plante"
@@ -23,6 +29,8 @@ export interface RecordView {
   readonly category: string;
   /** Ce qu'on retient de la fiche, en une ligne. */
   readonly descriptor: string;
+  /** Une plante : en pot ou en terre, et son emplacement (§ 12.4). */
+  readonly plante?: SituationPlante;
 }
 
 export interface RecordGroup {
@@ -56,4 +64,34 @@ export function groupRecords(
 /** « 1 fiche », « 4 fiches ». */
 export function recordCount(count: number): string {
   return count === 1 ? "1 fiche" : `${count} fiches`;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Le menu « Plantes » (§ 12.4, décisions du 25/10/2026)                    */
+/* ------------------------------------------------------------------------ */
+
+export const TOUTES_LES_PLANTES = "Toutes";
+
+/**
+ * Les critères du menu, d'après les plantes de la liste. Vide sans plante
+ * renseignée : le menu n'apparaît pas, il n'aurait rien à filtrer.
+ */
+export function plantCriteria(records: readonly RecordView[]): CriterePlante[] {
+  return criteresPlantes(
+    records.flatMap(record => (record.plante ? [record.plante] : [])),
+  );
+}
+
+/** Les plantes qui répondent au critère ; tout, sans critère. */
+export function filterPlants(
+  records: readonly RecordView[],
+  critere: CriterePlante | null,
+): RecordView[] {
+  if (critere === null) {
+    return [...records];
+  }
+
+  return records.filter(
+    record => record.plante !== undefined && correspond(record.plante, critere),
+  );
 }

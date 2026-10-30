@@ -3,6 +3,7 @@
  * titre, sa catégorie et ce qu'on en retient.
  */
 import Link from "next/link";
+import { labelsPlante } from "@/lib/data/plantes";
 import type { RecordNature, RecordView } from "@/lib/ui/inventory";
 import {
   ChevronRightIcon,
@@ -49,6 +50,12 @@ export function RecordCard({ record }: Readonly<{ record: RecordView }>) {
           <span className="inline-flex items-center rounded-full bg-grid px-[9px] py-[3px] text-[11px] leading-none text-ink-secondary">
             {record.category}
           </span>
+          {/* ⚠️ Provisoire : la maquette ne dessine pas encore ce label (§ 12.4). */}
+          {record.plante && labelsPlante(record.plante).length > 0 && (
+            <span className="inline-flex items-center rounded-full border border-border px-[9px] py-[2px] text-[11px] leading-none text-ink-secondary">
+              {labelsPlante(record.plante).join(" · ")}
+            </span>
+          )}
           <span className="text-[12px] leading-[1.4] text-ink-secondary">
             {record.descriptor}
           </span>

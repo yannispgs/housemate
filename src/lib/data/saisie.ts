@@ -10,6 +10,11 @@
  */
 import { z } from "zod";
 import {
+  EMPLACEMENTS_DE_DEPART,
+  POT_OU_TERRE,
+  type PotOuTerre,
+} from "@/lib/data/plantes";
+import {
   type RecurrenceJson,
   serializeRecurrence,
 } from "@/lib/data/recurrence-json";
@@ -185,6 +190,30 @@ export function marquesSuggerees(
 }
 
 /* ------------------------------------------------------------------------ */
+/* Emplacements des plantes (§ 12.4)                                        */
+/* ------------------------------------------------------------------------ */
+
+/** Les emplacements à proposer : ceux de départ et ceux déjà employés. */
+export function emplacementsProposes(employes: readonly string[]): string[] {
+  return sansDoublon([...EMPLACEMENTS_DE_DEPART, ...employes]);
+}
+
+/** Un emplacement saisi, ramené à celui qu'il désigne : « véranda » → « Véranda ». */
+export const emplacementConnu = valeurConnue;
+
+/** En pot ou en terre : facultatif, vide = non renseigné. */
+const potOuTerre = z
+  .union([z.enum(POT_OU_TERRE), z.literal("")], { error: "Choix inconnu." })
+  .optional()
+  .transform((v): PotOuTerre | null => v || null);
+
+/** Ce qu'on dit d'une plante, à la création comme sur sa fiche. */
+export const planteSaisie = z.object({
+  potOuTerre,
+  emplacement: texteFacultatif,
+});
+
+/* ------------------------------------------------------------------------ */
 /* Fiche vierge                                                             */
 /* ------------------------------------------------------------------------ */
 
@@ -192,7 +221,11 @@ export const ficheSaisie = z.object({
   nature: z.enum(NATURES, { error: "Nature inconnue." }),
   titre,
   categorie: texteFacultatif,
+  ...planteSaisie.shape,
 });
+
+/** Renommer une fiche (§ 4.2, décision du 25/10/2026). */
+export const titreSaisie = z.object({ titre });
 
 export type FicheSaisie = z.infer<typeof ficheSaisie>;
 

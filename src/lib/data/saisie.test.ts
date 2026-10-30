@@ -5,6 +5,8 @@ import {
   categorieConnue,
   categoriesProposees,
   echeanceSaisie,
+  emplacementConnu,
+  emplacementsProposes,
   ficheSaisie,
   garantieSaisie,
   lire,
@@ -16,6 +18,7 @@ import {
   remplacementSaisie,
   remplacementValide,
   SUGGESTIONS_MAX,
+  titreSaisie,
 } from "@/lib/data/saisie";
 import { fromISO } from "@/lib/domain/plain-date";
 
@@ -41,7 +44,41 @@ describe("fiche vierge", () => {
       }),
     ).toEqual({
       ok: true,
-      valeur: { nature: "plante", titre: "Le citronnier", categorie: null },
+      valeur: {
+        nature: "plante",
+        titre: "Le citronnier",
+        categorie: null,
+        potOuTerre: null,
+        emplacement: null,
+      },
+    });
+  });
+
+  it("lit en pot / en terre et l'emplacement d'une plante (§ 12.4)", () => {
+    expect(
+      lire(ficheSaisie, {
+        nature: "plante",
+        titre: "Le citronnier",
+        potOuTerre: "En pot",
+        emplacement: " Véranda ",
+      }),
+    ).toMatchObject({
+      ok: true,
+      valeur: { potOuTerre: "En pot", emplacement: "Véranda" },
+    });
+    expect(
+      lire(ficheSaisie, { nature: "plante", titre: "x", potOuTerre: "En bac" }),
+    ).toMatchObject({ ok: false, erreurs: { potOuTerre: "Choix inconnu." } });
+  });
+
+  it("renomme : même règle que le nom à la création", () => {
+    expect(lire(titreSaisie, { titre: " Le citronnier " })).toEqual({
+      ok: true,
+      valeur: { titre: "Le citronnier" },
+    });
+    expect(lire(titreSaisie, { titre: "" })).toMatchObject({
+      ok: false,
+      erreurs: { titre: "Un nom est nécessaire." },
     });
   });
 
@@ -275,6 +312,15 @@ describe("lire", () => {
     );
 
     expect(r).toEqual({ ok: false, erreurs: { formulaire: "Refusé." } });
+  });
+});
+
+describe("emplacements des plantes (§ 12.4)", () => {
+  it("propose Extérieur, Véranda et ceux du foyer, et ramène une saisie", () => {
+    const connus = emplacementsProposes(["salon", "Salon ", "Chambre"]);
+
+    expect(connus).toEqual(["Chambre", "Extérieur", "salon", "Véranda"]);
+    expect(emplacementConnu(" véranda", connus)).toBe("Véranda");
   });
 });
 

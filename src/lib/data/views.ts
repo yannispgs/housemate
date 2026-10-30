@@ -9,6 +9,8 @@
  * Une échéance dormante n'est qu'à « À venir ».
  */
 
+import { situationPlante } from "@/lib/data/plantes";
+import type { Attribut } from "@/lib/data/saisie";
 import type { ConsommableRow } from "@/lib/data/store";
 import {
   compteurEstime,
@@ -77,6 +79,7 @@ export interface FicheRow {
   readonly nature: Nature;
   readonly titre: string;
   readonly categorie: string | null;
+  readonly attributs: readonly Attribut[];
 }
 
 /** Sans catégorie, une fiche se range sous « Sans catégorie ». */
@@ -89,6 +92,9 @@ export function recordViews(fiches: readonly FicheRow[]): RecordView[] {
     nature: NATURE_LABELS[fiche.nature],
     category: fiche.categorie ?? SANS_CATEGORIE,
     descriptor: "",
+    ...(fiche.nature === "plante" && {
+      plante: situationPlante(fiche.attributs),
+    }),
   }));
 }
 
