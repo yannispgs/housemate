@@ -24,6 +24,7 @@ const echeance = (overrides: Partial<EcheanceRow>): EcheanceRow => ({
   preavisJours: 7,
   tenue: "souple",
   importance: "normal",
+  ficheId: null,
   ficheTitre: null,
   destinataire: "Foyer",
   pourMoi: true,
