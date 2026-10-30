@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.4.0](https://github.com/yannispgs/housemate/compare/v0.3.0...v0.4.0) (2026-10-30)
+
+
+### Features
+
+* **ajout:** propose les marques du foyer à mesure qu'on écrit ([b9e3a91](https://github.com/yannispgs/housemate/commit/b9e3a91ff3d272afd5a29bd3bd27bdf6dc746876))
+* **categories:** un thème choisi dans une liste, hérité de la fiche ([5b9e455](https://github.com/yannispgs/housemate/commit/5b9e455767433e634e3281ccc83e7e2f9c6e7a3f))
+* **categories:** un thème choisi dans une liste, hérité de la fiche ([9c1ab89](https://github.com/yannispgs/housemate/commit/9c1ab895345192fdaa6e04142259285bc9196afd))
+* **entretien:** « Fait » sur un consommable, avec la date et le compteur ([d7be15e](https://github.com/yannispgs/housemate/commit/d7be15e578fdc0b3005ca3702b88ce44fea83eda))
+* **entretien:** « Fait » sur un consommable, avec la date et le compteur ([201a2ab](https://github.com/yannispgs/housemate/commit/201a2abd4e6ddb688e794922d561cb9930ef983a))
+* **entretien:** ferme ou souple, et un seuil réglé par objet ([b6f8bd2](https://github.com/yannispgs/housemate/commit/b6f8bd20f17d8d45126fcd2592dedd9ae2dcf66e))
+* **entretien:** les consommables à l'accueil et dans À venir ([b430afe](https://github.com/yannispgs/housemate/commit/b430afeb6ce7e5ff5403db089e6bc0f70a8c7b91))
+* **entretien:** les consommables à l'accueil et dans À venir, ferme ou souple ([0308421](https://github.com/yannispgs/housemate/commit/03084217fff1f84c26ab84bdac7ec900d2dee5aa))
+* **mobile:** efface l'en-tête et les onglets pendant la frappe ([7f7d192](https://github.com/yannispgs/housemate/commit/7f7d192d82142c3433f663cd5cb89552b6c9648d))
+* **mobile:** garde en vue le champ où l'on écrit ([a53d734](https://github.com/yannispgs/housemate/commit/a53d734e9a9646f13165fa87b00444a7c2a24f41))
+* **navigation:** cacher le toggle Échéances / Fiches sur Réglages ([91d9a69](https://github.com/yannispgs/housemate/commit/91d9a6962f59e79f2ea60c6ffc59e9e8dfdbf14e))
+* **previews:** les dates recopiées dans seed suivent le calendrier ([e6a9a0f](https://github.com/yannispgs/housemate/commit/e6a9a0faa8f83b7d33f8a7bdf45524e14be6ced3))
+* **previews:** seed s'enrichit de la saisie d'une PR fusionnée ([2b696c7](https://github.com/yannispgs/housemate/commit/2b696c734e30f68c7be0b123312f4323b8908881))
+* **previews:** seed s'enrichit de la saisie d'une PR fusionnée ([61f8d46](https://github.com/yannispgs/housemate/commit/61f8d46459fe9dea974674b29c72b5a1b6685078))
+* résumés par e-mail réglables par compte ([0f8a1cd](https://github.com/yannispgs/housemate/commit/0f8a1cdb66e2923fea366948bf8761c193bd7f23))
+* résumés par e-mail réglables par compte ([7e71656](https://github.com/yannispgs/housemate/commit/7e7165671b72d82a2438000bb62ea6890e187266))
+
+
+### Bug Fixes
+
+* **ajout:** « ← Retour » en haut du formulaire, au lieu d'« Ajouter autre chose » ([7b0e3cd](https://github.com/yannispgs/housemate/commit/7b0e3cd26a8317e010c52c636f3596538eabd296))
+* **ajout:** la date et la durée tiennent dans l'écran, formulaires compactés ([0bf069f](https://github.com/yannispgs/housemate/commit/0bf069f0f7868ca87611a7cb791e8aacc47ff6a9))
+* **ajout:** la date et la durée tiennent dans l'écran, formulaires compactés ([18b16e2](https://github.com/yannispgs/housemate/commit/18b16e214608c2111b3f5ffcef2259b63d3f8c16))
+* **categories:** pas de focus automatique (SonarCloud) ([e54cbfb](https://github.com/yannispgs/housemate/commit/e54cbfb2ae6da25932fc568a55ad7ac30e1c46fa))
+* **echeances:** « Voir la fiche » mène à la fiche liée ([9787458](https://github.com/yannispgs/housemate/commit/97874583898d234693208a74dac02c4773b8aeb6))
+* **echeances:** « Voir la fiche » mène à la fiche liée, et seulement s'il y en a une ([cc52e10](https://github.com/yannispgs/housemate/commit/cc52e1086d57a53143dd30e50b2e80c6bd0e40ca))
+* **entretien:** les deux tenues définies une seule fois (SonarCloud) ([6b0a4e2](https://github.com/yannispgs/housemate/commit/6b0a4e2e702f1a63645145163ae25fce939c1b3a))
+* **previews:** vérifier l'adresse renvoyée par Neon avant de s'y connecter (Sonar) ([f214523](https://github.com/yannispgs/housemate/commit/f214523f5494e9edf1c45517dd51f15f18239df2))
+* **tests:** ficheId dans les échéances de test des résumés ([81b993b](https://github.com/yannispgs/housemate/commit/81b993b322503ee46113d57fd35fd7c2c5eb4c32))
+* **tests:** ficheId dans les échéances de test des résumés ([1dd2d6c](https://github.com/yannispgs/housemate/commit/1dd2d6c912ffe8d73f94b029e6cf6ac9e64a2411))
+
 ## [0.3.0](https://github.com/yannispgs/housemate/compare/v0.2.0...v0.3.0) (2026-10-16)
 
 
