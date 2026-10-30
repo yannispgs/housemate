@@ -17,7 +17,7 @@ import { NATURES } from "@/lib/data/views";
 import type { Month } from "@/lib/domain/month";
 import { compare, fromISO, type PlainDate } from "@/lib/domain/plain-date";
 import type { Duration, ScheduledRecurrence } from "@/lib/domain/recurrence";
-import { type Reminder, reminderDate } from "@/lib/domain/reminders";
+import { leadKey, type Reminder, reminderDate } from "@/lib/domain/reminders";
 import { IMPORTANCES } from "@/lib/ui/deadline";
 
 /* ------------------------------------------------------------------------ */
@@ -208,72 +208,152 @@ export interface NouvelleFiche {
 /* Échéance                                                                 */
 /* ------------------------------------------------------------------------ */
 
-export const echeanceSaisie = z
-  .object({
-    titre,
-    categorie: texteFacultatif,
-    importance: z.enum(IMPORTANCES, { error: "Importance inconnue." }),
-    tenue: z.enum(["souple", "ferme"], { error: "Tenue inconnue." }),
-    toleranceJours: entier(0, 365),
-    preavisJours: entier(0, 3650),
-    ficheId: z
-      .union([z.uuid(), z.literal("")])
-      .optional()
-      .transform(v => v || null),
-    motif: z.enum(["once", "interval", "annual", "sinceCompletion"], {
-      error: "Récurrence inconnue.",
+/** Les rappels qu'on peut ajouter d'un geste à une échéance (§ 6). */
+export const RAPPELS_MAX = 5;
+
+/** Un rappel à la main : « X unités avant », et ses canaux. Vide : aucun. */
+const rappelSaisi = z.object({
+  nombre: z
+    // Le vide d'abord : `entier` lirait "" comme 0, « le jour même ».
+    .union([z.literal(""), entier(0, 1000)])
+    .optional()
+    .transform(v => (v === "" ? undefined : v)),
+  unite: z
+    .enum(["day", "week", "month"], { error: "Unité inconnue." })
+    .optional(),
+  email: z.literal("on").optional(),
+  push: z.literal("on").optional(),
+});
+
+type RappelSaisi = z.infer<typeof rappelSaisi>;
+
+const CHAMP_RAPPEL = /^rappel(\d)(Nombre|Unite|Email|Push)$/;
+
+/**
+ * Les champs `rappel0Nombre`, `rappel0Unite`… du formulaire, regroupés en une
+ * liste `rappels`, dans l'ordre de leur numéro. Le formulaire envoie des
+ * champs à plat : deux champs du même nom n'en feraient qu'un.
+ */
+function regrouperRappels(champs: unknown): unknown {
+  if (typeof champs !== "object" || champs === null) {
+    return champs;
+  }
+
+  const rappels: Record<string, unknown>[] = [];
+  const autres: Record<string, unknown> = {};
+
+  for (const [nom, valeur] of Object.entries(champs)) {
+    const trouve = CHAMP_RAPPEL.exec(nom);
+
+    if (trouve === null) {
+      autres[nom] = valeur;
+    } else {
+      const [, rang, champ] = trouve as unknown as [string, string, string];
+      const rappel = rappels[Number(rang)] ?? {};
+      rappel[champ.toLowerCase()] = valeur;
+      rappels[Number(rang)] = rappel;
+    }
+  }
+
+  return { ...autres, rappels: Array.from(rappels, r => r ?? {}) };
+}
+
+function rappelDe(r: RappelSaisi): Reminder | null {
+  if (r.nombre === undefined) {
+    return null;
+  }
+
+  return {
+    amount: r.nombre,
+    unit: r.unite ?? "day",
+    channels: [
+      ...(r.email ? (["email"] as const) : []),
+      ...(r.push ? (["push"] as const) : []),
+    ],
+  };
+}
+
+export const echeanceSaisie = z.preprocess(
+  regrouperRappels,
+  z
+    .object({
+      titre,
+      categorie: texteFacultatif,
+      importance: z.enum(IMPORTANCES, { error: "Importance inconnue." }),
+      tenue: z.enum(["souple", "ferme"], { error: "Tenue inconnue." }),
+      toleranceJours: entier(0, 365),
+      preavisJours: entier(0, 3650),
+      ficheId: z
+        .union([z.uuid(), z.literal("")])
+        .optional()
+        .transform(v => v || null),
+      motif: z.enum(["once", "interval", "annual", "sinceCompletion"], {
+        error: "Récurrence inconnue.",
+      }),
+      // Pour « N après la dernière fois » : la dernière fois, facultative.
+      // Pour les autres : la date de l'échéance, ou de la première occurrence.
+      date: z
+        .union([dateIso, z.literal("")])
+        .optional()
+        .transform(v => v || null),
+      nombre: entier(1, 1000).optional(),
+      unite: unite.optional(),
+      // Des rappels à la main, facultatifs (§ 6) : un mois avant pour ne pas
+      // oublier, puis la veille…
+      rappels: z
+        .array(rappelSaisi)
+        .max(RAPPELS_MAX, `${RAPPELS_MAX} rappels au plus.`),
+    })
+    .superRefine((s, ctx) => {
+      const delais = new Set<string>();
+
+      for (const [rang, saisi] of s.rappels.entries()) {
+        const rappel = rappelDe(saisi);
+
+        if (rappel === null) {
+          continue;
+        }
+
+        if (rappel.channels.length === 0) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["rappels", rang],
+            message: "Choisis au moins un canal : e-mail ou notification.",
+          });
+        }
+
+        // Une semaine et sept jours sont le même délai (§ 6).
+        if (delais.has(leadKey(rappel))) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["rappels", rang],
+            message: "Un autre rappel tombe déjà à ce délai.",
+          });
+        }
+
+        delais.add(leadKey(rappel));
+      }
+
+      if (s.motif !== "sinceCompletion" && s.date === null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["date"],
+          message: "Indique une date.",
+        });
+      }
+
+      if (
+        (s.motif === "interval" || s.motif === "sinceCompletion") &&
+        (s.nombre === undefined || s.unite === undefined)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["nombre"],
+          message: "Indique tous les combien.",
+        });
+      }
     }),
-    // Pour « N après la dernière fois » : la dernière fois, facultative.
-    // Pour les autres : la date de l'échéance, ou de la première occurrence.
-    date: z
-      .union([dateIso, z.literal("")])
-      .optional()
-      .transform(v => v || null),
-    nombre: entier(1, 1000).optional(),
-    unite: unite.optional(),
-    // Un rappel à la main, facultatif (§ 6) : « X unités avant », et ses
-    // canaux. Vide : aucun.
-    rappelNombre: z
-      // Le vide d'abord : `entier` lirait "" comme 0, « le jour même ».
-      .union([z.literal(""), entier(0, 1000)])
-      .optional()
-      .transform(v => (v === "" ? undefined : v)),
-    rappelUnite: z.enum(["day", "week", "month"]).optional(),
-    rappelEmail: z.literal("on").optional(),
-    rappelPush: z.literal("on").optional(),
-  })
-  .superRefine((s, ctx) => {
-    if (
-      s.rappelNombre !== undefined &&
-      s.rappelEmail === undefined &&
-      s.rappelPush === undefined
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["rappelNombre"],
-        message: "Choisis au moins un canal : e-mail ou notification.",
-      });
-    }
-
-    if (s.motif !== "sinceCompletion" && s.date === null) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["date"],
-        message: "Indique une date.",
-      });
-    }
-
-    if (
-      (s.motif === "interval" || s.motif === "sinceCompletion") &&
-      (s.nombre === undefined || s.unite === undefined)
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["nombre"],
-        message: "Indique tous les combien.",
-      });
-    }
-  });
+);
 
 export type EcheanceSaisie = z.infer<typeof echeanceSaisie>;
 
@@ -293,20 +373,7 @@ export interface NouvelleEcheance {
 }
 
 function rappelsDe(s: EcheanceSaisie): Reminder[] {
-  if (s.rappelNombre === undefined) {
-    return [];
-  }
-
-  return [
-    {
-      amount: s.rappelNombre,
-      unit: s.rappelUnite ?? "day",
-      channels: [
-        ...(s.rappelEmail ? (["email"] as const) : []),
-        ...(s.rappelPush ? (["push"] as const) : []),
-      ],
-    },
-  ];
+  return s.rappels.map(rappelDe).filter(r => r !== null);
 }
 
 function recurrenceDe(s: EcheanceSaisie): ScheduledRecurrence {
@@ -328,18 +395,29 @@ function recurrenceDe(s: EcheanceSaisie): ScheduledRecurrence {
 }
 
 /**
- * Vrai si le rappel d'une échéance « une seule fois » tomberait aujourd'hui
- * ou avant : il ne préviendrait de rien, la saisie le refuse (§ 6). Pour une
- * échéance qui revient, un rappel passé vaudra pour les suivantes.
+ * Les rangs des rappels d'une échéance « une seule fois » qui tomberaient
+ * aujourd'hui ou avant : ils ne préviendraient de rien, la saisie les refuse
+ * (§ 6). Pour une échéance qui revient, un rappel passé vaudra pour les
+ * suivantes.
  */
-export function rappelDejaPasse(s: EcheanceSaisie, today: PlainDate): boolean {
-  const [rappel] = rappelsDe(s);
+export function rappelsDejaPasses(
+  s: EcheanceSaisie,
+  today: PlainDate,
+): number[] {
+  const { motif, date } = s;
 
-  if (rappel === undefined || s.motif !== "once" || s.date === null) {
-    return false;
+  if (motif !== "once" || date === null) {
+    return [];
   }
 
-  return compare(reminderDate(fromISO(s.date), rappel), today) <= 0;
+  return s.rappels.flatMap((saisi, rang) => {
+    const rappel = rappelDe(saisi);
+
+    return rappel !== null &&
+      compare(reminderDate(fromISO(date), rappel), today) <= 0
+      ? [rang]
+      : [];
+  });
 }
 
 export function nouvelleEcheance(s: EcheanceSaisie): NouvelleEcheance {
@@ -460,7 +538,10 @@ export type Resultat<T> =
   | { readonly ok: true; readonly valeur: T }
   | { readonly ok: false; readonly erreurs: Readonly<Record<string, string>> };
 
-/** Valide les champs d'un formulaire ; une erreur par champ, en français. */
+/**
+ * Valide les champs d'un formulaire ; une erreur par champ, en français. Dans
+ * une liste, une erreur par élément : `rappels.1` pour le deuxième rappel.
+ */
 export function lire<T>(
   schema: z.ZodType<T>,
   champs: Readonly<Record<string, unknown>>,
@@ -474,8 +555,10 @@ export function lire<T>(
   const erreurs: Record<string, string> = {};
 
   for (const issue of parsed.error.issues) {
-    const champ = String(issue.path[0] ?? "formulaire");
-    erreurs[champ] ??= issue.message;
+    const [champ = "formulaire", rang] = issue.path;
+    const cle =
+      typeof rang === "number" ? `${String(champ)}.${rang}` : String(champ);
+    erreurs[cle] ??= issue.message;
   }
 
   return { ok: false, erreurs };

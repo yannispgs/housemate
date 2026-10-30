@@ -72,7 +72,7 @@ export function defaultReminders(importance: ImportanceLevel): Reminder[] {
  * Deux rappels au même délai n'en font qu'un : une semaine et sept jours sont
  * le même délai. Les mois ne se convertissent pas (leur longueur varie).
  */
-function leadKey(reminder: Reminder): string {
+export function leadKey(reminder: Reminder): string {
   if (reminder.unit === "month") {
     return `month:${reminder.amount}`;
   }

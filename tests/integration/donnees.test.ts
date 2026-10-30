@@ -425,10 +425,14 @@ describe("rappels (§ 6)", () => {
       preavisJours: "30",
       motif: "once",
       date: "2026-12-01",
-      rappelNombre: "1",
-      rappelUnite: "month",
-      rappelEmail: "on",
-      rappelPush: "on",
+      // Un mois avant pour ne pas l'oublier, puis la veille.
+      rappel0Nombre: "1",
+      rappel0Unite: "month",
+      rappel0Email: "on",
+      rappel0Push: "on",
+      rappel1Nombre: "1",
+      rappel1Unite: "day",
+      rappel1Push: "on",
     });
 
     if (!saisie.ok) {
@@ -439,9 +443,6 @@ describe("rappels (§ 6)", () => {
       creerEcheance(tx, nouvelleEcheance(saisie.valeur)),
     );
     await commeMembre(sql(), conjoint.compte, tx =>
-      ajouterRappel(tx, id, { amount: 3, unit: "day", channels: ["push"] }),
-    );
-    await commeMembre(sql(), moi.compte, tx =>
       ajouterRappel(tx, id, { amount: 2, unit: "week", channels: ["email"] }),
     );
     const vue = (await commeMembre(sql(), moi.compte, listerEcheances)).find(
@@ -449,9 +450,9 @@ describe("rappels (§ 6)", () => {
     );
 
     expect(vue?.rappels).toEqual([
+      { amount: 1, unit: "day", channels: ["push"] },
       { amount: 1, unit: "month", channels: ["email", "push"] },
       { amount: 2, unit: "week", channels: ["email"] },
-      { amount: 3, unit: "day", channels: ["push"] },
     ]);
   });
 

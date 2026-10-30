@@ -13,7 +13,8 @@ import {
   marquesSuggerees,
   nouvelleEcheance,
   nouvelleGarantie,
-  rappelDejaPasse,
+  RAPPELS_MAX,
+  rappelsDejaPasses,
   remplacementSaisie,
   remplacementValide,
   SUGGESTIONS_MAX,
@@ -60,33 +61,97 @@ describe("fiche vierge", () => {
   });
 });
 
-describe("échéance, rappel à la main", () => {
-  it("lit un rappel et ses canaux", () => {
+describe("échéance, rappels à la main", () => {
+  it("lit plusieurs rappels et leurs canaux, dans l'ordre", () => {
     const r = echeance({
-      rappelNombre: "2",
-      rappelUnite: "week",
-      rappelEmail: "on",
-      rappelPush: "on",
+      rappel0Nombre: "1",
+      rappel0Unite: "month",
+      rappel0Email: "on",
+      rappel1Nombre: "1",
+      rappel1Unite: "day",
+      rappel1Email: "on",
+      rappel1Push: "on",
     });
 
     expect(r.ok && nouvelleEcheance(r.valeur).rappels).toEqual([
-      { amount: 2, unit: "week", channels: ["email", "push"] },
+      { amount: 1, unit: "month", channels: ["email"] },
+      { amount: 1, unit: "day", channels: ["email", "push"] },
     ]);
   });
 
-  it("n'en crée aucun sans délai, et prend les jours par défaut", () => {
-    const vide = echeance({ rappelNombre: "", rappelEmail: "on" });
-    const jours = echeance({ rappelNombre: "3", rappelPush: "on" });
+  it("ignore un rappel sans délai, et prend les jours par défaut", () => {
+    const r = echeance({
+      rappel0Nombre: "",
+      rappel0Email: "on",
+      rappel2Nombre: "3",
+      rappel2Push: "on",
+    });
 
-    expect(vide.ok && nouvelleEcheance(vide.valeur).rappels).toEqual([]);
-    expect(jours.ok && nouvelleEcheance(jours.valeur).rappels).toEqual([
+    expect(r.ok && nouvelleEcheance(r.valeur).rappels).toEqual([
       { amount: 3, unit: "day", channels: ["push"] },
     ]);
+    expect(echeance({})).toMatchObject({ ok: true, valeur: { rappels: [] } });
   });
 
-  it("⚠️ repère un rappel déjà passé, pour une échéance unique seulement", () => {
+  it("⚠️ refuse un rappel sans canal, ou à une unité inconnue, à son rang", () => {
+    expect(
+      echeance({
+        rappel0Nombre: "2",
+        rappel0Email: "on",
+        rappel1Nombre: "3",
+      }),
+    ).toEqual({
+      ok: false,
+      erreurs: {
+        "rappels.1": "Choisis au moins un canal : e-mail ou notification.",
+      },
+    });
+    expect(
+      echeance({
+        rappel0Nombre: "1",
+        rappel0Unite: "year",
+        rappel0Email: "on",
+      }),
+    ).toEqual({ ok: false, erreurs: { "rappels.0": "Unité inconnue." } });
+  });
+
+  it("⚠️ refuse deux rappels au même délai : une semaine vaut sept jours", () => {
+    expect(
+      echeance({
+        rappel0Nombre: "1",
+        rappel0Unite: "week",
+        rappel0Email: "on",
+        rappel1Nombre: "7",
+        rappel1Unite: "day",
+        rappel1Push: "on",
+      }),
+    ).toEqual({
+      ok: false,
+      erreurs: { "rappels.1": "Un autre rappel tombe déjà à ce délai." },
+    });
+  });
+
+  it(`refuse plus de ${RAPPELS_MAX} rappels`, () => {
+    const champs = Object.fromEntries(
+      Array.from({ length: RAPPELS_MAX + 1 }, (_, rang) => [
+        [`rappel${rang}Nombre`, String(rang + 1)],
+        [`rappel${rang}Email`, "on"],
+      ]).flat(),
+    );
+
+    expect(echeance(champs)).toEqual({
+      ok: false,
+      erreurs: { rappels: `${RAPPELS_MAX} rappels au plus.` },
+    });
+  });
+
+  it("ne lit pas autre chose qu'un formulaire", () => {
+    expect(echeanceSaisie.safeParse(null).success).toBe(false);
+  });
+
+  it("⚠️ repère les rappels déjà passés, pour une échéance unique seulement", () => {
     const valeur = (champs: Record<string, string>) => {
-      const r = echeance({ rappelEmail: "on", ...champs });
+      const r = echeance(champs);
 
       if (!r.ok) {
         throw new Error("saisie refusée");
@@ -95,42 +160,44 @@ describe("échéance, rappel à la main", () => {
       return r.valeur;
     };
     const aujourdhui = fromISO("2026-10-25");
+    // Le 1er novembre : une semaine avant tombe aujourd'hui, six jours avant
+    // demain, un mois avant est passé.
+    const trois = {
+      rappel0Nombre: "1",
+      rappel0Unite: "week",
+      rappel0Email: "on",
+      rappel1Nombre: "6",
+      rappel1Email: "on",
+      rappel2Nombre: "1",
+      rappel2Unite: "month",
+      rappel2Email: "on",
+    };
 
-    // Le 1er novembre, une semaine avant : le 25 octobre, aujourd'hui.
+    expect(rappelsDejaPasses(valeur(trois), aujourdhui)).toEqual([0, 2]);
     expect(
-      rappelDejaPasse(
-        valeur({ rappelNombre: "1", rappelUnite: "week" }),
+      rappelsDejaPasses(
+        valeur({ ...trois, motif: "interval", nombre: "1", unite: "month" }),
         aujourdhui,
       ),
-    ).toBe(true);
+    ).toEqual([]);
     expect(
-      rappelDejaPasse(
-        valeur({ rappelNombre: "6", rappelUnite: "day" }),
-        aujourdhui,
-      ),
-    ).toBe(false);
-    expect(
-      rappelDejaPasse(
+      rappelsDejaPasses(
         valeur({
-          rappelNombre: "1",
-          rappelUnite: "month",
-          motif: "interval",
+          ...trois,
+          motif: "sinceCompletion",
+          date: "",
           nombre: "1",
           unite: "month",
         }),
         aujourdhui,
       ),
-    ).toBe(false);
-    expect(rappelDejaPasse(valeur({}), aujourdhui)).toBe(false);
-  });
-
-  it("⚠️ refuse un rappel sans canal", () => {
-    expect(echeance({ rappelNombre: "3" })).toEqual({
-      ok: false,
-      erreurs: {
-        rappelNombre: "Choisis au moins un canal : e-mail ou notification.",
-      },
-    });
+    ).toEqual([]);
+    expect(
+      rappelsDejaPasses(
+        valeur({ rappel0Nombre: "", rappel0Email: "on" }),
+        aujourdhui,
+      ),
+    ).toEqual([]);
   });
 });
 
