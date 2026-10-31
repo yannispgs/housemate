@@ -15,7 +15,14 @@ import {
 } from "@/lib/data/recurrence-json";
 import { NATURES } from "@/lib/data/views";
 import type { Month } from "@/lib/domain/month";
-import { compare, fromISO, type PlainDate } from "@/lib/domain/plain-date";
+import {
+  compare,
+  daysBetween,
+  daysInMonth,
+  fromISO,
+  type PlainDate,
+  plainDate,
+} from "@/lib/domain/plain-date";
 import type { Duration, ScheduledRecurrence } from "@/lib/domain/recurrence";
 import { leadKey, type Reminder, reminderDate } from "@/lib/domain/reminders";
 import { IMPORTANCES } from "@/lib/ui/deadline";
@@ -72,6 +79,47 @@ const entier = (min: number, max: number) =>
 const unite = z.enum(["day", "week", "month", "year"], {
   error: "Unité inconnue.",
 });
+
+/* ------------------------------------------------------------------------ */
+/* Un mois ou une saison au lieu d'une date (décision du foyer, 2026-10-18)  */
+/* ------------------------------------------------------------------------ */
+
+export const PRECISIONS = ["jour", "mois", "saison"] as const;
+export type Precision = (typeof PRECISIONS)[number];
+
+/**
+ * Les saisons météorologiques, en mois entiers : l'hiver commence en
+ * décembre et finit en février de l'année suivante.
+ */
+export const SAISONS = {
+  printemps: { libelle: "Printemps (mars à mai)", debut: 3, mois: 3 },
+  ete: { libelle: "Été (juin à août)", debut: 6, mois: 3 },
+  automne: { libelle: "Automne (septembre à novembre)", debut: 9, mois: 3 },
+  hiver: { libelle: "Hiver (décembre à février)", debut: 12, mois: 3 },
+} as const;
+export type Saison = keyof typeof SAISONS;
+
+/** Une année sans 29 février : la période d'une échéance annuelle. */
+const ANNEE_ORDINAIRE = 2027;
+
+/** Le premier et le dernier jour d'un mois ou d'une saison, cette année-là. */
+export function bornesPeriode(
+  annee: number,
+  periode: { readonly mois: number } | { readonly saison: Saison },
+): { readonly debut: PlainDate; readonly fin: PlainDate } {
+  const [premier, nombre] =
+    "mois" in periode
+      ? [periode.mois, 1]
+      : [SAISONS[periode.saison].debut, SAISONS[periode.saison].mois];
+  const dernier = premier + nombre - 1;
+  const anneeFin = annee + Math.floor((dernier - 1) / 12);
+  const moisFin = ((dernier - 1) % 12) + 1;
+
+  return {
+    debut: plainDate(annee, premier, 1),
+    fin: plainDate(anneeFin, moisFin, daysInMonth(anneeFin, moisFin as Month)),
+  };
+}
 
 /* ------------------------------------------------------------------------ */
 /* Catégories (§ 5.4)                                                       */
@@ -281,7 +329,8 @@ export const echeanceSaisie = z.preprocess(
       categorie: texteFacultatif,
       importance: z.enum(IMPORTANCES, { error: "Importance inconnue." }),
       tenue: z.enum(["souple", "ferme"], { error: "Tenue inconnue." }),
-      toleranceJours: entier(0, 365),
+      // Absente pour une échéance ferme : elle n'a pas de tolérance.
+      toleranceJours: entier(0, 365).optional(),
       preavisJours: entier(0, 3650),
       ficheId: z
         .union([z.uuid(), z.literal("")])
@@ -298,6 +347,20 @@ export const echeanceSaisie = z.preprocess(
         .transform(v => v || null),
       nombre: entier(1, 1000).optional(),
       unite: unite.optional(),
+      // « Une seule fois » et « chaque année » : un jour précis, ou un mois,
+      // ou une saison. Le mois et la saison font de toute la période le temps
+      // de le faire.
+      precision: z
+        .enum(PRECISIONS, { error: "Précision inconnue." })
+        .optional()
+        .transform(v => v ?? "jour"),
+      mois: entier(1, 12).optional(),
+      saison: z
+        .enum(Object.keys(SAISONS) as [Saison, ...Saison[]], {
+          error: "Saison inconnue.",
+        })
+        .optional(),
+      annee: entier(2000, 2200).optional(),
       // Des rappels à la main, facultatifs (§ 6) : un mois avant pour ne pas
       // oublier, puis la veille…
       rappels: z
@@ -339,13 +402,7 @@ export const echeanceSaisie = z.preprocess(
         delais.add(leadKey(rappel));
       }
 
-      if (s.motif !== "sinceCompletion" && s.date === null) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["date"],
-          message: "Indique une date.",
-        });
-      }
+      verifierPeriode(s, ctx);
 
       if (
         (s.motif === "interval" || s.motif === "sinceCompletion") &&
@@ -361,6 +418,90 @@ export const echeanceSaisie = z.preprocess(
 );
 
 export type EcheanceSaisie = z.infer<typeof echeanceSaisie>;
+
+/**
+ * Une date pour un jour précis ; le mois ou la saison sinon, et l'année pour
+ * une seule fois.
+ */
+function verifierPeriode(s: EcheanceSaisie, ctx: z.RefinementCtx): void {
+  const periode = precisionDe(s);
+
+  if (periode === "jour" && s.motif !== "sinceCompletion" && s.date === null) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["date"],
+      message: "Indique une date.",
+    });
+  }
+
+  if (periode === "mois" && s.mois === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["mois"],
+      message: "Indique le mois.",
+    });
+  }
+
+  if (periode === "saison" && s.saison === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["saison"],
+      message: "Indique la saison.",
+    });
+  }
+
+  if (periode !== "jour" && s.motif === "once" && s.annee === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["annee"],
+      message: "Indique l'année.",
+    });
+  }
+}
+
+/** Seules « une seule fois » et « chaque année » se donnent par période. */
+function precisionDe(
+  s: Pick<EcheanceSaisie, "motif" | "precision">,
+): Precision {
+  return s.motif === "once" || s.motif === "annual" ? s.precision : "jour";
+}
+
+/** La période choisie, l'année venue ; `null` pour un jour précis. */
+function periodeDe(
+  s: EcheanceSaisie,
+): { readonly debut: PlainDate; readonly fin: PlainDate } | null {
+  const precision = precisionDe(s);
+
+  if (precision === "jour") {
+    return null;
+  }
+
+  // `superRefine` garantit le mois, la saison et, pour une seule fois, l'année.
+  const annee =
+    s.motif === "once" ? (s.annee ?? ANNEE_ORDINAIRE) : ANNEE_ORDINAIRE;
+
+  return bornesPeriode(
+    annee,
+    precision === "mois"
+      ? { mois: s.mois ?? 1 }
+      : { saison: s.saison ?? "printemps" },
+  );
+}
+
+/**
+ * La tolérance : toute la période pour un mois ou une saison (on a jusqu'à
+ * sa fin) ; aucune pour une échéance ferme, qui est en retard dès le
+ * lendemain (décision du foyer, 2026-10-18) ; sinon celle saisie.
+ */
+function toleranceDe(s: EcheanceSaisie): number {
+  const periode = periodeDe(s);
+
+  if (periode !== null) {
+    return daysBetween(periode.debut, periode.fin);
+  }
+
+  return s.tenue === "ferme" ? 0 : (s.toleranceJours ?? 0);
+}
 
 export interface NouvelleEcheance {
   readonly titre: string;
@@ -384,8 +525,9 @@ function rappelsDe(s: EcheanceSaisie): Reminder[] {
 }
 
 function recurrenceDe(s: EcheanceSaisie): ScheduledRecurrence {
-  // `superRefine` garantit une date hors « depuis la dernière fois ».
-  const date = fromISO(s.date ?? "1970-01-01");
+  // `superRefine` garantit une date, ou une période, hors « depuis la
+  // dernière fois ». Une période commence le premier jour.
+  const date = periodeDe(s)?.debut ?? fromISO(s.date ?? "1970-01-01");
   const every = { count: s.nombre ?? 1, unit: s.unite ?? "day" } as Duration;
 
   switch (s.motif) {
@@ -411,9 +553,9 @@ export function rappelsDejaPasses(
   s: EcheanceSaisie,
   today: PlainDate,
 ): number[] {
-  const { motif, date } = s;
+  const recurrence = recurrenceDe(s);
 
-  if (motif !== "once" || date === null) {
+  if (recurrence.kind !== "once") {
     return [];
   }
 
@@ -421,7 +563,7 @@ export function rappelsDejaPasses(
     const rappel = rappelDe(saisi);
 
     return rappel !== null &&
-      compare(reminderDate(fromISO(date), rappel), today) <= 0
+      compare(reminderDate(recurrence.on, rappel), today) <= 0
       ? [rang]
       : [];
   });
@@ -463,7 +605,7 @@ export function nouvelleEcheance(s: EcheanceSaisie): NouvelleEcheance {
     // Liée à une fiche, elle en hérite la catégorie (§ 5.4) : rien à garder.
     categorie: s.ficheId === null ? s.categorie : null,
     recurrence: serializeRecurrence(recurrenceDe(s)),
-    toleranceJours: s.toleranceJours,
+    toleranceJours: toleranceDe(s),
     preavisJours: s.preavisJours,
     tenue: s.tenue,
     importance: s.importance,
