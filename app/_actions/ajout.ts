@@ -15,6 +15,7 @@ import {
   marquesConnues,
   nouvelleEcheance,
   nouvelleGarantie,
+  RAPPEL_PASSE,
   rappelsDejaPasses,
 } from "@/lib/data/saisie";
 import { enMonNom } from "@/lib/data/server";
@@ -130,10 +131,7 @@ export async function ajouterEcheance(
     return {
       etape: "saisie",
       erreurs: Object.fromEntries(
-        passes.map(rang => [
-          `rappels.${rang}`,
-          "Ce rappel tomberait aujourd'hui ou avant : choisis un délai plus court.",
-        ]),
+        passes.map(rang => [`rappels.${rang}`, RAPPEL_PASSE]),
       ),
     };
   }

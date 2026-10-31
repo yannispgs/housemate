@@ -47,7 +47,12 @@ function Canal({
 
 export function RappelsSaisie({
   erreurs,
-}: Readonly<{ erreurs: Readonly<Record<string, string>> }>) {
+  onLignes,
+}: Readonly<{
+  erreurs: Readonly<Record<string, string>>;
+  /** Un rappel ajouté ou retiré : les erreurs sont à recalculer. */
+  onLignes: () => void;
+}>) {
   // Une clé stable par rappel : en retirer un ne vide pas les suivants.
   const suivant = useRef(0);
   const [cles, setCles] = useState<readonly number[]>([]);
@@ -55,6 +60,7 @@ export function RappelsSaisie({
   const ajouter = () => {
     setCles(actuelles => [...actuelles, suivant.current]);
     suivant.current += 1;
+    onLignes();
   };
 
   return (
@@ -105,9 +111,10 @@ export function RappelsSaisie({
             />
             <button
               type="button"
-              onClick={() =>
-                setCles(actuelles => actuelles.filter(c => c !== cle))
-              }
+              onClick={() => {
+                setCles(actuelles => actuelles.filter(c => c !== cle));
+                onLignes();
+              }}
               className="flex size-9 flex-none cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-ink-secondary hover:bg-grid"
               aria-label={`Retirer le rappel ${rang + 1}`}
             >

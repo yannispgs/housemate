@@ -5,6 +5,7 @@ import {
   categorieConnue,
   categoriesProposees,
   echeanceSaisie,
+  erreursDesRappels,
   ficheSaisie,
   garantieSaisie,
   lire,
@@ -13,6 +14,7 @@ import {
   marquesSuggerees,
   nouvelleEcheance,
   nouvelleGarantie,
+  RAPPEL_PASSE,
   RAPPELS_MAX,
   rappelsDejaPasses,
   remplacementSaisie,
@@ -579,5 +581,55 @@ describe("marques : proposées à mesure qu'on les écrit", () => {
     expect(marqueConnue(" bosch ", connues)).toBe("Bosch");
     expect(marqueConnue(" Miele ", connues)).toBe("Miele");
     expect(marqueConnue(null, connues)).toBeNull();
+  });
+});
+
+describe("erreurs des rappels pendant la saisie", () => {
+  const aujourdhui = fromISO("2026-10-25");
+  // Le formulaire tel qu'il s'ouvre : pas encore de nom.
+  const formulaire = {
+    importance: "normal",
+    tenue: "souple",
+    toleranceJours: "3",
+    preavisJours: "7",
+    motif: "once",
+    date: "2026-11-01",
+  };
+
+  it("signale un rappel déjà passé, sans attendre le nom", () => {
+    expect(
+      erreursDesRappels(
+        {
+          ...formulaire,
+          rappel0Nombre: "1",
+          rappel0Email: "on",
+          rappel1Nombre: "1",
+          rappel1Unite: "week",
+          rappel1Email: "on",
+        },
+        aujourdhui,
+      ),
+    ).toEqual({ "rappels.1": RAPPEL_PASSE });
+  });
+
+  it("ne garde que les erreurs des rappels", () => {
+    expect(
+      erreursDesRappels(
+        {
+          ...formulaire,
+          preavisJours: "-1",
+          rappel0Nombre: "1",
+          rappel0Unite: "year",
+          rappel0Email: "on",
+        },
+        aujourdhui,
+      ),
+    ).toEqual({ "rappels.0": "Unité inconnue." });
+    expect(
+      erreursDesRappels({ ...formulaire, rappel0Nombre: "2" }, aujourdhui),
+    ).toEqual({
+      "rappels.0": "Choisis au moins un canal : e-mail ou notification.",
+    });
+    expect(erreursDesRappels(formulaire, aujourdhui)).toEqual({});
   });
 });

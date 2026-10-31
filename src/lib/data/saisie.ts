@@ -420,6 +420,36 @@ export function rappelsDejaPasses(
   });
 }
 
+export const RAPPEL_PASSE =
+  "Ce rappel tomberait aujourd'hui ou avant : choisis un délai plus court.";
+
+/**
+ * Les erreurs des rappels, tels que le formulaire les contient à l'instant :
+ * de quoi les montrer pendant la saisie, avant l'envoi. Le reste peut être
+ * encore incomplet (pas de nom) : seules comptent celles des rappels.
+ */
+export function erreursDesRappels(
+  champs: Readonly<Record<string, unknown>>,
+  today: PlainDate,
+): Record<string, string> {
+  const saisie = lire(echeanceSaisie, { ...champs, titre: "—" });
+
+  if (!saisie.ok) {
+    return Object.fromEntries(
+      Object.entries(saisie.erreurs).filter(
+        ([cle]) => cle === "rappels" || cle.startsWith("rappels."),
+      ),
+    );
+  }
+
+  return Object.fromEntries(
+    rappelsDejaPasses(saisie.valeur, today).map(rang => [
+      `rappels.${rang}`,
+      RAPPEL_PASSE,
+    ]),
+  );
+}
+
 export function nouvelleEcheance(s: EcheanceSaisie): NouvelleEcheance {
   return {
     titre: s.titre,
