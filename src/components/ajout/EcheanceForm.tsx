@@ -4,8 +4,10 @@
  * Ajouter une échéance, aux quatre récurrences courantes (décision du foyer,
  * 2026-10-13). ⚠️ Provisoire : pas encore dessiné dans Claude Design.
  */
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { ETAT_AJOUT } from "@/lib/data/ajout-etat";
+import { erreursDesRappels } from "@/lib/data/saisie";
+import { fromISO } from "@/lib/domain/plain-date";
 import { IMPORTANCE_LABELS, IMPORTANCES } from "@/lib/ui/deadline";
 import { ajouterEcheance } from "../../../app/_actions/ajout";
 import {
@@ -18,6 +20,8 @@ import {
   NOMBRE,
 } from "../forms/Champ";
 import { ChoixCategorie } from "../forms/ChoixCategorie";
+import { useEnvoi } from "../forms/envoi";
+import { RappelsSaisie } from "./RappelsSaisie";
 
 type Motif = "once" | "interval" | "annual" | "sinceCompletion";
 
@@ -50,9 +54,39 @@ export function EcheanceForm({
   const [ficheId, setFicheId] = useState("");
   const erreurs = etat.etape === "saisie" ? (etat.erreurs ?? {}) : {};
   const repetee = motif === "interval" || motif === "sinceCompletion";
+  const envoyer = useEnvoi(agir);
+  const formulaire = useRef<HTMLFormElement>(null);
+  // Les erreurs des rappels, recalculées à chaque modification : un rappel
+  // déjà passé se voit avant l'envoi. `null` juste après un envoi : ce sont
+  // alors celles que le serveur a rendues.
+  const [direct, setDirect] = useState<Record<string, string> | null>(null);
+  const bloque = direct !== null && Object.keys(direct).length > 0;
+
+  // Après le rendu : changer de récurrence remplace le champ de date.
+  const recalculer = () =>
+    setTimeout(() => {
+      if (formulaire.current === null) {
+        return;
+      }
+
+      const champs = Object.fromEntries(
+        [...new FormData(formulaire.current).entries()].filter(
+          ([, valeur]) => typeof valeur === "string",
+        ),
+      );
+      setDirect(erreursDesRappels(champs, fromISO(aujourdhui)));
+    }, 0);
 
   return (
-    <form action={agir} className="flex flex-col gap-4">
+    <form
+      ref={formulaire}
+      onSubmit={evenement => {
+        setDirect(null);
+        envoyer(evenement);
+      }}
+      onChange={recalculer}
+      className="flex flex-col gap-4"
+    >
       <Champ libelle="Quoi" erreur={erreurs.titre}>
         <input name="titre" className={CHAMP} required maxLength={120} />
       </Champ>
@@ -159,6 +193,7 @@ export function EcheanceForm({
           />
         </Champ>
       </Ligne>
+      <RappelsSaisie erreurs={direct ?? erreurs} onLignes={recalculer} />
       {fiches.length > 0 && (
         <Champ
           libelle="Fiche liée (facultatif)"
@@ -183,9 +218,14 @@ export function EcheanceForm({
       {ficheId === "" && (
         <ChoixCategorie categories={categories} erreur={erreurs.categorie} />
       )}
-      <button type="submit" className={BOUTON} disabled={enCours}>
+      <button type="submit" className={BOUTON} disabled={enCours || bloque}>
         Créer l'échéance
       </button>
+      {bloque && (
+        <p className="-mt-1.5 m-0 text-center text-[12.5px] leading-normal text-ink-secondary">
+          Corrige les rappels signalés pour créer l'échéance.
+        </p>
+      )}
     </form>
   );
 }

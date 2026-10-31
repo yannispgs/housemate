@@ -8,11 +8,13 @@ import { NATURE_LABELS, NATURES } from "@/lib/data/views";
 import { ajouterFiche } from "../../../app/_actions/ajout";
 import { BOUTON, CHAMP, Champ, LISTE } from "../forms/Champ";
 import { ChoixCategorie } from "../forms/ChoixCategorie";
+import { useEnvoi } from "../forms/envoi";
 
 export function FicheForm({
   categories,
 }: Readonly<{ categories: readonly string[] }>) {
   const [etat, agir, enCours] = useActionState(ajouterFiche, ETAT_AJOUT);
+  const envoyer = useEnvoi(agir);
   const router = useRouter();
   const erreurs = etat.etape === "saisie" ? (etat.erreurs ?? {}) : {};
 
@@ -23,7 +25,7 @@ export function FicheForm({
   }, [etat, router]);
 
   return (
-    <form action={agir} className="flex flex-col gap-4">
+    <form onSubmit={envoyer} className="flex flex-col gap-4">
       <Champ libelle="Nature" erreur={erreurs.nature}>
         <select name="nature" defaultValue="equipement" className={LISTE}>
           {NATURES.map(nature => (

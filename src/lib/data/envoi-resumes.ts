@@ -10,20 +10,20 @@
 import type { MailContent } from "@/lib/auth/messages";
 import { toISO } from "@/lib/domain/plain-date";
 import {
+  type ContenuResume,
   composerResume,
   type InstantParis,
   resumesDus,
   type SorteResume,
 } from "./resumes";
 import type { Destinataire } from "./resumes-store";
-import type { EcheanceRow } from "./views";
 
 export interface EnvoiDeps {
   destinataires(): Promise<Destinataire[]>;
   reserver(membre: string, sorte: SorteResume, jour: string): Promise<boolean>;
   liberer(membre: string, sorte: SorteResume, jour: string): Promise<void>;
-  /** Les échéances vues par ce compte, sous sa RLS. */
-  echeances(compte: string): Promise<EcheanceRow[]>;
+  /** Les échéances et consommables vus par ce compte, sous sa RLS. */
+  contenu(compte: string): Promise<ContenuResume>;
   envoyer(to: string, content: MailContent): Promise<void>;
 }
 
@@ -56,12 +56,12 @@ async function pourUn(
     return [];
   }
 
-  const rows = await deps.echeances(d.compte);
+  const contenu = await deps.contenu(d.compte);
 
   return Promise.all(
     reserves.map(async (sorte): Promise<Issue> => {
       const content = composerResume(
-        rows,
+        contenu,
         instant.jour,
         sorte,
         d.reglages,

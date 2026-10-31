@@ -5,6 +5,7 @@ import {
   categorieConnue,
   categoriesProposees,
   echeanceSaisie,
+  erreursDesRappels,
   ficheSaisie,
   garantieSaisie,
   lire,
@@ -13,6 +14,9 @@ import {
   marquesSuggerees,
   nouvelleEcheance,
   nouvelleGarantie,
+  RAPPEL_PASSE,
+  RAPPELS_MAX,
+  rappelsDejaPasses,
   remplacementSaisie,
   remplacementValide,
   SUGGESTIONS_MAX,
@@ -59,6 +63,146 @@ describe("fiche vierge", () => {
   });
 });
 
+describe("échéance, rappels à la main", () => {
+  it("lit plusieurs rappels et leurs canaux, dans l'ordre", () => {
+    const r = echeance({
+      rappel0Nombre: "1",
+      rappel0Unite: "month",
+      rappel0Email: "on",
+      rappel1Nombre: "1",
+      rappel1Unite: "day",
+      rappel1Email: "on",
+      rappel1Push: "on",
+    });
+
+    expect(r.ok && nouvelleEcheance(r.valeur).rappels).toEqual([
+      { amount: 1, unit: "month", channels: ["email"] },
+      { amount: 1, unit: "day", channels: ["email", "push"] },
+    ]);
+  });
+
+  it("ignore un rappel sans délai, et prend les jours par défaut", () => {
+    const r = echeance({
+      rappel0Nombre: "",
+      rappel0Email: "on",
+      rappel2Nombre: "3",
+      rappel2Push: "on",
+    });
+
+    expect(r.ok && nouvelleEcheance(r.valeur).rappels).toEqual([
+      { amount: 3, unit: "day", channels: ["push"] },
+    ]);
+    expect(echeance({})).toMatchObject({ ok: true, valeur: { rappels: [] } });
+  });
+
+  it("⚠️ refuse un rappel sans canal, ou à une unité inconnue, à son rang", () => {
+    expect(
+      echeance({
+        rappel0Nombre: "2",
+        rappel0Email: "on",
+        rappel1Nombre: "3",
+      }),
+    ).toEqual({
+      ok: false,
+      erreurs: {
+        "rappels.1": "Choisis au moins un canal : e-mail ou notification.",
+      },
+    });
+    expect(
+      echeance({
+        rappel0Nombre: "1",
+        rappel0Unite: "year",
+        rappel0Email: "on",
+      }),
+    ).toEqual({ ok: false, erreurs: { "rappels.0": "Unité inconnue." } });
+  });
+
+  it("⚠️ refuse deux rappels au même délai : une semaine vaut sept jours", () => {
+    expect(
+      echeance({
+        rappel0Nombre: "1",
+        rappel0Unite: "week",
+        rappel0Email: "on",
+        rappel1Nombre: "7",
+        rappel1Unite: "day",
+        rappel1Push: "on",
+      }),
+    ).toEqual({
+      ok: false,
+      erreurs: { "rappels.1": "Un autre rappel tombe déjà à ce délai." },
+    });
+  });
+
+  it(`refuse plus de ${RAPPELS_MAX} rappels`, () => {
+    const champs = Object.fromEntries(
+      Array.from({ length: RAPPELS_MAX + 1 }, (_, rang) => [
+        [`rappel${rang}Nombre`, String(rang + 1)],
+        [`rappel${rang}Email`, "on"],
+      ]).flat(),
+    );
+
+    expect(echeance(champs)).toEqual({
+      ok: false,
+      erreurs: { rappels: `${RAPPELS_MAX} rappels au plus.` },
+    });
+  });
+
+  it("ne lit pas autre chose qu'un formulaire", () => {
+    expect(echeanceSaisie.safeParse(null).success).toBe(false);
+  });
+
+  it("⚠️ repère les rappels déjà passés, pour une échéance unique seulement", () => {
+    const valeur = (champs: Record<string, string>) => {
+      const r = echeance(champs);
+
+      if (!r.ok) {
+        throw new Error("saisie refusée");
+      }
+
+      return r.valeur;
+    };
+    const aujourdhui = fromISO("2026-10-25");
+    // Le 1er novembre : une semaine avant tombe aujourd'hui, six jours avant
+    // demain, un mois avant est passé.
+    const trois = {
+      rappel0Nombre: "1",
+      rappel0Unite: "week",
+      rappel0Email: "on",
+      rappel1Nombre: "6",
+      rappel1Email: "on",
+      rappel2Nombre: "1",
+      rappel2Unite: "month",
+      rappel2Email: "on",
+    };
+
+    expect(rappelsDejaPasses(valeur(trois), aujourdhui)).toEqual([0, 2]);
+    expect(
+      rappelsDejaPasses(
+        valeur({ ...trois, motif: "interval", nombre: "1", unite: "month" }),
+        aujourdhui,
+      ),
+    ).toEqual([]);
+    expect(
+      rappelsDejaPasses(
+        valeur({
+          ...trois,
+          motif: "sinceCompletion",
+          date: "",
+          nombre: "1",
+          unite: "month",
+        }),
+        aujourdhui,
+      ),
+    ).toEqual([]);
+    expect(
+      rappelsDejaPasses(
+        valeur({ rappel0Nombre: "", rappel0Email: "on" }),
+        aujourdhui,
+      ),
+    ).toEqual([]);
+  });
+});
+
 describe("échéance", () => {
   it("une seule fois, à une date", () => {
     const r = echeance({});
@@ -73,6 +217,7 @@ describe("échéance", () => {
       importance: "normal",
       ficheId: null,
       derniereFois: null,
+      rappels: [],
     });
   });
 
@@ -436,5 +581,55 @@ describe("marques : proposées à mesure qu'on les écrit", () => {
     expect(marqueConnue(" bosch ", connues)).toBe("Bosch");
     expect(marqueConnue(" Miele ", connues)).toBe("Miele");
     expect(marqueConnue(null, connues)).toBeNull();
+  });
+});
+
+describe("erreurs des rappels pendant la saisie", () => {
+  const aujourdhui = fromISO("2026-10-25");
+  // Le formulaire tel qu'il s'ouvre : pas encore de nom.
+  const formulaire = {
+    importance: "normal",
+    tenue: "souple",
+    toleranceJours: "3",
+    preavisJours: "7",
+    motif: "once",
+    date: "2026-11-01",
+  };
+
+  it("signale un rappel déjà passé, sans attendre le nom", () => {
+    expect(
+      erreursDesRappels(
+        {
+          ...formulaire,
+          rappel0Nombre: "1",
+          rappel0Email: "on",
+          rappel1Nombre: "1",
+          rappel1Unite: "week",
+          rappel1Email: "on",
+        },
+        aujourdhui,
+      ),
+    ).toEqual({ "rappels.1": RAPPEL_PASSE });
+  });
+
+  it("ne garde que les erreurs des rappels", () => {
+    expect(
+      erreursDesRappels(
+        {
+          ...formulaire,
+          preavisJours: "-1",
+          rappel0Nombre: "1",
+          rappel0Unite: "year",
+          rappel0Email: "on",
+        },
+        aujourdhui,
+      ),
+    ).toEqual({ "rappels.0": "Unité inconnue." });
+    expect(
+      erreursDesRappels({ ...formulaire, rappel0Nombre: "2" }, aujourdhui),
+    ).toEqual({
+      "rappels.0": "Choisis au moins un canal : e-mail ou notification.",
+    });
+    expect(erreursDesRappels(formulaire, aujourdhui)).toEqual({});
   });
 });

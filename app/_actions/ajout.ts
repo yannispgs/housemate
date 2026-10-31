@@ -15,6 +15,8 @@ import {
   marquesConnues,
   nouvelleEcheance,
   nouvelleGarantie,
+  RAPPEL_PASSE,
+  rappelsDejaPasses,
 } from "@/lib/data/saisie";
 import { enMonNom } from "@/lib/data/server";
 import {
@@ -121,6 +123,17 @@ export async function ajouterEcheance(
 
   if (!saisie.ok) {
     return { etape: "saisie", erreurs: saisie.erreurs };
+  }
+
+  const passes = rappelsDejaPasses(saisie.valeur, aujourdhuiAParis());
+
+  if (passes.length > 0) {
+    return {
+      etape: "saisie",
+      erreurs: Object.fromEntries(
+        passes.map(rang => [`rappels.${rang}`, RAPPEL_PASSE]),
+      ),
+    };
   }
 
   await enMonNom(async tx =>

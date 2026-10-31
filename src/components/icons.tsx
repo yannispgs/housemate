@@ -192,3 +192,28 @@ export const GearIcon = (props: IconProps) => (
     <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
   </Icon>
 );
+
+/*
+ * Les canaux d'un rappel, et la croix pour le retirer : pas encore dans la
+ * maquette, tracés Lucide (mail, smartphone, x) en attendant Claude Design.
+ */
+
+export const MailIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <path d="M22 7l-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+  </Icon>
+);
+
+export const PhoneIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <rect x="5" y="2" width="14" height="20" rx="2" />
+    <path d="M12 18h.01" />
+  </Icon>
+);
+
+export const CloseIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M18 6L6 18M6 6l12 12" />
+  </Icon>
+);
