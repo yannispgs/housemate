@@ -25,6 +25,7 @@ const aFaire: EcheanceRow = {
   creeLe: fromISO("2026-10-01"),
   completions: [],
   rappels: [],
+  notifier: null,
 };
 
 const moi: Destinataire = {
