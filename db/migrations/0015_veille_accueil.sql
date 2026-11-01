@@ -16,11 +16,10 @@ create function app.nuit_en_cours(instant timestamptz) returns date
   language sql stable set search_path = ''
   as $$
     select case
-      when (instant at time zone 'Europe/Paris')::time >= time '20:00'
-        then (instant at time zone 'Europe/Paris')::date
-      when (instant at time zone 'Europe/Paris')::time < time '09:30'
-        then (instant at time zone 'Europe/Paris')::date - 1
+      when paris.heure::time >= time '20:00' then paris.heure::date
+      when paris.heure::time < time '09:30' then paris.heure::date - 1
     end
+    from (select instant at time zone 'Europe/Paris' as heure) paris
   $$;
 
 -- Les plantes de la nuit en cours qui ont un niveau (alerte, vigilance,
@@ -51,9 +50,9 @@ create function app.veille_gel_en_cours(instant timestamptz)
     join meteo.nuits_gel_plantes p on p.nuit = n.nuit
     join app.fiches f on f.id = p.fiche_id
     left join lateral (
-      select a->>'valeur' as valeur
-      from jsonb_array_elements(f.attributs) a
-      where a->>'libelle' = 'Emplacement' and a->>'type' = 'texte'
+      select a.valeur
+      from jsonb_to_recordset(f.attributs) a(libelle text, type text, valeur text)
+      where a.libelle = 'Emplacement' and a.type = 'texte'
       limit 1
     ) e on true
     where n.nuit = app.nuit_en_cours(instant)

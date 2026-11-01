@@ -29,19 +29,17 @@ select
   case when f.prive then f.cree_par end as reservee_a
 from app.fiches f
 cross join lateral (
-  select a->>'valeur' as valeur
-  from jsonb_array_elements(f.attributs) a
-  where a->>'libelle' = 'Emplacement' and a->>'type' = 'texte'
+  select a.valeur
+  from jsonb_to_recordset(f.attributs) a(libelle text, type text, valeur text)
+  where a.libelle = 'Emplacement' and a.type = 'texte'
   limit 1
 ) e
 cross join lateral (
   select
-    max((a->>'valeur')::numeric) filter (where a->>'libelle' = 'Seuil de dégâts')
-      as degats,
-    max((a->>'valeur')::numeric) filter (where a->>'libelle' = 'Seuil de mort')
-      as mort
-  from jsonb_array_elements(f.attributs) a
-  where a->>'type' = 'temperature'
+    max(a.valeur::numeric) filter (where a.libelle = 'Seuil de dégâts') as degats,
+    max(a.valeur::numeric) filter (where a.libelle = 'Seuil de mort') as mort
+  from jsonb_to_recordset(f.attributs) a(libelle text, type text, valeur text)
+  where a.type = 'temperature'
 ) s
 where f.nature = 'plante'
   and f.archivee_le is null

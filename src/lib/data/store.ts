@@ -479,7 +479,7 @@ export async function lireVeilleGel(
   tx: Tx,
   instant: Date,
 ): Promise<FrostRow[]> {
-  return tx<FrostRow[]>`
+  const rows = await tx<FrostRow[]>`
     select
       to_char(nuit, 'YYYY-MM-DD') as nuit, chauffee, fiche_id::text as "ficheId",
       titre, emplacement_du_soir as "emplacementDuSoir", emplacement, niveau,
@@ -487,6 +487,8 @@ export async function lireVeilleGel(
       seuil_degats::float8 as "seuilDegats", seuil_mort::float8 as "seuilMort"
     from app.veille_gel_en_cours(${instant})
     order by titre, fiche_id`;
+
+  return rows;
 }
 
 /** « Chauffer » la véranda cette nuit, ou se raviser. */
