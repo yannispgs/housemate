@@ -35,6 +35,7 @@ const echeance = (overrides: Partial<EcheanceRow>): EcheanceRow => ({
   pourMoi: true,
   creeLe: d("2026-10-01"),
   completions: [],
+  rappels: [],
   ...overrides,
 });
 

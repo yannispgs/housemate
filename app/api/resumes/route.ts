@@ -7,7 +7,11 @@ import {
   reserverResume,
 } from "@/lib/data/resumes-store";
 import { baseApp } from "@/lib/data/server";
-import { commeMembre, listerEcheances } from "@/lib/data/store";
+import {
+  commeMembre,
+  listerConsommables,
+  listerEcheances,
+} from "@/lib/data/store";
 import { instantAParis } from "@/lib/data/today";
 
 /**
@@ -36,7 +40,11 @@ export async function POST(request: Request): Promise<Response> {
       reserver: (membre, sorte, jour) =>
         reserverResume(sql, membre, sorte, jour),
       liberer: (membre, sorte, jour) => libererResume(sql, membre, sorte, jour),
-      echeances: compte => commeMembre(sql, compte, listerEcheances),
+      contenu: compte =>
+        commeMembre(sql, compte, async tx => ({
+          echeances: await listerEcheances(tx),
+          consommables: await listerConsommables(tx),
+        })),
       envoyer: envoyerMail(),
     },
     instantAParis(),

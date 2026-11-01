@@ -43,8 +43,15 @@ test.describe("réglages", () => {
       name: "Heure du résumé quotidien",
     });
     await expect(heureQuotidien).toBeHidden();
+    // Désactivé, il dit qu'un rappel par e-mail le fait partir quand même.
+    const sansQuotidien = page.getByText("Désactivé, il part quand même");
+    await expect(sansQuotidien).toContainText(
+      "à 7 h les jours où tombe un rappel par e-mail",
+    );
+    await expect(sansQuotidien).toContainText("le jour même d'une critique");
     await page.getByRole("switch", { name: "Résumé quotidien" }).click();
     await expect(heureQuotidien).toBeVisible();
+    await expect(sansQuotidien).toBeHidden();
 
     await page.getByRole("button", { name: "30 jours" }).click();
     await expect(

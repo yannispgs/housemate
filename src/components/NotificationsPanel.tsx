@@ -253,6 +253,17 @@ export function NotificationsPanel({
             label="Résumé quotidien"
           />
         </Ligne>
+        {!reglages.quotidien && (
+          // Un rappel par e-mail le fait partir quand même (§ 6, décision du
+          // 29/10/2026) : sans cela, il ne serait jamais reçu.
+          <span className={AIDE}>
+            Désactivé, il part quand même à {reglages.quotidienHeure} h les
+            jours où tombe un rappel par e-mail : ceux ajoutés à une échéance
+            {reglages.email.critique &&
+              ", et le jour même d'une critique (colonne E-mail)"}
+            . Il ne contient alors que ces rappels.
+          </span>
+        )}
         {reglages.quotidien && (
           <div className="flex items-center justify-between gap-2.5">
             <span className={`${AIDE} flex-1`}>

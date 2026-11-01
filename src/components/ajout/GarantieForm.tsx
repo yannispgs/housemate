@@ -21,6 +21,7 @@ import {
 } from "../forms/Champ";
 import { ChampMarque } from "../forms/ChampMarque";
 import { ChoixCategorie } from "../forms/ChoixCategorie";
+import { useEnvoi } from "../forms/envoi";
 import { envoyerPieceJointe } from "../forms/fichier";
 
 export function GarantieForm({
@@ -34,6 +35,7 @@ export function GarantieForm({
   marques: readonly string[];
 }>) {
   const [etat, agir, enCours] = useActionState(ajouterGarantie, ETAT_AJOUT);
+  const envoyer = useEnvoi(agir);
   const facture = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const [envoi, setEnvoi] = useState<
@@ -87,7 +89,7 @@ export function GarantieForm({
   }
 
   return (
-    <form action={agir} className="flex flex-col gap-4">
+    <form onSubmit={envoyer} className="flex flex-col gap-4">
       <Champ libelle="Objet" erreur={erreurs.titre}>
         <input name="titre" className={CHAMP} required maxLength={120} />
       </Champ>
