@@ -11,6 +11,7 @@
  * Chaque saisie passe par la même validation que le formulaire d'ajout :
  * le jeu ne peut pas contenir ce que l'app refuserait.
  */
+import { attributsPlante, type PotOuTerre } from "@/lib/data/plantes";
 import {
   type Attribut,
   type EcheanceSaisie,
@@ -121,6 +122,9 @@ export function jeuFictif(today: PlainDate): JeuFictif {
     consommables: [],
     releves: [],
   });
+  // En pot ou en terre, et l'emplacement (§ 12.4) : de quoi essayer le filtre.
+  const plante = (pot: PotOuTerre, emplacement: string) =>
+    attributsPlante({ pot, emplacement });
   const texte = (libelle: string, valeur: string): Attribut => ({
     libelle,
     type: "texte",
@@ -198,47 +202,65 @@ export function jeuFictif(today: PlainDate): JeuFictif {
           },
         ],
       },
-      fiche("plante", "Le citronnier en pot", "Jardin", [
-        // Depuis la dernière fois (motif 4) : en préavis.
-        echeance({
-          titre: "Engrais du citronnier",
-          categorie: "Jardin",
-          motif: "sinceCompletion",
-          date: jour(-13),
-          nombre: 15,
-          unite: "day",
-        }),
-        echeance({
-          titre: "Rentrer le citronnier sous abri",
-          categorie: "Jardin",
-          motif: "annual",
-          date: jour(5),
-          tenue: "ferme",
-          importance: "important",
-          toleranceJours: 2,
-          preavisJours: 14,
-        }),
-      ]),
-      fiche("plante", "Le laurier rose", "Jardin", [
-        echeance({
-          titre: "Hivernage du laurier rose",
-          categorie: "Jardin",
-          motif: "once",
-          date: jour(30),
-          preavisJours: 10,
-        }),
-      ]),
-      fiche("plante", "Le rosier grimpant", "Jardin", [
-        // Fait il y a trois jours : figure au récap.
-        echeance({
-          titre: "Fleurs fanées du rosier",
-          categorie: "Jardin",
-          motif: "sinceCompletion",
-          date: jour(-3),
-          nombre: 15,
-          unite: "day",
-        }),
-      ]),
+      fiche(
+        "plante",
+        "Le citronnier en pot",
+        "Jardin",
+        [
+          // Depuis la dernière fois (motif 4) : en préavis.
+          echeance({
+            titre: "Engrais du citronnier",
+            categorie: "Jardin",
+            motif: "sinceCompletion",
+            date: jour(-13),
+            nombre: 15,
+            unite: "day",
+          }),
+          echeance({
+            titre: "Rentrer le citronnier sous abri",
+            categorie: "Jardin",
+            motif: "annual",
+            date: jour(5),
+            tenue: "ferme",
+            importance: "important",
+            toleranceJours: 2,
+            preavisJours: 14,
+          }),
+        ],
+        plante("En pot", "Extérieur"),
+      ),
+      fiche(
+        "plante",
+        "Le laurier rose",
+        "Jardin",
+        [
+          echeance({
+            titre: "Hivernage du laurier rose",
+            categorie: "Jardin",
+            motif: "once",
+            date: jour(30),
+            preavisJours: 10,
+          }),
+        ],
+        plante("En pot", "Véranda"),
+      ),
+      fiche(
+        "plante",
+        "Le rosier grimpant",
+        "Jardin",
+        [
+          // Fait il y a trois jours : figure au récap.
+          echeance({
+            titre: "Fleurs fanées du rosier",
+            categorie: "Jardin",
+            motif: "sinceCompletion",
+            date: jour(-3),
+            nombre: 15,
+            unite: "day",
+          }),
+        ],
+        plante("En terre", "Extérieur"),
+      ),
       fiche(
         "equipement",
         "La chaudière",

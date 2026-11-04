@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   ALL_CATEGORIES,
+  filterNature,
+  filterPlants,
   groupRecords,
+  plantCriteria,
   type RecordView,
   recordCategories,
   recordCount,
+  recordNatures,
 } from "./inventory";
 
 const record = (title: string, category: string): RecordView => ({
@@ -45,5 +49,54 @@ describe("recordCount", () => {
   it("accorde au singulier et au pluriel", () => {
     expect(recordCount(1)).toBe("1 fiche");
     expect(recordCount(4)).toBe("4 fiches");
+  });
+});
+
+describe("le menu « Plantes » (§ 12.4)", () => {
+  const plante = (
+    title: string,
+    pot: "En pot" | "En terre" | null,
+    emplacement: string | null,
+  ): RecordView => ({
+    ...record(title, "Jardin"),
+    plante: { pot, emplacement },
+  });
+  const liste = [
+    plante("Citronnier", "En pot", "Véranda"),
+    plante("Rosier", "En terre", "Extérieur"),
+    plante("Ficus", null, null),
+    { ...record("Voiture", "Véhicule"), nature: "Véhicule" as const },
+  ];
+
+  it("propose les critères des plantes renseignées, sur le type « Plante » seulement", () => {
+    expect(plantCriteria(liste, "Plante").map(c => c.valeur)).toEqual([
+      "En pot",
+      "En terre",
+      "Extérieur",
+      "Véranda",
+    ]);
+    expect(plantCriteria([plante("Ficus", null, null)], "Plante")).toEqual([]);
+    expect(plantCriteria(liste, null)).toEqual([]);
+    expect(plantCriteria(liste, "Véhicule")).toEqual([]);
+  });
+
+  it("filtre par type, et liste les types présents", () => {
+    expect(recordNatures(liste)).toEqual(["Plante", "Véhicule"]);
+    expect(filterNature(liste, "Véhicule").map(r => r.title)).toEqual([
+      "Voiture",
+    ]);
+    expect(filterNature(liste, null)).toEqual(liste);
+  });
+
+  it("ne garde que les plantes du critère, ou tout sans critère", () => {
+    expect(
+      filterPlants(liste, { sorte: "pot", valeur: "En pot" }).map(r => r.title),
+    ).toEqual(["Citronnier"]);
+    expect(
+      filterPlants(liste, { sorte: "emplacement", valeur: "Extérieur" }).map(
+        r => r.title,
+      ),
+    ).toEqual(["Rosier"]);
+    expect(filterPlants(liste, null)).toEqual(liste);
   });
 });

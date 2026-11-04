@@ -2,6 +2,12 @@
  * L'inventaire : les fiches du foyer, groupées par catégorie (handoff de
  * design, § F). Logique pure.
  */
+import {
+  type CriterePlante,
+  correspond,
+  criteresPlantes,
+  type SituationPlante,
+} from "@/lib/data/plantes";
 
 export type RecordNature =
   | "Plante"
@@ -23,6 +29,8 @@ export interface RecordView {
   readonly category: string;
   /** Ce qu'on retient de la fiche, en une ligne. */
   readonly descriptor: string;
+  /** Une plante : en pot ou en terre, et son emplacement (§ 12.4). */
+  readonly plante?: SituationPlante;
 }
 
 export interface RecordGroup {
@@ -53,7 +61,66 @@ export function groupRecords(
     }));
 }
 
+/* ------------------------------------------------------------------------ */
+/* Le menu « Type » : la nature des fiches (§ 4.1)                           */
+/* ------------------------------------------------------------------------ */
+
+export const ALL_NATURES = "Tous les types";
+
+/** Les types présents, dans l'ordre où ils apparaissent. */
+export function recordNatures(records: readonly RecordView[]): RecordNature[] {
+  return Array.from(new Set(records.map(record => record.nature)));
+}
+
+/** Les fiches du type choisi ; toutes, sans type. */
+export function filterNature(
+  records: readonly RecordView[],
+  nature: RecordNature | null,
+): RecordView[] {
+  return nature === null
+    ? [...records]
+    : records.filter(record => record.nature === nature);
+}
+
 /** « 1 fiche », « 4 fiches ». */
 export function recordCount(count: number): string {
   return count === 1 ? "1 fiche" : `${count} fiches`;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Le menu « Plantes » (§ 12.4, décisions du 25/10/2026)                    */
+/* ------------------------------------------------------------------------ */
+
+export const TOUTES_LES_PLANTES = "Toutes";
+
+/**
+ * Les critères du menu, d'après les plantes renseignées. Seulement sur le
+ * type « Plante » : ailleurs, ou sans plante renseignée, le menu n'apparaît
+ * pas, il n'aurait rien à filtrer.
+ */
+export function plantCriteria(
+  records: readonly RecordView[],
+  nature: RecordNature | null,
+): CriterePlante[] {
+  if (nature !== "Plante") {
+    return [];
+  }
+
+  return criteresPlantes(
+    records.flatMap(record => (record.plante ? [record.plante] : [])),
+  );
+}
+
+/** Les plantes qui répondent au critère ; tout, sans critère. */
+export function filterPlants(
+  records: readonly RecordView[],
+  critere: CriterePlante | null,
+): RecordView[] {
+  if (critere === null) {
+    return [...records];
+  }
+
+  return records.filter(
+    record => record.plante !== undefined && correspond(record.plante, critere),
+  );
 }

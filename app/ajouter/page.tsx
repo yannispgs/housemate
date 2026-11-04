@@ -6,10 +6,15 @@ import { FicheForm } from "@/components/ajout/FicheForm";
 import { GarantieForm } from "@/components/ajout/GarantieForm";
 import { Panel, Screen } from "@/components/Screen";
 import { demoEnabled } from "@/demo/mode";
-import { categoriesProposees, marquesConnues } from "@/lib/data/saisie";
+import {
+  categoriesProposees,
+  emplacementsProposes,
+  marquesConnues,
+} from "@/lib/data/saisie";
 import { enMonNom } from "@/lib/data/server";
 import {
   listerCategories,
+  listerEmplacements,
   listerFiches,
   listerMarques,
 } from "@/lib/data/store";
@@ -86,8 +91,13 @@ export default async function Page({
     );
   }
 
-  const [lues, employees, saisies] = await enMonNom(tx =>
-    Promise.all([listerFiches(tx), listerCategories(tx), listerMarques(tx)]),
+  const [lues, employees, saisies, places] = await enMonNom(tx =>
+    Promise.all([
+      listerFiches(tx),
+      listerCategories(tx),
+      listerMarques(tx),
+      listerEmplacements(tx),
+    ]),
   );
   const fiches = lues.map(f => ({ id: f.id, titre: f.titre }));
   const categories = categoriesProposees(employees);
@@ -110,7 +120,12 @@ export default async function Page({
             categories={categories}
           />
         )}
-        {choix.type === "fiche" && <FicheForm categories={categories} />}
+        {choix.type === "fiche" && (
+          <FicheForm
+            categories={categories}
+            emplacements={emplacementsProposes(places)}
+          />
+        )}
       </Panel>
     </Screen>
   );

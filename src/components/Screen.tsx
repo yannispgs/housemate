@@ -11,7 +11,7 @@ export function Screen({
   title,
   subtitle,
   back,
-  titleAside,
+  toolbar,
   aside,
   children,
 }: Readonly<{
@@ -19,8 +19,12 @@ export function Screen({
   subtitle?: ReactNode;
   /** Au-dessus du titre : « ← Retour » vers l'écran précédent. */
   back?: string;
-  /** À droite du titre : un menu, des filtres. */
-  titleAside?: ReactNode;
+  /**
+   * Sous le titre et le sous-titre, sur toute la largeur : des filtres. Une
+   * ligne à part, qui passe à la ligne : à côté du titre, des pilules
+   * nombreuses ou longues le recouvraient.
+   */
+  toolbar?: ReactNode;
   /** Colonne latérale du bureau ; absente sur mobile. */
   aside?: ReactNode;
   children: ReactNode;
@@ -29,14 +33,11 @@ export function Screen({
     <div className="md:px-10 md:pt-[38px] md:pb-12">
       <div className="flex max-w-[1040px] items-start gap-[54px]">
         <div className="flex min-w-0 flex-1 flex-col md:max-w-[620px] md:gap-[22px]">
-          {/* Grille : sur mobile, ce qui accompagne le titre s'aligne sur le
-              titre seul et le sous-titre prend toute la largeur ; sur bureau,
-              il se range à droite du bloc entier, aligné en bas. */}
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-[22px] pt-2.5 pb-[18px] md:gap-x-4 md:gap-y-[7px] md:p-0">
+          <div className="flex flex-col gap-1.5 px-[22px] pt-2.5 pb-[18px] md:gap-[7px] md:p-0">
             {back && (
               <Link
                 href={back}
-                className="col-span-2 -ml-0.5 flex w-fit items-center gap-1.5 text-[14px] text-ink-secondary no-underline hover:text-ink"
+                className="-ml-0.5 flex w-fit items-center gap-1.5 text-[14px] text-ink-secondary no-underline hover:text-ink"
               >
                 <ArrowLeftIcon size={17} strokeWidth={2.25} />
                 Retour
@@ -45,16 +46,12 @@ export function Screen({
             <h1 className="m-0 font-display text-[27px] leading-[1.12] font-normal tracking-normal text-ink md:text-[32px] md:leading-[1.1]">
               {title}
             </h1>
-            {titleAside && (
-              <div className="relative justify-self-end md:row-span-2 md:self-end">
-                {titleAside}
-              </div>
-            )}
             {subtitle && (
-              <p className="col-span-2 m-0 text-[14.5px] leading-[1.45] text-ink-secondary md:col-span-1 md:text-[15px] md:leading-normal">
+              <p className="m-0 text-[14.5px] leading-[1.45] text-ink-secondary md:text-[15px] md:leading-normal">
                 {subtitle}
               </p>
             )}
+            {toolbar && <div className="relative pt-2">{toolbar}</div>}
           </div>
           <div className="flex flex-col gap-2.5 px-[18px] pb-[26px] md:gap-[22px] md:p-0">
             {children}
