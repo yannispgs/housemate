@@ -755,3 +755,138 @@ export function libelleFoyer(nom: string | null): string {
 
   return `Foyer · ${reste.charAt(0).toUpperCase()}${reste.slice(1)}`;
 }
+
+/* ------------------------------------------------------------------------ */
+/* La fiche : ses échéances et ses consommables                             */
+/* ------------------------------------------------------------------------ */
+
+/** Une échéance liée à une fiche ; un tap ouvre sa carte dans une modale. */
+export interface EcheanceDeFiche {
+  readonly id: string;
+  readonly titre: string;
+  /** « dans 19 jours », « depuis 2 jours » ; `null` sans occurrence. */
+  readonly quand: string | null;
+  /** Sa carte d'échéance ; `null` sans occurrence (rien à montrer de plus). */
+  readonly vue: DeadlineView | null;
+}
+
+/** Les échéances liées à une fiche, de la plus proche à la plus lointaine. */
+export function echeancesDeFiche(
+  rows: readonly EcheanceRow[],
+  ficheId: string,
+  today: PlainDate,
+): EcheanceDeFiche[] {
+  return rows
+    .filter(row => row.ficheId === ficheId)
+    .map(row => ({ row, s: situer(row, today) }))
+    .sort(
+      (a, b) =>
+        parDate(a.s?.occurrence.due, b.s?.occurrence.due) ||
+        a.row.titre.localeCompare(b.row.titre, "fr"),
+    )
+    .map(({ row, s }) => ({
+      id: row.id,
+      titre: row.titre,
+      quand: s && whenText(s.occurrence.due, today),
+      vue: s && deadlineView(s, today),
+    }));
+}
+
+/** Un consommable du carnet d'entretien : son dernier et son prochain remplacement. */
+export interface LigneConsommable {
+  readonly id: string;
+  readonly intitule: string;
+  /** « 3 mars 2022 · 45 000 km » ; `null` : jamais remplacé. */
+  readonly dernier: string | null;
+  /** « vers le 12 janvier 2027 · 165 000 km » ; `null` : incalculable. */
+  readonly prochain: string | null;
+  /** « dans 19 jours » ; `null` sans prochain remplacement. */
+  readonly quand: string | null;
+  /** Il manque le compteur d'un remplacement, ou un relevé (§ 5.3). */
+  readonly donneeManquante: boolean;
+  /** Sa carte d'échéance ; `null` sans prochain remplacement. */
+  readonly vue: DeadlineView | null;
+}
+
+/** Les plus proches devant ; sans date, à la fin. */
+function parDate(a: PlainDate | undefined, b: PlainDate | undefined): number {
+  if (a === undefined || b === undefined) {
+    return Number(a === undefined) - Number(b === undefined);
+  }
+
+  return compare(a, b);
+}
+
+type Ligne = LigneConsommable & { readonly due: PlainDate | undefined };
+
+function ligneConsommable(row: ConsommableRow, today: PlainDate): Ligne {
+  const { donneeManquante } = etatConsommable(
+    row,
+    row.releves,
+    today,
+    row.seuil,
+  );
+  const dernier = [...row.remplacements]
+    .sort((a, b) => compare(a.le, b.le))
+    .at(-1);
+  const ligne = {
+    id: row.id,
+    intitule: row.intitule,
+    donneeManquante,
+  };
+
+  // Jamais remplacé : pas de point de départ, donc pas d'échéance.
+  if (dernier === undefined) {
+    return {
+      ...ligne,
+      dernier: null,
+      prochain: null,
+      quand: null,
+      vue: null,
+      due: undefined,
+    };
+  }
+
+  const c = situerConsommable(row, today);
+  let kmDernier: string | null = null;
+  let kmProchain: string | null = null;
+
+  if (row.dureeKm !== null) {
+    kmDernier =
+      dernier.compteur === null
+        ? "km non noté"
+        : `${KM.format(dernier.compteur)} km`;
+    kmProchain =
+      dernier.compteur === null
+        ? null
+        : `${KM.format(dernier.compteur + row.dureeKm)} km`;
+  }
+
+  const date =
+    c && (c.estimee ? `vers le ${longDate(c.due)}` : longDate(c.due));
+
+  return {
+    ...ligne,
+    dernier: [longDate(dernier.le), kmDernier].filter(Boolean).join(" · "),
+    prochain: date && [date, kmProchain].filter(Boolean).join(" · "),
+    quand: c && whenText(c.due, today),
+    vue: c && consommableView(c, today),
+    due: c?.due,
+  };
+}
+
+/** Les consommables d'une fiche, le prochain à remplacer devant. */
+export function consommablesDeFiche(
+  rows: readonly ConsommableRow[],
+  ficheId: string,
+  today: PlainDate,
+): LigneConsommable[] {
+  return rows
+    .filter(row => row.ficheId === ficheId)
+    .map(row => ligneConsommable(row, today))
+    .sort(
+      (a, b) =>
+        parDate(a.due, b.due) || a.intitule.localeCompare(b.intitule, "fr"),
+    )
+    .map(({ due: _, ...ligne }) => ligne);
+}

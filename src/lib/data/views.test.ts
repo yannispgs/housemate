@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ConsommableRow } from "@/lib/data/store";
 import {
+  consommablesDeFiche,
   type EcheanceRow,
+  echeancesDeFiche,
   homeDeadlines,
   iconFor,
   libelleFoyer,
@@ -745,5 +747,121 @@ describe("sorte d'une échéance et icône (§ 5.4)", () => {
   it("garde l'icône de la catégorie pour un entretien", () => {
     expect(iconFor("Véhicule", "entretien")).toBe("vehicle");
     expect(iconFor("Cuisine", "garantie")).toBe("warranty");
+  });
+});
+
+describe("la fiche : ses échéances et ses consommables", () => {
+  it("range les échéances de la fiche, sans occurrence à la fin", () => {
+    const lieeA = (id: string, titre: string, on: string | null) =>
+      echeance({
+        id,
+        titre,
+        ficheId: "f",
+        recurrence: on === null ? null : { kind: "once", on: d(on) },
+      });
+    const lignes = echeancesDeFiche(
+      [
+        lieeA("tard", "Assurance", "2026-10-20"),
+        lieeA("sans-b", "Rangement", null),
+        lieeA("tot", "Contrôle", "2026-10-15"),
+        lieeA("sans-a", "Nettoyage", null),
+        echeance({ id: "ailleurs", ficheId: "g" }),
+      ],
+      "f",
+      TODAY,
+    );
+
+    expect(lignes.map(l => [l.id, l.quand])).toEqual([
+      ["tot", "dans 2 jours"],
+      ["tard", "dans 7 jours"],
+      ["sans-a", null],
+      ["sans-b", null],
+    ]);
+    expect(lignes[0]?.vue).toMatchObject({ id: "tot", title: "Contrôle" });
+    expect(lignes[2]?.vue).toBeNull();
+  });
+
+  // 50 km par jour ; 118 250 km au 13 octobre.
+  const RELEVES = [
+    { le: d("2025-10-13"), valeur: 100_000 },
+    { le: d("2026-10-13"), valeur: 118_250 },
+  ];
+  const conso = (champs: Partial<ConsommableRow>): ConsommableRow => ({
+    id: "c",
+    intitule: "Vidange",
+    ficheId: "f",
+    ficheTitre: "La voiture",
+    categorie: "Véhicule",
+    tenue: "ferme",
+    seuil: 0.075,
+    dureeKm: 15_000,
+    dureeTemps: null,
+    remplacements: [{ le: d("2026-03-01"), compteur: 104_000 }],
+    releves: RELEVES,
+    ...champs,
+  });
+
+  it("donne le dernier et le prochain remplacement, le plus proche devant", () => {
+    const lignes = consommablesDeFiche(
+      [
+        conso({
+          id: "temps",
+          intitule: "Filtre",
+          dureeKm: null,
+          dureeTemps: { count: 1, unit: "year" },
+          remplacements: [
+            { le: d("2025-03-01"), compteur: null },
+            { le: d("2026-03-01"), compteur: null },
+          ],
+        }),
+        conso({ id: "jamais", intitule: "Bougies", remplacements: [] }),
+        conso({ id: "km" }),
+        conso({
+          id: "sans-km",
+          intitule: "Courroie",
+          remplacements: [{ le: d("2026-03-01"), compteur: null }],
+        }),
+        conso({ id: "ailleurs", ficheId: "g" }),
+      ],
+      "f",
+      TODAY,
+    );
+
+    expect(lignes.map(({ vue: _, ...l }) => l)).toEqual([
+      {
+        id: "km",
+        intitule: "Vidange",
+        dernier: "1 mars 2026 · 104\u202f000 km",
+        prochain: "vers le 28 octobre 2026 · 119\u202f000 km",
+        quand: "dans 15 jours",
+        donneeManquante: false,
+      },
+      {
+        id: "temps",
+        intitule: "Filtre",
+        dernier: "1 mars 2026",
+        prochain: "1 mars 2027",
+        quand: "dans 139 jours",
+        donneeManquante: false,
+      },
+      {
+        id: "jamais",
+        intitule: "Bougies",
+        dernier: null,
+        prochain: null,
+        quand: null,
+        donneeManquante: true,
+      },
+      {
+        id: "sans-km",
+        intitule: "Courroie",
+        dernier: "1 mars 2026 · km non noté",
+        prochain: null,
+        quand: null,
+        donneeManquante: true,
+      },
+    ]);
+    expect(lignes[0]?.vue).toMatchObject({ id: "consommable-km" });
+    expect(lignes[2]?.vue).toBeNull();
   });
 });

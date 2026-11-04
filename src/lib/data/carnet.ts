@@ -22,9 +22,6 @@ export interface Carnet {
   readonly entrees: readonly EntreeCarnet[];
 }
 
-/** Les entrées montrées d'emblée ; « Tout voir » montre les autres. */
-export const ENTREES_VISIBLES = 5;
-
 const DATE = new Intl.DateTimeFormat("fr-FR", {
   day: "numeric",
   month: "long",

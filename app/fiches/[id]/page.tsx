@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { z } from "zod";
 import { AjouterPiece } from "@/components/ajout/AjouterPiece";
 import { CarnetEntretien } from "@/components/CarnetEntretien";
+import { EcheancesFiche } from "@/components/fiche/EcheancesFiche";
 import { PlantationFiche } from "@/components/fiche/PlantationFiche";
 import { TitreFiche } from "@/components/fiche/TitreFiche";
 import { Panel, Screen, SectionLabel } from "@/components/Screen";
@@ -17,15 +18,31 @@ import {
 } from "@/lib/data/plantes";
 import { emplacementsProposes } from "@/lib/data/saisie";
 import { enMonNom } from "@/lib/data/server";
-import { lireCarnet, lireFiche, listerEmplacements } from "@/lib/data/store";
-import { NATURE_LABELS } from "@/lib/data/views";
+import {
+  lireCarnet,
+  lireFiche,
+  listerConsommables,
+  listerEcheances,
+  listerEmplacements,
+} from "@/lib/data/store";
+import { aujourdhuiAParis } from "@/lib/data/today";
+import {
+  consommablesDeFiche,
+  echeancesDeFiche,
+  NATURE_LABELS,
+  shortDate,
+} from "@/lib/data/views";
+import { toISO } from "@/lib/domain/plain-date";
+import { annuler, cocher } from "../../_actions/echeances";
+import { remplacer } from "../../_actions/entretien";
 
 export const metadata: Metadata = { title: "Fiche" };
 
 /**
  * ⚠️ Écran provisoire : la fiche n'est pas encore dessinée dans Claude
  * Design (`a-dessiner.md`, § 2.1). Titre renommable, plantation d'une
- * plante, attributs, pièces jointes, carnet d'entretien, échéances liées ; le
+ * plante, attributs, pièces jointes, carnet d'entretien (une ligne par consommable),
+ * échéances liées ; un tap sur l'une d'elles ouvre sa carte dans une modale. Le
  * reste (frise, archivage) viendra avec sa maquette.
  */
 export default async function Page({
@@ -38,11 +55,13 @@ export default async function Page({
   }
 
   await connection();
-  const [fiche, emplacements, carnet] = await enMonNom(tx =>
+  const [fiche, emplacements, carnet, rows, consommables] = await enMonNom(tx =>
     Promise.all([
       lireFiche(tx, id.data),
       listerEmplacements(tx),
       lireCarnet(tx, id.data),
+      listerEcheances(tx),
+      listerConsommables(tx),
     ]),
   );
 
@@ -50,6 +69,10 @@ export default async function Page({
     notFound();
   }
 
+  const today = aujourdhuiAParis();
+  const jour = { iso: toISO(today), court: shortDate(today) };
+  const actions = { cocher, annuler, remplacer };
+  const echeances = echeancesDeFiche(rows, fiche.id, today);
   const plante = fiche.nature === "plante";
   const situation = situationPlante(fiche.attributs);
   // Ceux d'une plante ont leur propre section, modifiable (§ 12.4).
@@ -121,17 +144,17 @@ export default async function Page({
         <AjouterPiece ficheId={fiche.id} />
       </Panel>
 
-      {carnet.entretien && <CarnetEntretien entrees={carnet.entrees} />}
+      {carnet.entretien && (
+        <CarnetEntretien
+          consommables={consommablesDeFiche(consommables, fiche.id, today)}
+          entrees={carnet.entrees}
+          actions={actions}
+          jour={jour}
+        />
+      )}
 
-      {fiche.echeances.length > 0 && (
-        <Panel className="gap-3 p-[18px]">
-          <SectionLabel count={fiche.echeances.length}>Échéances</SectionLabel>
-          <ul className="m-0 flex list-none flex-col gap-1.5 p-0 text-[15px] text-ink">
-            {fiche.echeances.map(echeance => (
-              <li key={echeance.id}>{echeance.titre}</li>
-            ))}
-          </ul>
-        </Panel>
+      {echeances.length > 0 && (
+        <EcheancesFiche echeances={echeances} actions={actions} jour={jour} />
       )}
     </Screen>
   );
