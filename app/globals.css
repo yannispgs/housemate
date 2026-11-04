@@ -214,9 +214,14 @@
  * Mobile, pendant la frappe : l'en-tête et la barre d'onglets s'effacent tant
  * qu'un champ qui ouvre le clavier a le focus (décision du foyer, 2026-10-21) ;
  * le clavier prend déjà plus de la moitié de l'écran. Sur bureau, ces deux
- * barres sont déjà masquées.
+ * barres sont déjà masquées. Un appui commencé pendant la frappe les garde
+ * effacées jusqu'au relâchement (`useAppuiEnSaisie`).
  */
 @layer utilities {
+  [data-appui-en-saisie] .masque-en-saisie {
+    display: none;
+  }
+
   .shell:has(
       main
         :is(
