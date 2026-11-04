@@ -476,15 +476,17 @@ function periodeDe(
     return null;
   }
 
-  // `superRefine` garantit le mois, la saison et, pour une seule fois, l'année.
+  // `superRefine` garantit le mois, la saison et, pour une seule fois,
+  // l'année : pas de valeur de repli, qui ne servirait jamais.
+  type Requis<K extends keyof EcheanceSaisie> = NonNullable<EcheanceSaisie[K]>;
   const annee =
-    s.motif === "once" ? (s.annee ?? ANNEE_ORDINAIRE) : ANNEE_ORDINAIRE;
+    s.motif === "once" ? (s.annee as Requis<"annee">) : ANNEE_ORDINAIRE;
 
   return bornesPeriode(
     annee,
     precision === "mois"
-      ? { mois: s.mois ?? 1 }
-      : { saison: s.saison ?? "printemps" },
+      ? { mois: s.mois as Requis<"mois"> }
+      : { saison: s.saison as Requis<"saison"> },
   );
 }
 
