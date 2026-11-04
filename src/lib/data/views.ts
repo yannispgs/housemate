@@ -127,6 +127,12 @@ export interface EcheanceRow {
   readonly completions: readonly CompletionRow[];
   /** Les rappels ajoutés à la main ; ceux de l'importance se calculent. */
   readonly rappels: readonly Reminder[];
+  /**
+   * Mon exception pour les notifications push (§ 6) : `true` la fait
+   * notifier quel que soit le tableau, `false` la tait, `null` suit le
+   * tableau.
+   */
+  readonly notifier: boolean | null;
 }
 
 /** Les niveaux de la base et de l'écran, vers ceux du domaine, et retour. */

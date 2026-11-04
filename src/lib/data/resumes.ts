@@ -56,6 +56,8 @@ export interface ReglagesResumes {
   readonly perimetre: Perimetre;
   /** La colonne « E-mail » du tableau des notifications. */
   readonly email: Readonly<Record<Importance, boolean>>;
+  /** La colonne « Push » : les niveaux qui notifient (`push.ts`). */
+  readonly push: Readonly<Record<Importance, boolean>>;
 }
 
 /** Sans réglage enregistré : ce que le foyer a décidé le 18/10/2026. */
@@ -69,10 +71,17 @@ export const REGLAGES_PAR_DEFAUT: ReglagesResumes = {
   retards: true,
   perimetre: "moi",
   email: { critique: true, important: true, normal: true, memoire: false },
+  push: { critique: true, important: true, normal: false, memoire: false },
 };
 
 const heure = z.number().int().min(0).max(23);
 const coche = z.boolean();
+const parNiveau = z.object({
+  critique: coche,
+  important: coche,
+  normal: coche,
+  memoire: coche,
+});
 
 /** Ce que la section Notifications de Réglages envoie : tout, d'un bloc. */
 export const reglagesSaisis = z.object({
@@ -84,12 +93,8 @@ export const reglagesSaisis = z.object({
   horizonJours: z.union(HORIZONS.map(h => z.literal(h))),
   retards: coche,
   perimetre: z.enum(["moi", "foyer"]),
-  email: z.object({
-    critique: coche,
-    important: coche,
-    normal: coche,
-    memoire: coche,
-  }),
+  email: parNiveau,
+  push: parNiveau,
 }) satisfies z.ZodType<ReglagesResumes>;
 
 export const JOURS = [
