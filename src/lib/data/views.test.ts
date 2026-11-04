@@ -568,7 +568,8 @@ describe("consommables à l'accueil et dans À venir (§ 5.3)", () => {
     expect(vue(conso({}))).toMatchObject({
       title: "Vidange",
       state: "en préavis",
-      when: "dans 15 jours",
+      // Le premier des deux termes suffit : la date estimée, ou les km.
+      when: "dans 15 jours / 800 km",
       verb: "Fait",
       // « Fait » demande la date et le compteur, estimé en indication.
       remplacement: {
@@ -594,6 +595,15 @@ describe("consommables à l'accueil et dans À venir (§ 5.3)", () => {
       ["consommable-c", "critique", "en retard"],
       ["due", "normal", "due"],
     ]);
+  });
+
+  it("en retard, il dit les kilomètres de trop", () => {
+    // Limite 115 000, 118 250 estimés : 3 250 km, 65 jours.
+    const [carte] = homeDeadlines([], TODAY, [
+      conso({ remplacements: [{ le: d("2026-01-01"), compteur: 100_000 }] }),
+    ]);
+
+    expect(carte?.when).toBe("depuis 65 jours / 3\u202f200 km de trop");
   });
 
   it("souple, dû aujourd'hui : à faire, au rang 3, sans monter", () => {
@@ -833,7 +843,7 @@ describe("la fiche : ses échéances et ses consommables", () => {
         intitule: "Vidange",
         dernier: "1 mars 2026 · 104\u202f000 km",
         prochain: "vers le 28 octobre 2026 · 119\u202f000 km",
-        quand: "dans 15 jours",
+        quand: "dans 15 jours / 800 km",
         donneeManquante: false,
       },
       {

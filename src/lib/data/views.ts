@@ -402,6 +402,11 @@ export interface ConsommableSitue {
   readonly estimee: boolean;
   /** Le compteur estimé, arrondi à la centaine ; `null` sans relevé. */
   readonly estimation: number | null;
+  /**
+   * Les kilomètres avant la limite, à la centaine (négatifs au-delà) ;
+   * `null` sans limite au compteur ou sans relevé.
+   */
+  readonly kmRestants: number | null;
 }
 
 /**
@@ -442,7 +447,38 @@ export function situerConsommable(
     raised: importance !== "normal",
     estimee: etat.terme === "compteur",
     estimation: arrondiCentaine(compteurEstime(row.releves, today)),
+    kmRestants: arrondiCentaine(kmAvantLimite(row, today)),
   };
+}
+
+function kmAvantLimite(row: ConsommableRow, today: PlainDate): number | null {
+  const dernier = [...row.remplacements]
+    .sort((a, b) => compare(a.le, b.le))
+    .at(-1);
+  const estime = compteurEstime(row.releves, today);
+
+  return row.dureeKm === null || dernier?.compteur == null || estime === null
+    ? null
+    : dernier.compteur + row.dureeKm - estime;
+}
+
+/**
+ * « dans 15 jours / 800 km » : au compteur, le premier des deux termes
+ * suffit, la date (estimée) comme les kilomètres.
+ */
+function quandConsommable(c: ConsommableSitue, today: PlainDate): string {
+  const quand = whenText(c.due, today);
+
+  if (c.kmRestants === null) {
+    return quand;
+  }
+
+  const km =
+    c.kmRestants < 0
+      ? `${KM.format(-c.kmRestants)} km de trop`
+      : `${KM.format(c.kmRestants)} km`;
+
+  return `${quand} / ${km}`;
 }
 
 const KM = new Intl.NumberFormat("fr-FR");
@@ -461,7 +497,7 @@ function consommableView(c: ConsommableSitue, today: PlainDate): DeadlineView {
     title: c.row.intitule,
     detail: [quand, c.row.ficheTitre].join(" · "),
     state: STATE_LABELS[c.state],
-    when: whenText(c.due, today),
+    when: quandConsommable(c, today),
     category: c.row.categorie ?? SANS_CATEGORIE,
     recipient: "Foyer",
     // « Fait » demande d'abord la date et le compteur (§ 5.3).
@@ -869,7 +905,7 @@ function ligneConsommable(row: ConsommableRow, today: PlainDate): Ligne {
     ...ligne,
     dernier: [longDate(dernier.le), kmDernier].filter(Boolean).join(" · "),
     prochain: date && [date, kmProchain].filter(Boolean).join(" · "),
-    quand: c && whenText(c.due, today),
+    quand: c && quandConsommable(c, today),
     vue: c && consommableView(c, today),
     due: c?.due,
   };
