@@ -66,14 +66,19 @@ describe("le menu « Plantes » (§ 12.4)", () => {
     { ...record("Voiture", "Véhicule"), nature: "Véhicule" as const },
   ];
 
-  it("propose les critères des plantes renseignées, sinon rien", () => {
-    expect(plantCriteria(liste).map(c => c.valeur)).toEqual([
+  it("propose les critères des plantes renseignées de la catégorie, sinon rien", () => {
+    expect(plantCriteria(liste, "Jardin").map(c => c.valeur)).toEqual([
       "En pot",
       "En terre",
       "Extérieur",
       "Véranda",
     ]);
-    expect(plantCriteria([plante("Ficus", null, null)])).toEqual([]);
+    expect(plantCriteria([plante("Ficus", null, null)], "Jardin")).toEqual([]);
+  });
+
+  it("ne propose rien sur « Tout » ni sur une catégorie sans plante", () => {
+    expect(plantCriteria(liste, ALL_CATEGORIES)).toEqual([]);
+    expect(plantCriteria(liste, "Véhicule")).toEqual([]);
   });
 
   it("ne garde que les plantes du critère, ou tout sans critère", () => {

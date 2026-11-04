@@ -73,12 +73,22 @@ export function recordCount(count: number): string {
 export const TOUTES_LES_PLANTES = "Toutes";
 
 /**
- * Les critères du menu, d'après les plantes de la liste. Vide sans plante
- * renseignée : le menu n'apparaît pas, il n'aurait rien à filtrer.
+ * Les critères du menu, d'après les plantes de la catégorie choisie. Vide sur
+ * « Tout », ou sans plante renseignée dans la catégorie : le menu n'apparaît
+ * pas, il n'aurait rien à filtrer.
  */
-export function plantCriteria(records: readonly RecordView[]): CriterePlante[] {
+export function plantCriteria(
+  records: readonly RecordView[],
+  category: string,
+): CriterePlante[] {
+  if (category === ALL_CATEGORIES) {
+    return [];
+  }
+
   return criteresPlantes(
-    records.flatMap(record => (record.plante ? [record.plante] : [])),
+    records.flatMap(record =>
+      record.category === category && record.plante ? [record.plante] : [],
+    ),
   );
 }
 

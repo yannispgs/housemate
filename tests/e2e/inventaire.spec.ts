@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 // Inventaire en démonstration (HOUSEMATE_AUTH=desactivee) : le menu
-// « Plantes » (SPEC § 12.4, décisions du 25/10/2026).
+// « Plantes » (SPEC § 12.4, décisions du 25/10/2026), seulement sur une
+// catégorie choisie qui a des plantes.
 
 test.describe("inventaire", () => {
   test("le menu « Plantes » ne garde que les plantes d'un emplacement", async ({
@@ -9,7 +10,11 @@ test.describe("inventaire", () => {
   }) => {
     await page.goto("/inventaire");
     await expect(page.getByText("Voiture", { exact: true })).toBeVisible();
+    // Sur « Tout », pas de menu « Plantes ».
+    await expect(page.getByRole("button", { name: "Plantes" })).toHaveCount(0);
 
+    await page.getByRole("button", { name: "Tout", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "Jardin" }).click();
     await page.getByRole("button", { name: "Plantes" }).click();
     await page.getByRole("menuitemradio", { name: "Véranda" }).click();
 
@@ -17,10 +22,14 @@ test.describe("inventaire", () => {
     await expect(
       page.getByText("Rosier grimpant", { exact: true }),
     ).toBeHidden();
-    await expect(page.getByText("Voiture", { exact: true })).toBeHidden();
 
-    await page.getByRole("button", { name: "Véranda", exact: true }).click();
-    await page.getByRole("menuitemradio", { name: "Toutes" }).click();
+    // Revenir à « Tout » efface le critère et retire le menu.
+    await page.getByRole("button", { name: "Jardin", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "Tout" }).click();
     await expect(page.getByText("Voiture", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Rosier grimpant", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Plantes" })).toHaveCount(0);
   });
 });

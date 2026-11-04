@@ -68,8 +68,14 @@ export function InventoryScreen({
 }: Readonly<{ records: readonly RecordView[] }>) {
   const [category, setCategory] = useState(ALL_CATEGORIES);
   const [critere, setCritere] = useState<CriterePlante | null>(null);
-  const criteres = plantCriteria(records);
+  // Le menu « Plantes » n'apparaît qu'une catégorie choisie, si elle a des
+  // plantes ; en changer efface le critère.
+  const criteres = plantCriteria(records, category);
   const groups = groupRecords(filterPlants(records, critere), category);
+  const choisirCategorie = (name: string) => {
+    setCategory(name);
+    setCritere(null);
+  };
 
   return (
     <Screen
@@ -98,7 +104,7 @@ export function InventoryScreen({
                 name => ({
                   label: name,
                   checked: name === category,
-                  onSelect: () => setCategory(name),
+                  onSelect: () => choisirCategorie(name),
                 }),
               )}
             />
