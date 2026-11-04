@@ -294,6 +294,8 @@ export function echeancesDerivees(
             preavisJours: PREAVIS_GARANTIE_JOURS,
             tenue: "souple",
             importance: "memoire",
+            rappels: [],
+            notifier: null,
           },
         ];
   }
@@ -316,6 +318,8 @@ export function echeancesDerivees(
             preavisJours: PREAVIS_RENOUVELLEMENT_JOURS,
             tenue: "ferme",
             importance: "important",
+            rappels: [],
+            notifier: null,
           },
         ];
   }

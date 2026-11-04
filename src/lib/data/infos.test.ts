@@ -189,6 +189,8 @@ describe("echeancesDerivees", () => {
         preavisJours: 30,
         tenue: "souple",
         importance: "memoire",
+        rappels: [],
+        notifier: null,
       },
     ]);
   });
@@ -223,6 +225,8 @@ describe("echeancesDerivees", () => {
         preavisJours: 90,
         tenue: "ferme",
         importance: "important",
+        rappels: [],
+        notifier: null,
       },
     ]);
     expect(echeancesDerivees("document", "Le passeport", [])).toEqual([]);

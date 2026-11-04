@@ -1365,6 +1365,8 @@ describe("infos de base (§ 4.1)", () => {
         preavisJours: 30,
         tenue: "souple",
         importance: "memoire",
+        rappels: [],
+        notifier: null,
         ficheId: id,
         derniereFois: null,
       });
