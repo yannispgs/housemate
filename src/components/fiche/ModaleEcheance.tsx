@@ -4,14 +4,16 @@
  * Le détail d'une échéance ou d'un consommable depuis sa fiche (décision du
  * foyer, 04/11/2026) : un tap sur sa ligne ouvre, dans une modale, la carte
  * d'échéance de l'accueil, dépliée, avec ses actions (« Fait », le
- * remplacement d'un consommable).
+ * remplacement d'un consommable). Un tap à côté la referme, comme Échap ou
+ * « Fermer ».
  *
  * ⚠️ Provisoire : pas encore dessinée dans Claude Design (a-dessiner.md).
  */
 import { useRouter } from "next/navigation";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useState } from "react";
 import type { DeadlineView } from "@/lib/ui/deadline";
 import { DeadlineCard } from "../DeadlineCard";
+import { Modale } from "../Modale";
 
 /** Les actions de l'accueil, branchées sur la fiche. */
 export interface ActionsFiche {
@@ -47,42 +49,35 @@ function ModaleEcheance({
   faire: () => void;
   remplacer?: (le: string, compteur: string) => Promise<string | null>;
 }>) {
-  const ref = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    const dialogue = ref.current;
-    dialogue?.showModal();
-
-    return () => dialogue?.close();
-  }, []);
-
   return (
-    // Échap, « Fermer » ou l'en-tête de la carte la referment.
-    <dialog
-      ref={ref}
-      aria-label={deadline.title}
+    // Échap, un tap à côté, « Fermer » ou l'en-tête de la carte la referment.
+    <Modale
+      titre={deadline.title}
+      fermerEnDehors
       onClose={fermer}
-      className="m-auto w-[min(100%-32px,460px)] border-0 bg-transparent p-0 backdrop:bg-black/40"
+      className="w-[min(100%-32px,460px)]"
     >
-      <div className="flex flex-col gap-2.5">
-        <DeadlineCard
-          deadline={deadline}
-          open
-          todayLabel={jour.court}
-          onToggle={() => ref.current?.close()}
-          onDone={faire}
-          aujourdhui={jour.iso}
-          onReplace={remplacer}
-        />
-        <button
-          type="button"
-          onClick={() => ref.current?.close()}
-          className="min-h-11 cursor-pointer self-center rounded-full border border-border bg-surface px-5 font-display text-[14px] text-ink"
-        >
-          Fermer
-        </button>
-      </div>
-    </dialog>
+      {fermerModale => (
+        <div className="flex flex-col gap-2.5">
+          <DeadlineCard
+            deadline={deadline}
+            open
+            todayLabel={jour.court}
+            onToggle={fermerModale}
+            onDone={faire}
+            aujourdhui={jour.iso}
+            onReplace={remplacer}
+          />
+          <button
+            type="button"
+            onClick={fermerModale}
+            className="min-h-11 cursor-pointer self-center rounded-full border border-border bg-surface px-5 font-display text-[14px] text-ink"
+          >
+            Fermer
+          </button>
+        </div>
+      )}
+    </Modale>
   );
 }
 
