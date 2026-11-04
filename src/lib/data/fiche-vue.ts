@@ -69,9 +69,11 @@ export function valeurAffichee(
           ? null
           : age({ jour, mois, annee }, aujourdhui);
 
-      return ans === null
-        ? LONG.format(date)
-        : `${LONG.format(date)} · ${ans} an${ans > 1 ? "s" : ""}`;
+      if (ans === null) {
+        return LONG.format(date);
+      }
+
+      return `${LONG.format(date)} · ${ans} an${ans > 1 ? "s" : ""}`;
     }
     case "montant":
       return EUROS.format(attribut.valeur);

@@ -742,17 +742,19 @@ export async function reglerAnniversaires(
       simple_preavis_jours = excluded.simple_preavis_jours,
       simple_importance = excluded.simple_importance`;
 
-  for (const niveau of NIVEAUX) {
-    await tx`
-      update app.echeances e set
-        preavis_jours = ${reglages[niveau].preavisJours},
-        importance = ${reglages[niveau].importance}
-      from app.anniversaires a
-      where a.echeance_id = e.id and a.niveau = ${niveau}
-        and e.archivee_le is null
-        and e.preavis_jours = ${avant[niveau].preavisJours}
-        and e.importance = ${avant[niveau].importance}`;
-  }
+  await Promise.all(
+    NIVEAUX.map(
+      niveau => tx`
+        update app.echeances e set
+          preavis_jours = ${reglages[niveau].preavisJours},
+          importance = ${reglages[niveau].importance}
+        from app.anniversaires a
+        where a.echeance_id = e.id and a.niveau = ${niveau}
+          and e.archivee_le is null
+          and e.preavis_jours = ${avant[niveau].preavisJours}
+          and e.importance = ${avant[niveau].importance}`,
+    ),
+  );
 }
 
 /** Le choix de la personne connectée pour une personne : un niveau ou rien. */

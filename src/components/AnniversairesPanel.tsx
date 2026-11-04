@@ -27,10 +27,15 @@ export function AnniversairesPanel({
   regler,
 }: Readonly<{
   reglages: ReglagesAnniversaires;
-  /** Server action ; rend les erreurs par champ, ou `null`. */
-  regler: (
-    saisie: Readonly<Record<string, string>>,
-  ) => Promise<Readonly<Record<string, string>> | null>;
+  /**
+   * Server action ; rend les erreurs par champ, ou `null`. Elle-même `null`
+   * en démonstration (rien n'est enregistré).
+   */
+  regler:
+    | ((
+        saisie: Readonly<Record<string, string>>,
+      ) => Promise<Readonly<Record<string, string>> | null>)
+    | null;
 }>) {
   const [erreurs, setErreurs] = useState<Readonly<Record<string, string>>>({});
   const [enregistre, setEnregistre] = useState(false);
@@ -50,7 +55,7 @@ export function AnniversairesPanel({
             ),
           );
           demarrer(async () => {
-            const probleme = await regler(champs);
+            const probleme = regler === null ? null : await regler(champs);
             setErreurs(probleme ?? {});
             setEnregistre(probleme === null);
           });
@@ -123,9 +128,9 @@ export function AnniversairesPanel({
             Enregistrer
           </button>
           {enregistre && (
-            <span role="status" className="text-[13px] text-ink-secondary">
+            <output className="text-[13px] text-ink-secondary">
               Enregistré.
-            </span>
+            </output>
           )}
         </span>
       </form>

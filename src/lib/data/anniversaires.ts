@@ -99,7 +99,8 @@ export function preavisLisible(jours: number): string {
   }
 
   const { nombre, unite } = preavisEnUnite(jours);
-  const mot = unite === "mois" ? "mois" : `${unite}${nombre > 1 ? "s" : ""}`;
+  // « mois » est invariable ; `nombre` vaut au moins 1.
+  const mot = unite === "mois" || nombre === 1 ? unite : `${unite}s`;
 
   return `${nombre} ${mot} avant`;
 }

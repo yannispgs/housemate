@@ -26,13 +26,6 @@ import { deconnexion } from "../connexion/actions";
 
 export const metadata: Metadata = { title: "Réglages" };
 
-/** En démonstration, rien n'est enregistré. */
-async function reglerEnDemo(): Promise<null> {
-  "use server";
-
-  return null;
-}
-
 export default async function Page() {
   const demo = demoEnabled();
   const rows = [
@@ -64,7 +57,7 @@ export default async function Page() {
         marge={DEMO_MARGIN}
         anniversaires={{
           reglages: ANNIVERSAIRES_PAR_DEFAUT,
-          regler: reglerEnDemo,
+          regler: null,
         }}
       />
     );
