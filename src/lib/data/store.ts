@@ -627,35 +627,31 @@ export async function deriver(tx: Tx, ficheId: string): Promise<void> {
         recurrence->>'kind' = 'derived' and titre like 'Fin de garantie — %'))`;
   const voulues = echeancesDerivees(fiche.nature, fiche.titre, fiche.attributs);
 
-  for (const voulue of voulues) {
-    const { source, ...echeance } = voulue;
-    const existante = existantes.find(e => e.source === source);
+  await Promise.all(
+    voulues.map(({ source, ...echeance }) => {
+      const existante = existantes.find(e => e.source === source);
 
-    if (existante === undefined) {
-      await creerEcheance(tx, {
-        ...echeance,
-        categorie: null,
-        ficheId,
-        derniereFois: null,
-      });
-    } else {
-      await tx`
-        update app.echeances set
-          titre = ${echeance.titre},
-          recurrence = ${tx.json(echeance.recurrence as postgres.JSONValue)}
-        where id = ${existante.id}`;
-    }
-  }
+      return existante === undefined
+        ? creerEcheance(tx, {
+            ...echeance,
+            categorie: null,
+            ficheId,
+            derniereFois: null,
+          })
+        : tx`
+            update app.echeances set
+              titre = ${echeance.titre},
+              recurrence = ${tx.json(echeance.recurrence as postgres.JSONValue)}
+            where id = ${existante.id}`;
+    }),
+  );
 
   const gardees = new Set(voulues.map(v => v.source));
+  const videes = existantes.filter(e => !gardees.has(e.source)).map(e => e.id);
 
-  for (const existante of existantes) {
-    if (!gardees.has(existante.source)) {
-      await tx`
-        update app.echeances set archivee_le = now()
-        where id = ${existante.id}`;
-    }
-  }
+  await tx`
+    update app.echeances set archivee_le = now()
+    where id = any(${videes}::uuid[])`;
 }
 
 /** Une fiche visible de la personne connectée, ou `null`. */
