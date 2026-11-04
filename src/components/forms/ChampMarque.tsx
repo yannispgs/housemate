@@ -13,8 +13,14 @@ import { CHAMP, Champ } from "./Champ";
 export function ChampMarque({
   marques,
   erreur,
-}: Readonly<{ marques: readonly string[]; erreur?: string }>) {
-  const [valeur, setValeur] = useState("");
+  initiale = "",
+}: Readonly<{
+  marques: readonly string[];
+  erreur?: string;
+  /** La marque déjà enregistrée, quand on modifie une fiche. */
+  initiale?: string;
+}>) {
+  const [valeur, setValeur] = useState(initiale);
   const [ouverte, setOuverte] = useState(false);
   const [active, setActive] = useState(-1);
   const liste = useId();

@@ -3,19 +3,21 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { z } from "zod";
 import { AjouterPiece } from "@/components/ajout/AjouterPiece";
+import { InfosFiche } from "@/components/fiche/InfosFiche";
 import { PlantationFiche } from "@/components/fiche/PlantationFiche";
 import { TitreFiche } from "@/components/fiche/TitreFiche";
 import { Panel, Screen, SectionLabel } from "@/components/Screen";
 import { demoEnabled } from "@/demo/mode";
 import { valeurAffichee } from "@/lib/data/fiche-vue";
+import { horsInfos, INFOS, infosDe, valeursInfos } from "@/lib/data/infos";
 import {
   LIBELLES_PLANTATION,
   labelsPlante,
   plantation,
 } from "@/lib/data/plantes";
-import { emplacementsProposes } from "@/lib/data/saisie";
+import { emplacementsProposes, marquesConnues } from "@/lib/data/saisie";
 import { enMonNom } from "@/lib/data/server";
-import { lireFiche, listerEmplacements } from "@/lib/data/store";
+import { lireFiche, listerEmplacements, listerMarques } from "@/lib/data/store";
 import { NATURE_LABELS } from "@/lib/data/views";
 
 export const metadata: Metadata = { title: "Fiche" };
@@ -35,8 +37,12 @@ export default async function Page({
   }
 
   await connection();
-  const [fiche, emplacements] = await enMonNom(tx =>
-    Promise.all([lireFiche(tx, id.data), listerEmplacements(tx)]),
+  const [fiche, emplacements, marques] = await enMonNom(tx =>
+    Promise.all([
+      lireFiche(tx, id.data),
+      listerEmplacements(tx),
+      listerMarques(tx),
+    ]),
   );
 
   if (fiche === null) {
@@ -49,6 +55,8 @@ export default async function Page({
   const informations = plante
     ? fiche.attributs.filter(a => !LIBELLES_PLANTATION.includes(a.libelle))
     : fiche.attributs;
+  // Les infos de base de sa nature, modifiables (§ 4.1).
+  const avecInfos = INFOS[fiche.nature].length > 0;
 
   return (
     <Screen
@@ -69,7 +77,18 @@ export default async function Page({
         />
       )}
 
-      {informations.length > 0 && (
+      {avecInfos && (
+        <InfosFiche
+          ficheId={fiche.id}
+          nature={fiche.nature}
+          infos={infosDe(informations, fiche.nature)}
+          valeurs={valeursInfos(informations, fiche.nature)}
+          autres={horsInfos(informations, fiche.nature)}
+          marques={marquesConnues(marques)}
+        />
+      )}
+
+      {!avecInfos && informations.length > 0 && (
         <Panel className="gap-3 p-[18px]">
           <SectionLabel>Informations</SectionLabel>
           <dl className="m-0 flex flex-col gap-2.5">

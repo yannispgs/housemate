@@ -124,6 +124,7 @@ export default async function Page({
           <FicheForm
             categories={categories}
             emplacements={emplacementsProposes(places)}
+            marques={marques}
           />
         )}
       </Panel>

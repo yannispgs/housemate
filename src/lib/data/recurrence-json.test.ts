@@ -63,6 +63,16 @@ describe("récurrence stockée", () => {
     expect(parseRecurrence(value)).toBeNull();
   });
 
+  it("lit une échéance qui suit l'attribut de sa fiche", () => {
+    expect(
+      parseRecurrence({
+        kind: "once",
+        on: "2031-05-01",
+        source: "Date d'expiration",
+      }),
+    ).toEqual({ kind: "once", on: fromISO("2031-05-01") });
+  });
+
   it("refuse d'écrire un motif pas encore pris en charge", () => {
     expect(() => serializeRecurrence({ kind: "dormant" } as never)).toThrow(
       /pas encore pris en charge/,
