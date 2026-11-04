@@ -122,9 +122,14 @@ export function jeuFictif(today: PlainDate): JeuFictif {
     consommables: [],
     releves: [],
   });
-  // En pot ou en terre, et l'emplacement (§ 12.4) : de quoi essayer le filtre.
-  const plante = (pot: PotOuTerre, emplacement: string) =>
-    attributsPlante({ pot, emplacement });
+  // En pot ou en terre, l'emplacement (§ 12.4) et les seuils de gel (§ 12.2) :
+  // de quoi essayer le filtre et la veille gel.
+  const plante = (
+    pot: PotOuTerre,
+    emplacement: string,
+    seuilDegats: number,
+    seuilMort: number,
+  ) => attributsPlante({ pot, emplacement, seuilDegats, seuilMort });
   const texte = (libelle: string, valeur: string): Attribut => ({
     libelle,
     type: "texte",
@@ -227,7 +232,7 @@ export function jeuFictif(today: PlainDate): JeuFictif {
             preavisJours: 14,
           }),
         ],
-        plante("En pot", "Extérieur"),
+        plante("En pot", "Extérieur", -5, -10),
       ),
       fiche(
         "plante",
@@ -242,7 +247,7 @@ export function jeuFictif(today: PlainDate): JeuFictif {
             preavisJours: 10,
           }),
         ],
-        plante("En pot", "Véranda"),
+        plante("En pot", "Véranda", 0, -5),
       ),
       fiche(
         "plante",
@@ -259,7 +264,7 @@ export function jeuFictif(today: PlainDate): JeuFictif {
             unite: "day",
           }),
         ],
-        plante("En terre", "Extérieur"),
+        plante("En terre", "Extérieur", -20, -25),
       ),
       fiche(
         "equipement",

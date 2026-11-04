@@ -9,10 +9,9 @@ import { Panel, Screen, SectionLabel } from "@/components/Screen";
 import { demoEnabled } from "@/demo/mode";
 import { valeurAffichee } from "@/lib/data/fiche-vue";
 import {
-  LIBELLE_EMPLACEMENT,
-  LIBELLE_POT,
+  LIBELLES_PLANTATION,
   labelsPlante,
-  situationPlante,
+  plantation,
 } from "@/lib/data/plantes";
 import { emplacementsProposes } from "@/lib/data/saisie";
 import { enMonNom } from "@/lib/data/server";
@@ -45,12 +44,10 @@ export default async function Page({
   }
 
   const plante = fiche.nature === "plante";
-  const situation = situationPlante(fiche.attributs);
+  const sectionPlante = plantation(fiche.attributs);
   // Ceux d'une plante ont leur propre section, modifiable (§ 12.4).
   const informations = plante
-    ? fiche.attributs.filter(
-        a => a.libelle !== LIBELLE_POT && a.libelle !== LIBELLE_EMPLACEMENT,
-      )
+    ? fiche.attributs.filter(a => !LIBELLES_PLANTATION.includes(a.libelle))
     : fiche.attributs;
 
   return (
@@ -59,7 +56,7 @@ export default async function Page({
       subtitle={[
         NATURE_LABELS[fiche.nature],
         fiche.categorie,
-        ...(plante ? labelsPlante(situation) : []),
+        ...(plante ? labelsPlante(sectionPlante) : []),
       ]
         .filter(Boolean)
         .join(" · ")}
@@ -67,7 +64,7 @@ export default async function Page({
       {plante && (
         <PlantationFiche
           ficheId={fiche.id}
-          situation={situation}
+          plantation={sectionPlante}
           emplacements={emplacementsProposes(emplacements)}
         />
       )}

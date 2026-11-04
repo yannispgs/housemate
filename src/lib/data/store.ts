@@ -11,9 +11,9 @@
 import type postgres from "postgres";
 import {
   avecAttribut,
+  avecPlantation,
   LIBELLE_EMPLACEMENT,
-  LIBELLE_POT,
-  type SituationPlante,
+  type Plantation,
 } from "@/lib/data/plantes";
 import { parseRecurrence } from "@/lib/data/recurrence-json";
 import type {
@@ -32,6 +32,7 @@ import { fromISO, type PlainDate, toISO } from "@/lib/domain/plain-date";
 import type { Duration } from "@/lib/domain/recurrence";
 import type { Reminder, ReminderUnit } from "@/lib/domain/reminders";
 import type { Importance, Tenure } from "@/lib/ui/deadline";
+import type { FrostRow, MarginRow } from "@/lib/ui/frost";
 
 export type Tx = postgres.TransactionSql;
 
@@ -414,14 +415,14 @@ export async function renommerFiche(
 }
 
 /**
- * En pot ou en terre, et l'emplacement d'une plante visible (§ 12.4) : les
- * deux attributs, remplacés à leur place ou retirés s'ils sont vides. Rend
+ * En pot ou en terre, l'emplacement et les seuils de gel d'une plante visible
+ * (§ 12.2, § 12.4) : remplacés à leur place ou retirés s'ils sont vides. Rend
  * `false` si la fiche n'est pas une plante visible.
  */
 export async function modifierPlante(
   tx: Tx,
   id: string,
-  situation: SituationPlante,
+  plante: Plantation,
 ): Promise<boolean> {
   const [fiche] = await tx<{ attributs: Attribut[] }[]>`
     select attributs from app.fiches
@@ -432,10 +433,38 @@ export async function modifierPlante(
     return false;
   }
 
+  const attributs = avecPlantation(fiche.attributs, plante);
+  await tx`
+    update app.fiches
+    set attributs = ${tx.json(attributs as unknown as postgres.JSONValue)}
+    where id = ${id}`;
+
+  return true;
+}
+
+/**
+ * « Déplacer » depuis la carte de gel (§ 12.8, décision du 26/10/2026) : le
+ * seul emplacement change, jusqu'au prochain changement. Rend `false` si la
+ * fiche n'est pas une plante visible.
+ */
+export async function deplacerPlante(
+  tx: Tx,
+  id: string,
+  emplacement: string,
+): Promise<boolean> {
+  const [fiche] = await tx<{ attributs: Attribut[] }[]>`
+    select attributs from app.fiches
+    where id = ${id} and nature = 'plante' and archivee_le is null
+    for update`;
+
+  if (fiche === undefined) {
+    return false;
+  }
+
   const attributs = avecAttribut(
-    avecAttribut(fiche.attributs, LIBELLE_POT, situation.pot),
+    fiche.attributs,
     LIBELLE_EMPLACEMENT,
-    situation.emplacement,
+    emplacement,
   );
   await tx`
     update app.fiches
@@ -443,6 +472,87 @@ export async function modifierPlante(
     where id = ${id}`;
 
   return true;
+}
+
+/** La nuit en cours (de 20 h au bilan du matin), plantes visibles seulement. */
+export async function lireVeilleGel(
+  tx: Tx,
+  instant: Date,
+): Promise<FrostRow[]> {
+  const rows = await tx<FrostRow[]>`
+    select
+      to_char(nuit, 'YYYY-MM-DD') as nuit, chauffee, fiche_id::text as "ficheId",
+      titre, emplacement_du_soir as "emplacementDuSoir", emplacement, niveau,
+      estimation::float8 as estimation, borne_basse::float8 as "borneBasse",
+      seuil_degats::float8 as "seuilDegats", seuil_mort::float8 as "seuilMort"
+    from app.veille_gel_en_cours(${instant})
+    order by titre, fiche_id`;
+
+  return rows;
+}
+
+/** « Chauffer » la véranda cette nuit, ou se raviser. */
+export async function declarerNuitChauffee(
+  tx: Tx,
+  instant: Date,
+  chauffee: boolean,
+): Promise<boolean> {
+  const [row] = await tx<{ fait: boolean }[]>`
+    select app.declarer_nuit_chauffee(${instant}, ${chauffee}) as fait`;
+
+  /* c8 ignore next -- repli inatteignable : un select rend toujours sa ligne. */
+  return row?.fait ?? false;
+}
+
+/**
+ * La marge de prévision de la veille gel : celle en vigueur, et la proposition
+ * en attente. `null` hors d'un foyer.
+ */
+export async function lireMargePrevision(tx: Tx): Promise<MarginRow | null> {
+  const [row] = await tx<
+    {
+      actuelle: number | null;
+      appliquee_le: Date | null;
+      proposition: string | null;
+      proposee: number;
+      nuits: number;
+      erreur: number;
+    }[]
+  >`
+    select actuelle::float8 as actuelle, appliquee_le,
+      proposition::text as proposition, proposee::float8 as proposee, nuits,
+      erreur::float8 as erreur
+    from app.marge_prevision()`;
+
+  if (row === undefined) {
+    return null;
+  }
+
+  return {
+    actuelle: row.actuelle,
+    appliqueeLe: row.appliquee_le,
+    proposition:
+      row.proposition === null
+        ? null
+        : {
+            id: row.proposition,
+            valeur: row.proposee,
+            nuits: row.nuits,
+            erreur: row.erreur,
+          },
+  };
+}
+
+/** « Appliquer » la marge proposée : `false` si elle n'est plus en attente. */
+export async function appliquerMargePrevision(
+  tx: Tx,
+  proposition: string,
+): Promise<boolean> {
+  const [row] = await tx<{ fait: boolean }[]>`
+    select app.appliquer_marge_prevision(${proposition}) as fait`;
+
+  /* c8 ignore next -- repli inatteignable : un select rend toujours sa ligne. */
+  return row?.fait ?? false;
 }
 
 /** Une fiche visible de la personne connectée, ou `null`. */

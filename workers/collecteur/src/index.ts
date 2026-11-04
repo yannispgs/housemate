@@ -15,7 +15,12 @@ import {
   parseMetNorway,
   parseOpenMeteo,
 } from "./forecasts";
-import { evaluateEvening, reviewNight, sendPending } from "./frost-run";
+import {
+  evaluateEvening,
+  proposeMargin,
+  reviewNight,
+  sendPending,
+} from "./frost-run";
 import type { Mail } from "./frost-watch";
 import { demanderResumes } from "./resumes";
 import {
@@ -95,6 +100,11 @@ async function watchFrost(env: Env, now: Date, hour: number): Promise<void> {
 
   if (shouldReviewNight(hour)) {
     await reviewNight(sql, parisDate(now, -1));
+    const proposal = await proposeMargin(sql);
+
+    if (proposal !== null) {
+      await sendMail(env, proposal);
+    }
   }
 }
 
