@@ -61,6 +61,27 @@ export function groupRecords(
     }));
 }
 
+/* ------------------------------------------------------------------------ */
+/* Le menu « Type » : la nature des fiches (§ 4.1)                           */
+/* ------------------------------------------------------------------------ */
+
+export const ALL_NATURES = "Tous les types";
+
+/** Les types présents, dans l'ordre où ils apparaissent. */
+export function recordNatures(records: readonly RecordView[]): RecordNature[] {
+  return Array.from(new Set(records.map(record => record.nature)));
+}
+
+/** Les fiches du type choisi ; toutes, sans type. */
+export function filterNature(
+  records: readonly RecordView[],
+  nature: RecordNature | null,
+): RecordView[] {
+  return nature === null
+    ? [...records]
+    : records.filter(record => record.nature === nature);
+}
+
 /** « 1 fiche », « 4 fiches ». */
 export function recordCount(count: number): string {
   return count === 1 ? "1 fiche" : `${count} fiches`;
@@ -73,22 +94,20 @@ export function recordCount(count: number): string {
 export const TOUTES_LES_PLANTES = "Toutes";
 
 /**
- * Les critères du menu, d'après les plantes de la catégorie choisie. Vide sur
- * « Tout », ou sans plante renseignée dans la catégorie : le menu n'apparaît
+ * Les critères du menu, d'après les plantes renseignées. Seulement sur le
+ * type « Plante » : ailleurs, ou sans plante renseignée, le menu n'apparaît
  * pas, il n'aurait rien à filtrer.
  */
 export function plantCriteria(
   records: readonly RecordView[],
-  category: string,
+  nature: RecordNature | null,
 ): CriterePlante[] {
-  if (category === ALL_CATEGORIES) {
+  if (nature !== "Plante") {
     return [];
   }
 
   return criteresPlantes(
-    records.flatMap(record =>
-      record.category === category && record.plante ? [record.plante] : [],
-    ),
+    records.flatMap(record => (record.plante ? [record.plante] : [])),
   );
 }
 

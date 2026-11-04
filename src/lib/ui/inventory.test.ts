@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   ALL_CATEGORIES,
+  filterNature,
   filterPlants,
   groupRecords,
   plantCriteria,
   type RecordView,
   recordCategories,
   recordCount,
+  recordNatures,
 } from "./inventory";
 
 const record = (title: string, category: string): RecordView => ({
@@ -66,19 +68,24 @@ describe("le menu « Plantes » (§ 12.4)", () => {
     { ...record("Voiture", "Véhicule"), nature: "Véhicule" as const },
   ];
 
-  it("propose les critères des plantes renseignées de la catégorie, sinon rien", () => {
-    expect(plantCriteria(liste, "Jardin").map(c => c.valeur)).toEqual([
+  it("propose les critères des plantes renseignées, sur le type « Plante » seulement", () => {
+    expect(plantCriteria(liste, "Plante").map(c => c.valeur)).toEqual([
       "En pot",
       "En terre",
       "Extérieur",
       "Véranda",
     ]);
-    expect(plantCriteria([plante("Ficus", null, null)], "Jardin")).toEqual([]);
+    expect(plantCriteria([plante("Ficus", null, null)], "Plante")).toEqual([]);
+    expect(plantCriteria(liste, null)).toEqual([]);
+    expect(plantCriteria(liste, "Véhicule")).toEqual([]);
   });
 
-  it("ne propose rien sur « Tout » ni sur une catégorie sans plante", () => {
-    expect(plantCriteria(liste, ALL_CATEGORIES)).toEqual([]);
-    expect(plantCriteria(liste, "Véhicule")).toEqual([]);
+  it("filtre par type, et liste les types présents", () => {
+    expect(recordNatures(liste)).toEqual(["Plante", "Véhicule"]);
+    expect(filterNature(liste, "Véhicule").map(r => r.title)).toEqual([
+      "Voiture",
+    ]);
+    expect(filterNature(liste, null)).toEqual(liste);
   });
 
   it("ne garde que les plantes du critère, ou tout sans critère", () => {
