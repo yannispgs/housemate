@@ -18,16 +18,20 @@ import {
 } from "@/lib/data/saisie";
 import type { Nature } from "@/lib/data/views";
 
-export type TypeInfo = "texte" | "date" | "duree" | "montant";
+export type TypeInfo = "texte" | "date" | "duree" | "montant" | "jour";
 
 export interface ChampInfo {
-  /** Le nom du champ de formulaire ; une durée en a deux, `…Nombre` et `…Unite`. */
+  /**
+   * Le nom du champ de formulaire ; une durée en a deux, `…Nombre` et
+   * `…Unite`, un jour trois, `…Jour`, `…Mois` et `…Annee`.
+   */
   readonly cle: string;
   readonly libelle: string;
   readonly type: TypeInfo;
 }
 
 export const LIBELLE_EXPIRATION = "Date d'expiration";
+export const LIBELLE_NAISSANCE = "Date de naissance";
 
 const champ = (cle: string, libelle: string, type: TypeInfo): ChampInfo => ({
   cle,
@@ -35,10 +39,7 @@ const champ = (cle: string, libelle: string, type: TypeInfo): ChampInfo => ({
   type,
 });
 
-/**
- * Les infos de chaque nature. La personne attend son anniversaire par membre ;
- * le lieu et le séjour n'en ont pas.
- */
+/** Les infos de chaque nature ; le lieu et le séjour n'en ont pas. */
 export const INFOS: Readonly<Record<Nature, readonly ChampInfo[]>> = {
   equipement: [
     champ("marque", "Marque", "texte"),
@@ -70,7 +71,7 @@ export const INFOS: Readonly<Record<Nature, readonly ChampInfo[]>> = {
     champ("emission", "Date d'émission", "date"),
     champ("expiration", LIBELLE_EXPIRATION, "date"),
   ],
-  personne: [],
+  personne: [champ("naissance", LIBELLE_NAISSANCE, "jour")],
   lieu: [],
   sejour: [],
 };
@@ -119,11 +120,74 @@ const montant = z.preprocess(
     .optional(),
 );
 
+const entierFacultatif = (min: number, max: number, message: string) =>
+  z.preprocess(
+    vide,
+    z.coerce
+      .number({ error: message })
+      .int(message)
+      .min(min, message)
+      .max(max, message)
+      .optional(),
+  );
+
+/** Le jour, le mois et l'année d'une naissance : ensemble, et possibles. */
+function jourValide(cle: string) {
+  return (lu: Record<string, unknown>, ctx: z.RefinementCtx) => {
+    const jour = lu[`${cle}Jour`] as number | undefined;
+    const mois = lu[`${cle}Mois`] as number | undefined;
+    const annee = lu[`${cle}Annee`] as number | undefined;
+
+    if (jour === undefined && mois === undefined) {
+      if (annee !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: [`${cle}Jour`],
+          message: "Le jour et le mois sont nécessaires.",
+        });
+      }
+
+      return;
+    }
+
+    if (jour === undefined || mois === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: [`${cle}Jour`],
+        message: "Le jour et le mois sont nécessaires.",
+      });
+
+      return;
+    }
+
+    // Sans année, le 29 février reste possible.
+    const date = new Date(Date.UTC(annee ?? 2000, mois - 1, jour));
+
+    if (date.getUTCMonth() !== mois - 1) {
+      ctx.addIssue({
+        code: "custom",
+        path: [`${cle}Jour`],
+        message: "Ce jour n'existe pas.",
+      });
+    }
+  };
+}
+
 function schema(nature: Nature) {
   const forme: Record<string, z.ZodType> = {};
+  const jours: string[] = [];
 
   for (const { cle, type } of INFOS[nature]) {
-    if (type === "duree") {
+    if (type === "jour") {
+      forme[`${cle}Jour`] = entierFacultatif(1, 31, "Un jour entre 1 et 31.");
+      forme[`${cle}Mois`] = entierFacultatif(1, 12, "Un mois entre 1 et 12.");
+      forme[`${cle}Annee`] = entierFacultatif(
+        1900,
+        2100,
+        "Une année entre 1900 et 2100.",
+      );
+      jours.push(cle);
+    } else if (type === "duree") {
       forme[`${cle}Nombre`] = nombre;
       forme[`${cle}Unite`] = unite;
     } else {
@@ -131,13 +195,27 @@ function schema(nature: Nature) {
     }
   }
 
-  return z.object(forme);
+  return z.object(forme).superRefine((lu, ctx) => {
+    for (const cle of jours) {
+      jourValide(cle)(lu, ctx);
+    }
+  });
 }
 
 function attribut(
   { libelle, type, cle }: ChampInfo,
   lu: Readonly<Record<string, unknown>>,
 ): Attribut | null {
+  if (type === "jour") {
+    const jour = lu[`${cle}Jour`] as number | undefined;
+    const mois = lu[`${cle}Mois`] as number;
+    const annee = (lu[`${cle}Annee`] as number | undefined) ?? null;
+
+    return jour === undefined
+      ? null
+      : { libelle, type, valeur: { jour, mois, annee } };
+  }
+
   if (type === "duree") {
     const count = lu[`${cle}Nombre`] as number | undefined;
     const unit = lu[`${cle}Unite`] as "month" | "year";
@@ -224,7 +302,12 @@ export function valeursInfos(
   for (const { cle, libelle } of INFOS[nature]) {
     const a = attributs.find(x => x.libelle === libelle);
 
-    if (a?.type === "duree") {
+    if (a?.type === "jour") {
+      valeurs[`${cle}Jour`] = String(a.valeur.jour);
+      valeurs[`${cle}Mois`] = String(a.valeur.mois);
+      valeurs[`${cle}Annee`] =
+        a.valeur.annee === null ? "" : String(a.valeur.annee);
+    } else if (a?.type === "duree") {
       valeurs[`${cle}Nombre`] = String(a.valeur.count);
       valeurs[`${cle}Unite`] = a.valeur.unit;
     } else if (a?.type === "montant") {

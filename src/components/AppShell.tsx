@@ -10,7 +10,8 @@
  *
  * Mobile, pendant la frappe, l'en-tête et la barre d'onglets s'effacent
  * (`.masque-en-saisie`, voir `globals.css`) pour laisser la place au clavier,
- * et le champ où l'on écrit reste en vue (`useChampVisible`).
+ * et le champ où l'on écrit reste en vue (`useChampVisible`). Un appui commencé
+ * pendant la frappe les garde effacées jusqu'au relâchement (`useAppuiEnSaisie`).
  *
  * Client component : l'onglet actif dépend du chemin courant. La barre d'état
  * et l'indicateur d'accueil de la maquette ne sont pas dessinés : ce sont les
@@ -34,6 +35,7 @@ import {
   PlusIcon,
   SlidersIcon,
 } from "./icons";
+import { useAppuiEnSaisie } from "./useAppuiEnSaisie";
 import { useChampVisible } from "./useChampVisible";
 
 function Brand() {
@@ -202,6 +204,7 @@ export function AppShell({
 }>) {
   const pathname = usePathname();
   useChampVisible();
+  useAppuiEnSaisie();
 
   return (
     <div className="shell flex h-dvh flex-col overflow-hidden bg-page text-ink">
