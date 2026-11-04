@@ -27,6 +27,9 @@ import { MenuList, type MenuOption, PillButton, useDismiss } from "../Menu";
 import { RecordCard } from "../RecordCard";
 import { Screen, SectionLabel } from "../Screen";
 
+/** La largeur la plus grande d'un menu, avec la marge de l'écran. */
+const LARGEUR_MENU = 232;
+
 /** Une pilule et son menu, fermé par un clic en dehors ou par Échap. */
 function FilterMenu({
   label,
@@ -38,6 +41,9 @@ function FilterMenu({
   options: readonly MenuOption[];
 }>) {
   const [open, setOpen] = useState(false);
+  // Le menu s'ouvre vers la droite, sauf s'il sortirait de l'écran : la
+  // dernière pilule de la ligne l'ouvre alors vers la gauche.
+  const [versLaGauche, setVersLaGauche] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useDismiss(ref, open, close);
@@ -48,11 +54,15 @@ function FilterMenu({
         label={label}
         highlighted={highlighted}
         open={open}
-        onClick={() => setOpen(value => !value)}
+        onClick={() => {
+          const gauche = ref.current?.getBoundingClientRect().left ?? 0;
+          setVersLaGauche(gauche + LARGEUR_MENU > window.innerWidth);
+          setOpen(value => !value);
+        }}
       />
       {open && (
         <MenuList
-          className="top-[calc(100%+8px)] right-0 min-w-[190px] md:min-w-[210px]"
+          className={`top-[calc(100%+8px)] min-w-[190px] md:min-w-[210px] ${versLaGauche ? "right-0" : "left-0"}`}
           options={options.map(option => ({
             ...option,
             onSelect: () => {
@@ -93,9 +103,9 @@ export function InventoryScreen({
     <Screen
       title="Inventaire"
       subtitle="Ce que le foyer possède, et ce qu'on en sait"
-      titleAside={
+      toolbar={
         records.length > 0 && (
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex flex-wrap gap-2">
             <FilterMenu
               label={nature ?? "Type"}
               highlighted={nature !== null}
