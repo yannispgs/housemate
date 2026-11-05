@@ -39,6 +39,9 @@ export function Modale({
     // Rejouée en développement (StrictMode) : ne pas l'ouvrir deux fois.
     if (!dialogue.open) {
       dialogue.showModal();
+      // Le focus va à la modale, pas à son premier bouton : sinon son anneau
+      // s'affiche dès l'ouverture, au doigt comme au clavier.
+      dialogue.focus();
     }
 
     let depuisLeFond = false;
@@ -66,8 +69,9 @@ export function Modale({
     <dialog
       ref={ref}
       aria-label={titre}
+      tabIndex={-1}
       onClose={onClose}
-      className={`m-auto border-0 bg-transparent p-0 backdrop:bg-black/40 ${className}`}
+      className={`m-auto border-0 bg-transparent p-0 outline-none backdrop:bg-black/40 ${className}`}
     >
       {children(() => ref.current?.close())}
     </dialog>
