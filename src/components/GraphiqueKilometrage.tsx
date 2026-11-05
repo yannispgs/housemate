@@ -2,10 +2,9 @@
 
 /**
  * La section « Kilométrage » d'une fiche (SPEC § 5.3, décisions du
- * 23/10/2026) : la courbe des relevés réels sur 1, 2 ou 5 ans ou tout
+ * 23/10 et du 05/11/2026) : le nuage des relevés réels sur 1, 2 ou 5 ans ou tout
  * l'historique, un repère par intervention du carnet, et les kilomètres de
- * chaque année ; sous deux relevés sur la période, les points seuls
- * (05/11/2026). Le calcul est dans `@/lib/domain/kilometrage`.
+ * chaque année. Le calcul est dans `@/lib/domain/kilometrage`.
  *
  * ⚠️ Provisoire : pas encore dessinée dans Claude Design (a-dessiner.md).
  */
@@ -61,8 +60,6 @@ export function GraphiqueKilometrage({
     jour,
     COURBE,
   );
-  // Une ligne ne se trace qu'entre deux relevés au moins.
-  const nuage = c.points.length < 2;
   const debut = debutDePeriode(periode, releves, jour);
   const annees = anneesDeLaPeriode(kmParAn(releves, jour), debut);
   const repere = choisi === null ? undefined : reperes[choisi];
@@ -150,21 +147,13 @@ export function GraphiqueKilometrage({
               </text>
             </g>
           ))}
-          {/* Moins de 2 relevés : les points seuls (décision du 05/11/2026). */}
-          {nuage || (
-            <polyline
-              points={c.points.map(p => `${p.x},${p.y}`).join(" ")}
-              fill="none"
-              stroke="var(--brand-strong)"
-              strokeWidth="2"
-            />
-          )}
+          {/* Un nuage de points, sans ligne (décision du 05/11/2026). */}
           {c.points.map(p => (
             <circle
               key={`${p.x} ${p.y}`}
               cx={p.x}
               cy={p.y}
-              r={nuage ? 4 : 2.5}
+              r="4"
               fill="var(--brand-strong)"
             />
           ))}
