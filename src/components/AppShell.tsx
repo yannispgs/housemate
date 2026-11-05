@@ -205,7 +205,7 @@ export function AppShell({
 
   return (
     <div className="shell flex h-dvh flex-col overflow-hidden bg-page text-ink">
-      <header className="masque-en-saisie flex flex-none items-start justify-between gap-3.5 px-[22px] pt-[max(env(safe-area-inset-top),14px)] md:hidden">
+      <header className="masque-en-saisie flex flex-none items-start justify-between gap-3.5 px-[22px] pt-[max(env(safe-area-inset-top),14px)] pb-2.5 md:hidden">
         <Brand />
         {!isActive(SETTINGS.href, pathname) && (
           <DomainToggle pathname={pathname} compact={false} />
