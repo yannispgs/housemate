@@ -1122,7 +1122,7 @@ describe("remplissage d'une preview", () => {
       await commeMembre(sql(), moi.compte, tx =>
         remplirFoyer(tx, jeuFictif(TODAY)),
       ),
-    ).toEqual({ fiches: 14, echeances: 20, consommables: 3 });
+    ).toEqual({ fiches: 15, echeances: 20, consommables: 7 });
 
     expect(await commeMembre(sql(), conjoint.compte, foyerVide)).toBe(false);
     // ⚠️ Le foyer voisin n'en voit rien.
@@ -1148,6 +1148,11 @@ describe("remplissage d'une preview", () => {
       verb: "Fait",
       tenure: "ferme",
     });
+    // La vieille voiture est à jour : rien d'elle à l'accueil.
+    expect(accueil.filter(v => v.title === "Vidange")).toHaveLength(1);
+    expect(
+      consommables.filter(c => c.intitule === "Courroie de distribution"),
+    ).toHaveLength(2);
     // Souple malgré la voiture ferme : en retard, sans monter.
     expect(accueil.find(v => v.title === "Essuie-glaces")).toMatchObject({
       state: "en retard",

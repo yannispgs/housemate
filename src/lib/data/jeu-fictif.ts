@@ -1,7 +1,7 @@
 /**
  * Le jeu de données fictif des previews : « à l'image du foyer » (décision du
  * 2026-10-10), jamais ses vraies données. Un couple et un jeune enfant, une
- * maison avec une véranda et un jardin, une voiture. ⚠️ Le dépôt est public :
+ * maison avec une véranda et un jardin, deux voitures. ⚠️ Le dépôt est public :
  * aucun prénom réel, aucune commune, aucune date de vie réelle.
  *
  * Toutes les dates sont relatives au jour où la preview est remplie
@@ -202,6 +202,7 @@ export function jeuFictif(today: PlainDate): JeuFictif {
           },
         ],
       },
+      vieilleVoiture(today),
       fiche(
         "plante",
         "Le citronnier en pot",
@@ -436,6 +437,75 @@ export function jeuFictif(today: PlainDate): JeuFictif {
         toleranceJours: 0,
         preavisJours: 30,
       }),
+    ],
+  };
+}
+
+/**
+ * La seconde voiture : de 2008 (au 05/11/2026), plus de 200 000 km, et un
+ * long carnet — plusieurs vidanges, plaquettes, essuie-glaces, une seule
+ * courroie (décision du foyer, 05/11/2026). De quoi remplir le graphique sur
+ * tout l'historique. Tout y est à jour : l'accueil reste celui de la
+ * première voiture.
+ */
+function vieilleVoiture(today: PlainDate): FicheFictive {
+  // Mise en circulation il y a 224 mois, environ 11 000 km par an depuis.
+  const age = 224;
+  const il = (mois: number) => addMonths(today, -mois);
+  const km = (mois: number) =>
+    Math.round(((age - mois) * 11_000) / 1_200) * 100;
+  const fait = (...mois: readonly number[]) =>
+    mois.map(m => ({ le: il(m), compteur: km(m) }));
+
+  return {
+    fiche: {
+      nature: "vehicule",
+      titre: "La vieille voiture",
+      categorie: "Véhicule",
+      attributs: [
+        { libelle: "Immatriculation", type: "texte", valeur: "BB-000-BB" },
+        {
+          libelle: "Mise en circulation",
+          type: "date",
+          valeur: toISO(il(age)),
+        },
+      ],
+    },
+    echeances: [],
+    releves: [200, 176, 152, 128, 104, 80, 56, 40, 26, 14, 6, 1].map(m => ({
+      le: il(m),
+      valeur: km(m),
+    })),
+    entretien: { tenue: "ferme", seuil: 0.075 },
+    consommables: [
+      {
+        intitule: "Vidange",
+        tenue: null,
+        duree: { compteur: 15_000, temps: { count: 1, unit: "year" } },
+        remplacements: fait(52, 40, 27, 15, 4),
+      },
+      // Une seule fois, à dix ans passés : la prochaine dans vingt mois.
+      {
+        intitule: "Courroie de distribution",
+        tenue: null,
+        duree: { compteur: 120_000, temps: { count: 10, unit: "year" } },
+        remplacements: fait(100),
+      },
+      {
+        intitule: "Plaquettes de frein",
+        tenue: null,
+        duree: { compteur: 40_000, temps: null },
+        remplacements: fait(139, 95, 49, 7),
+      },
+      {
+        intitule: "Essuie-glaces",
+        tenue: "souple",
+        duree: { compteur: null, temps: { count: 1, unit: "year" } },
+        remplacements: [38, 25, 13, 1].map(m => ({
+          le: il(m),
+          compteur: null,
+        })),
+      },
     ],
   };
 }

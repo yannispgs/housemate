@@ -19,7 +19,7 @@ describe("jeuFictif — le foyer fictif des previews", () => {
       ...jeu.echeances,
     ];
 
-    expect(jeu.fiches.length + jeu.garanties.length).toBe(14);
+    expect(jeu.fiches.length + jeu.garanties.length).toBe(15);
     expect(echeances).toHaveLength(20);
     // Chaque récurrence se relit, comme en base.
     for (const e of echeances) {
