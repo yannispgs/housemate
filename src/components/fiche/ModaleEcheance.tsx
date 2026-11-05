@@ -60,7 +60,8 @@ function ModaleEcheance({
       {fermerModale => (
         <div className="flex flex-col gap-2.5">
           <DeadlineCard
-            deadline={deadline}
+            // Déjà sur la fiche : pas de « Voir la fiche », qui y ramènerait.
+            deadline={{ ...deadline, ficheId: null }}
             open
             todayLabel={jour.court}
             onToggle={fermerModale}
