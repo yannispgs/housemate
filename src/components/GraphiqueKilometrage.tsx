@@ -3,16 +3,18 @@
 /**
  * La section « Kilométrage » d'une fiche (SPEC § 5.3, décisions du
  * 23/10 et du 05/11/2026) : le nuage des relevés réels sur 1, 2 ou 5 ans ou tout
- * l'historique, un repère par intervention du carnet, et les kilomètres de
- * chaque année. Le calcul est dans `@/lib/domain/kilometrage`.
+ * l'historique, un repère par intervention du carnet, filtrables par
+ * consommable (06/11/2026), et les kilomètres de chaque année. Le calcul est dans `@/lib/domain/kilometrage`.
  *
  * ⚠️ Provisoire : pas encore dessinée dans Claude Design (a-dessiner.md).
  */
 import { useState } from "react";
 import {
   ancreCarnet,
+  consommablesDesReperes,
   enteteEntree,
   type RepereCarnet,
+  reperesAffiches,
 } from "@/lib/data/carnet";
 import type { Releve } from "@/lib/domain/entretien";
 import {
@@ -42,7 +44,7 @@ function libellePeriode(periode: Periode): string {
 
 export function GraphiqueKilometrage({
   releves,
-  reperes,
+  reperes: tous,
   aujourdhui,
 }: Readonly<{
   releves: readonly Releve[];
@@ -52,6 +54,19 @@ export function GraphiqueKilometrage({
 }>) {
   const [periode, setPeriode] = useState<Periode>(PERIODE_PAR_DEFAUT);
   const [choisi, setChoisi] = useState<number | null>(null);
+  const [masques, setMasques] = useState<ReadonlySet<string>>(new Set());
+  const consommables = consommablesDesReperes(tous);
+  const reperes = reperesAffiches(tous, masques);
+  const basculer = (consommable: string) => {
+    const suivants = new Set(masques);
+
+    if (!suivants.delete(consommable)) {
+      suivants.add(consommable);
+    }
+
+    setMasques(suivants);
+    setChoisi(null);
+  };
   const jour = fromISO(aujourdhui);
   const c = courbe(
     releves,
@@ -93,6 +108,46 @@ export function GraphiqueKilometrage({
           </button>
         ))}
       </fieldset>
+
+      {/* Un seul consommable : rien à filtrer. */}
+      {consommables.length > 1 && (
+        <fieldset
+          aria-label="Repères affichés"
+          className="m-0 flex min-w-0 flex-wrap gap-1.5 border-0 p-0"
+        >
+          {consommables.map(nom => {
+            const affiche = !masques.has(nom);
+
+            return (
+              <button
+                key={nom}
+                type="button"
+                aria-pressed={affiche}
+                onClick={() => basculer(nom)}
+                className="flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-[12.5px]"
+                style={{
+                  borderColor: affiche
+                    ? "var(--brand-strong)"
+                    : "var(--baseline)",
+                  color: affiche ? "var(--ink)" : "var(--ink-muted)",
+                }}
+              >
+                <span
+                  aria-hidden
+                  className="block size-2 rotate-45 border-2"
+                  style={{
+                    borderColor: affiche
+                      ? "var(--brand-strong)"
+                      : "var(--baseline)",
+                    background: affiche ? "var(--brand-strong)" : "transparent",
+                  }}
+                />
+                {nom}
+              </button>
+            );
+          })}
+        </fieldset>
+      )}
 
       {c.points.length === 0 && (
         <span className="text-[13.5px] text-ink-secondary">

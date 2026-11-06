@@ -75,3 +75,24 @@ export function reperesDuCarnet(
 
   return [...groupes.values()];
 }
+
+/** Les consommables des repères, chacun une fois, dans l'ordre alphabétique. */
+export function consommablesDesReperes(
+  reperes: readonly RepereCarnet[],
+): string[] {
+  return [...new Set(reperes.flatMap(r => r.libelles))].sort((a, b) =>
+    a.localeCompare(b, "fr"),
+  );
+}
+
+/**
+ * Les repères à afficher (décision du foyer, 06/11/2026) : ceux dont un
+ * consommable au moins n'est pas masqué. Un repère garde tout ce qui a été
+ * fait ce jour-là.
+ */
+export function reperesAffiches(
+  reperes: readonly RepereCarnet[],
+  masques: ReadonlySet<string>,
+): RepereCarnet[] {
+  return reperes.filter(r => r.libelles.some(l => !masques.has(l)));
+}
