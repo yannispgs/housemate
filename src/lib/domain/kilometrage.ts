@@ -11,6 +11,7 @@ import {
   daysBetween,
   type PlainDate,
   plainDate,
+  toISO,
 } from "./plain-date";
 
 /** Les années montrées ; « tout » part du premier relevé. */
@@ -156,6 +157,26 @@ export interface Courbe {
 export interface RepereKm {
   readonly le: PlainDate;
   readonly compteur: number;
+}
+
+/**
+ * Toutes les données du compteur (décision du foyer, 06/11/2026) : les
+ * relevés, et les remplacements notés avec un compteur. Un jour qui a les
+ * deux garde son relevé.
+ */
+export function serieKilometrique(
+  releves: readonly Releve[],
+  reperes: readonly RepereKm[],
+): Releve[] {
+  const parJour = new Map(
+    reperes.map(r => [toISO(r.le), { le: r.le, valeur: r.compteur }]),
+  );
+
+  for (const releve of releves) {
+    parJour.set(toISO(releve.le), releve);
+  }
+
+  return tries([...parJour.values()]);
 }
 
 /**

@@ -7,6 +7,7 @@ import {
   debutDePeriode,
   kmParAn,
   PERIODE_PAR_DEFAUT,
+  serieKilometrique,
 } from "./kilometrage";
 import { fromISO } from "./plain-date";
 
@@ -144,5 +145,27 @@ describe("courbe", () => {
       graduationsX: [],
       graduationsY: [],
     });
+  });
+});
+
+describe("serieKilometrique", () => {
+  it("ajoute aux relevés les remplacements notés au compteur, dans l'ordre", () => {
+    const repere = (le: string, compteur: number) => ({
+      le: fromISO(le),
+      compteur,
+    });
+
+    expect(
+      serieKilometrique(RELEVES, [
+        repere("2025-01-10", 105_000),
+        // Le même jour qu'un relevé : le relevé l'emporte.
+        repere("2025-07-01", 109_990),
+      ]),
+    ).toEqual([
+      r("2024-07-01", 100_000),
+      r("2025-01-10", 105_000),
+      r("2025-07-01", 110_000),
+      r("2026-07-01", 118_000),
+    ]);
   });
 });

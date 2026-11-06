@@ -1,10 +1,12 @@
 "use client";
 
 /**
- * La section « Kilométrage » d'une fiche (SPEC § 5.3, décisions du
- * 23/10 et du 05/11/2026) : le nuage des relevés réels sur 1, 2 ou 5 ans ou tout
- * l'historique, un repère par intervention du carnet, filtrables par
- * consommable (06/11/2026), et les kilomètres de chaque année. Le calcul est dans `@/lib/domain/kilometrage`.
+ * La section « Kilométrage » d'une fiche (SPEC § 5.3, décisions du 23/10 et
+ * du 06/11/2026) : sur 1, 2 ou 5 ans ou tout l'historique, la courbe de
+ * chaque donnée du compteur (relevés et remplacements notés au compteur),
+ * un losange par intervention du carnet, de la couleur de la courbe et
+ * filtrable par consommable, et les kilomètres de chaque année. Le calcul est
+ * dans `@/lib/domain/kilometrage`.
  *
  * ⚠️ Provisoire : pas encore dessinée dans Claude Design (a-dessiner.md).
  */
@@ -25,6 +27,7 @@ import {
   PERIODE_PAR_DEFAUT,
   PERIODES,
   type Periode,
+  serieKilometrique,
 } from "@/lib/domain/kilometrage";
 import { fromISO } from "@/lib/domain/plain-date";
 import { Panel, SectionLabel } from "./Screen";
@@ -68,15 +71,20 @@ export function GraphiqueKilometrage({
     setChoisi(null);
   };
   const jour = fromISO(aujourdhui);
-  const c = courbe(
+  // Tous les remplacements au compteur, même ceux dont le repère est masqué.
+  const serie = serieKilometrique(
     releves,
+    tous.map(r => ({ le: fromISO(r.le), compteur: r.compteur })),
+  );
+  const c = courbe(
+    serie,
     reperes.map(r => ({ le: fromISO(r.le), compteur: r.compteur })),
     periode,
     jour,
     COURBE,
   );
-  const debut = debutDePeriode(periode, releves, jour);
-  const annees = anneesDeLaPeriode(kmParAn(releves, jour), debut);
+  const debut = debutDePeriode(periode, serie, jour);
+  const annees = anneesDeLaPeriode(kmParAn(serie, jour), debut);
   const repere = choisi === null ? undefined : reperes[choisi];
 
   return (
@@ -127,7 +135,7 @@ export function GraphiqueKilometrage({
                 className="flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-[12.5px]"
                 style={{
                   borderColor: affiche
-                    ? "var(--chart-repere)"
+                    ? "var(--brand-strong)"
                     : "var(--baseline)",
                   color: affiche ? "var(--ink)" : "var(--ink-muted)",
                 }}
@@ -137,9 +145,9 @@ export function GraphiqueKilometrage({
                   className="block size-2 rotate-45 border-2"
                   style={{
                     borderColor: affiche
-                      ? "var(--chart-repere)"
+                      ? "var(--brand-strong)"
                       : "var(--baseline)",
-                    background: affiche ? "var(--chart-repere)" : "transparent",
+                    background: affiche ? "var(--brand-strong)" : "transparent",
                   }}
                 />
                 {nom}
@@ -202,16 +210,27 @@ export function GraphiqueKilometrage({
               </text>
             </g>
           ))}
-          {/* Un nuage de points, sans ligne (décision du 05/11/2026). */}
-          {c.points.map(p => (
-            <circle
-              key={`${p.x} ${p.y}`}
-              cx={p.x}
-              cy={p.y}
-              r="4"
-              fill="var(--brand-strong)"
+          {/* Une courbe par chaque donnée du compteur ; un point seul tant
+              qu'il n'y en a qu'une (décision du 06/11/2026). */}
+          {c.points.length > 1 && (
+            <polyline
+              points={c.points.map(p => `${p.x},${p.y}`).join(" ")}
+              fill="none"
+              stroke="var(--brand-strong)"
+              strokeWidth="2"
+              strokeLinejoin="round"
             />
-          ))}
+          )}
+          {c.points.length === 1 &&
+            c.points.map(p => (
+              <circle
+                key={`${p.x} ${p.y}`}
+                cx={p.x}
+                cy={p.y}
+                r="4"
+                fill="var(--brand-strong)"
+              />
+            ))}
         </svg>
         {c.reperes.map(r => {
           const intervention = reperes[r.index];
@@ -236,10 +255,10 @@ export function GraphiqueKilometrage({
               <span
                 className="m-auto block size-2.5 rotate-45 border-2"
                 style={{
-                  borderColor: "var(--chart-repere)",
+                  borderColor: "var(--brand-strong)",
                   background:
                     choisi === r.index
-                      ? "var(--chart-repere)"
+                      ? "var(--brand-strong)"
                       : "var(--surface)",
                 }}
               />
