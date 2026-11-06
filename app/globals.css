@@ -69,6 +69,11 @@
   --ink-warning: #fab219;
   --ink-good: #0ca30c;
   --critical-tint: color-mix(in srgb, #d03b3b 14%, var(--page));
+
+  /* Les repères du carnet sur le graphique du kilométrage : bleus face aux
+     relevés rouille, une paire que les daltonismes courants distinguent
+     (06/11/2026). 3,95:1 sur le fond. */
+  --chart-repere: #1f66b8;
 }
 
 /*
@@ -108,6 +113,7 @@
     --ink-warning: #f3c655;
     --ink-good: #5fcf7a;
     --critical-tint: color-mix(in srgb, #f07a7a 22%, #2a2b2e);
+    --chart-repere: #6ea0e6;
   }
 }
 
@@ -139,6 +145,7 @@
   --ink-warning: #f3c655;
   --ink-good: #5fcf7a;
   --critical-tint: color-mix(in srgb, #f07a7a 22%, #2a2b2e);
+  --chart-repere: #6ea0e6;
 }
 
 /*

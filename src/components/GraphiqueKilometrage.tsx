@@ -127,7 +127,7 @@ export function GraphiqueKilometrage({
                 className="flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-[12.5px]"
                 style={{
                   borderColor: affiche
-                    ? "var(--brand-strong)"
+                    ? "var(--chart-repere)"
                     : "var(--baseline)",
                   color: affiche ? "var(--ink)" : "var(--ink-muted)",
                 }}
@@ -137,9 +137,9 @@ export function GraphiqueKilometrage({
                   className="block size-2 rotate-45 border-2"
                   style={{
                     borderColor: affiche
-                      ? "var(--brand-strong)"
+                      ? "var(--chart-repere)"
                       : "var(--baseline)",
-                    background: affiche ? "var(--brand-strong)" : "transparent",
+                    background: affiche ? "var(--chart-repere)" : "transparent",
                   }}
                 />
                 {nom}
@@ -236,10 +236,10 @@ export function GraphiqueKilometrage({
               <span
                 className="m-auto block size-2.5 rotate-45 border-2"
                 style={{
-                  borderColor: "var(--brand-strong)",
+                  borderColor: "var(--chart-repere)",
                   background:
                     choisi === r.index
-                      ? "var(--brand-strong)"
+                      ? "var(--chart-repere)"
                       : "var(--surface)",
                 }}
               />
