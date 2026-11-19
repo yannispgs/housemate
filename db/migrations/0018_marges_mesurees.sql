@@ -60,7 +60,8 @@ alter table meteo.marges_prevision
   add column emplacement text references meteo.emplacements_marge;
 update meteo.marges_prevision
   set emplacement = (select emplacement from meteo.emplacements_marge
-    where not veranda);
+    where not veranda)
+  where emplacement is null;
 alter table meteo.marges_prevision alter column emplacement set not null;
 alter table meteo.marges_prevision rename column erreur to ecart;
 
