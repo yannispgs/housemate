@@ -113,37 +113,82 @@ describe("destinationProposee", () => {
 });
 
 describe("marginView", () => {
-  it("part du réglage de départ, et montre la proposition", () => {
-    expect(
-      marginView({
-        actuelle: null,
-        appliqueeLe: null,
-        proposition: { id: "3", valeur: 1.2, nuits: 14, erreur: 0.6 },
-      }),
-    ).toEqual({
-      actuelle: deg("2 °C"),
-      origine: "Réglage de départ, en attendant 10 nuits froides mesurées.",
-      proposition: {
-        id: "3",
-        valeur: deg("1,2 °C"),
-        base: deg(
-          "D'après 14 nuits froides : la prévision s'est trompée de 0,6 °C en moyenne quadratique. La marge en couvre deux fois l'erreur.",
-        ),
-      },
-    });
+  const sansRien = (emplacement: "Extérieur" | "Véranda") => ({
+    emplacement,
+    actuelle: null,
+    appliqueeLe: null,
+    proposition: null,
   });
 
-  it("dit quand la marge en vigueur a été appliquée", () => {
+  it("part des réglages de départ, et montre la proposition", () => {
     expect(
-      marginView({
+      marginView([
+        {
+          ...sansRien("Extérieur"),
+          proposition: { id: "3", valeur: 1.2, nuits: 14, ecart: 1.7 },
+        },
+        sansRien("Véranda"),
+      ]),
+    ).toEqual([
+      {
+        emplacement: "Extérieur",
+        libelle: "Dehors",
+        actuelle: deg("2 °C"),
+        origine: "Réglage de départ, en attendant 10 nuits froides mesurées.",
+        role: "Retranchée au minimum annoncé pour chaque plante dehors, avec les marges du sol et du radiatif.",
+        proposition: {
+          id: "3",
+          valeur: deg("1,2 °C"),
+          base: deg(
+            "D'après 14 nuits froides : le minimum extérieur a fini au pire 1,7 °C sous le minimum attendu. Avec cette marge, le réel finirait au plus 0,5 °C sous le pire cas.",
+          ),
+        },
+      },
+      {
+        emplacement: "Véranda",
+        libelle: "Véranda",
+        // Modèle 1,1 + prévision 2.
+        actuelle: deg("3,1 °C"),
+        origine: deg(
+          "Réglage de départ : marges du modèle (1,1 °C) et de la prévision additionnées, plus 1,5 °C de radiatif, en attendant 10 nuits froides mesurées.",
+        ),
+        role: "",
+        proposition: null,
+      },
+    ]);
+  });
+
+  it("dit quand une marge a été appliquée, et ce qu'elle fait", () => {
+    const [exterieur, veranda] = marginView([
+      {
+        ...sansRien("Extérieur"),
         actuelle: 1.3,
         appliqueeLe: new Date("2026-11-20T08:15:00Z"),
-        proposition: null,
-      }),
-    ).toEqual({
-      actuelle: deg("1,3 °C"),
-      origine: "Appliquée le 20 novembre 2026.",
-      proposition: null,
-    });
+      },
+      {
+        ...sansRien("Véranda"),
+        actuelle: 0.6,
+        appliqueeLe: new Date("2026-11-21T08:15:00Z"),
+        proposition: { id: "4", valeur: 0.3, nuits: 12, ecart: 0 },
+      },
+    ]);
+
+    expect(exterieur?.actuelle).toBe(deg("1,3 °C"));
+    expect(exterieur?.origine).toBe("Appliquée le 20 novembre 2026.");
+    expect(veranda?.actuelle).toBe(deg("0,6 °C"));
+    expect(veranda?.role).toBe(
+      deg(
+        "Retranchée au minimum estimé de la véranda, avec 0,5 °C de radiatif.",
+      ),
+    );
+    expect(veranda?.proposition?.base).toBe(
+      deg(
+        "D'après 12 nuits froides : la véranda a fini au-dessus du minimum attendu chaque fois. Avec cette marge, le réel finirait au plus 0,5 °C sous le pire cas.",
+      ),
+    );
+  });
+
+  it("ne montre rien hors d'un foyer", () => {
+    expect(marginView([])).toEqual([]);
   });
 });

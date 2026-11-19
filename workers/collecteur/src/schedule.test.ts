@@ -7,6 +7,7 @@ import {
   shouldReadSensors,
   shouldReviewNight,
   shouldSendFrostMessage,
+  shouldSendWeeklyFrostReview,
 } from "./schedule";
 
 describe("parisHour", () => {
@@ -73,5 +74,21 @@ describe("veille de gel", () => {
     expect(hours.filter(shouldEvaluateFrost)).toEqual([20]);
     expect(hours.filter(shouldSendFrostMessage)).toEqual([20, 21, 22, 23]);
     expect(hours.filter(shouldReviewNight)).toEqual([9]);
+  });
+});
+
+describe("shouldSendWeeklyFrostReview", () => {
+  it("part le dimanche à 9 h de Paris, et seulement alors", () => {
+    // Dimanche 13 décembre 2026, 9 h à Paris = 8 h UTC.
+    expect(shouldSendWeeklyFrostReview(new Date("2026-12-13T08:00:00Z"))).toBe(
+      true,
+    );
+    expect(shouldSendWeeklyFrostReview(new Date("2026-12-13T09:00:00Z"))).toBe(
+      false,
+    );
+    // Samedi, même heure.
+    expect(shouldSendWeeklyFrostReview(new Date("2026-12-12T08:00:00Z"))).toBe(
+      false,
+    );
   });
 });

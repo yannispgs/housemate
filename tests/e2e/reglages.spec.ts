@@ -82,16 +82,19 @@ test.describe("réglages", () => {
 });
 
 test.describe("réglages : veille gel", () => {
-  test("applique la marge de prévision proposée", async ({ page }) => {
+  test("applique la marge proposée pour la véranda", async ({ page }) => {
     await page.goto("/reglages");
-    const proposee = page.getByRole("region", { name: "Marge proposée" });
+    const veranda = page.getByRole("region", { name: "Véranda", exact: true });
+    const proposee = page.getByRole("region", {
+      name: "Marge proposée · Véranda",
+    });
 
-    await expect(page.getByText("Réglage de départ")).toBeVisible();
-    await expect(proposee).toContainText("Proposée : 1,2");
+    await expect(veranda.getByText("Réglage de départ")).toBeVisible();
+    await expect(proposee).toContainText("Proposée : 0,6");
 
     await proposee.getByRole("button", { name: "Appliquer" }).click();
 
     await expect(proposee).toBeHidden();
-    await expect(page.getByText("Appliquée aujourd'hui.")).toBeVisible();
+    await expect(veranda.getByText("Appliquée aujourd'hui.")).toBeVisible();
   });
 });

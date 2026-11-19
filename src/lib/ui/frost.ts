@@ -4,7 +4,12 @@
  * Extérieur puis Véranda. Logique pure.
  */
 import { celsius } from "@/lib/data/fiche-vue";
-import { DEFAULT_FORECAST_MARGIN, MARGIN_PROPOSAL } from "@/lib/domain/frost";
+import {
+  DEFAULT_FORECAST_MARGIN,
+  MARGIN_PROPOSAL,
+  VERANDA_MODEL,
+  VERANDA_RADIATIVE_MARGIN,
+} from "@/lib/domain/frost";
 import type { FrostRange } from "@/lib/ui/deadline";
 
 export type FrostLocation = "Extérieur" | "Véranda";
@@ -148,28 +153,38 @@ export function destinationProposee(
   return emplacements.find(e => e !== depuis && e !== "Extérieur") ?? "";
 }
 
-/** La marge de prévision telle que la base la rend (`app.marge_prevision`). */
+/** Une marge mesurée telle que la base la rend (`app.marge_prevision`). */
 export interface MarginRow {
+  readonly emplacement: FrostLocation;
   readonly actuelle: number | null;
   readonly appliqueeLe: Date | null;
   readonly proposition: {
     readonly id: string;
     readonly valeur: number;
     readonly nuits: number;
-    readonly erreur: number;
+    /** Le pire écart dangereux mesuré, sur lequel elle repose. */
+    readonly ecart: number;
   } | null;
 }
 
-export interface MarginView {
+export interface MarginLocationView {
+  readonly emplacement: FrostLocation;
+  /** « Dehors » ou « Véranda ». */
+  readonly libelle: string;
   readonly actuelle: string;
   /** D'où elle vient : appliquée, ou le réglage de départ. */
   readonly origine: string;
+  /** Ce qu'elle fait. */
+  readonly role: string;
   readonly proposition: {
     readonly id: string;
     readonly valeur: string;
     readonly base: string;
   } | null;
 }
+
+/** Le panneau « Veille gel » : une marge par emplacement, Dehors d'abord. */
+export type MarginView = readonly MarginLocationView[];
 
 const JOUR = new Intl.DateTimeFormat("fr-FR", {
   day: "numeric",
@@ -178,23 +193,78 @@ const JOUR = new Intl.DateTimeFormat("fr-FR", {
   timeZone: "Europe/Paris",
 });
 
-/** Le panneau « Veille gel » des réglages (SPEC § 12.8, décisions du 26/10/2026). */
-export function marginView(row: MarginRow): MarginView {
-  const p = row.proposition;
+const ATTENTE = `en attendant ${MARGIN_PROPOSAL.minNights} nuits froides mesurées.`;
 
-  return {
-    actuelle: celsius(row.actuelle ?? DEFAULT_FORECAST_MARGIN),
-    origine:
-      row.appliqueeLe === null
-        ? `Réglage de départ, en attendant ${MARGIN_PROPOSAL.minNights} nuits froides mesurées.`
-        : `Appliquée le ${JOUR.format(row.appliqueeLe)}.`,
-    proposition:
-      p === null
-        ? null
-        : {
-            id: p.id,
-            valeur: celsius(p.valeur),
-            base: `D'après ${p.nuits} nuits froides : la prévision s'est trompée de ${celsius(p.erreur)} en moyenne quadratique. La marge en couvre deux fois l'erreur.`,
-          },
-  };
+const MARGES = {
+  Extérieur: {
+    libelle: "Dehors",
+    reel: "le minimum extérieur a fini",
+    role: "Retranchée au minimum annoncé pour chaque plante dehors, avec les marges du sol et du radiatif.",
+    depart: () => `Réglage de départ, ${ATTENTE}`,
+  },
+  Véranda: {
+    libelle: "Véranda",
+    reel: "la véranda a fini",
+    role: `Retranchée au minimum estimé de la véranda, avec ${celsius(VERANDA_RADIATIVE_MARGIN.measured)} de radiatif.`,
+    depart: () =>
+      `Réglage de départ : marges du modèle (${celsius(VERANDA_MODEL.margin)}) et de la prévision additionnées, plus ${celsius(VERANDA_RADIATIVE_MARGIN.start)} de radiatif, ${ATTENTE}`,
+  },
+} as const;
+
+function base(
+  row: MarginRow,
+  p: NonNullable<MarginRow["proposition"]>,
+): string {
+  const reel = MARGES[row.emplacement].reel;
+  const pire =
+    p.ecart === 0
+      ? `${reel} au-dessus du minimum attendu chaque fois`
+      : `${reel} au pire ${celsius(p.ecart)} sous le minimum attendu`;
+
+  return `D'après ${p.nuits} nuits froides : ${pire}. Avec cette marge, le réel finirait au plus ${celsius(MARGIN_PROPOSAL.tolerance)} sous le pire cas.`;
+}
+
+/**
+ * Le panneau « Veille gel » des réglages (SPEC § 12.8, décisions du 26/10 et
+ * du 19/11/2026).
+ */
+export function marginView(rows: readonly MarginRow[]): MarginView {
+  const exterieur =
+    rows.find(row => row.emplacement === "Extérieur")?.actuelle ??
+    DEFAULT_FORECAST_MARGIN;
+
+  return ["Extérieur" as const, "Véranda" as const].flatMap(emplacement => {
+    const row = rows.find(r => r.emplacement === emplacement);
+
+    if (row === undefined) {
+      return [];
+    }
+
+    const marge = MARGES[emplacement];
+    const depart =
+      emplacement === "Véranda"
+        ? VERANDA_MODEL.margin + exterieur
+        : DEFAULT_FORECAST_MARGIN;
+    const p = row.proposition;
+
+    return [
+      {
+        emplacement,
+        libelle: marge.libelle,
+        actuelle: celsius(row.actuelle ?? depart),
+        origine:
+          row.appliqueeLe === null
+            ? marge.depart()
+            : `Appliquée le ${JOUR.format(row.appliqueeLe)}.`,
+        role:
+          row.appliqueeLe === null && emplacement === "Véranda"
+            ? ""
+            : marge.role,
+        proposition:
+          p === null
+            ? null
+            : { id: p.id, valeur: celsius(p.valeur), base: base(row, p) },
+      },
+    ];
+  });
 }

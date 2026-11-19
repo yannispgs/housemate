@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   exteriorLowerBound,
   frostLevel,
+  measuredVerandaLowerBound,
+  measuredVerandaMargin,
   nightErrors,
   predictVerandaMinimum,
-  proposeForecastMargin,
+  proposeMargin,
   verandaLowerBound,
 } from "@/lib/domain/frost";
 
@@ -123,19 +125,42 @@ describe("nightErrors", () => {
   });
 });
 
-describe("proposeForecastMargin", () => {
+describe("proposeMargin", () => {
   it("attend dix nuits froides", () => {
-    expect(proposeForecastMargin({ nights: 9, error: 0.6 }, 2)).toBeNull();
-    expect(proposeForecastMargin({ nights: 10, error: 0.6 }, 2)).toBe(1.2);
+    expect(proposeMargin({ nights: 9, shortfall: 1.7 }, 2)).toBeNull();
+    expect(proposeMargin({ nights: 10, shortfall: 1.7 }, 2)).toBe(1.2);
   });
 
-  it("couvre deux fois l'erreur, jamais moins que la finesse du capteur", () => {
-    expect(proposeForecastMargin({ nights: 14, error: 1.24 }, 1)).toBe(2.5);
-    expect(proposeForecastMargin({ nights: 14, error: 0.1 }, 2)).toBe(0.6);
+  it("couvre le pire écart, à un demi-degré près, jamais moins que le capteur", () => {
+    expect(proposeMargin({ nights: 14, shortfall: 3 }, 1)).toBe(2.5);
+    // Le réel n'a jamais fini sous l'attendu : le plancher.
+    expect(proposeMargin({ nights: 14, shortfall: 0 }, 2)).toBe(0.3);
   });
 
   it("ne dérange pas pour moins d'un demi-degré d'écart", () => {
-    expect(proposeForecastMargin({ nights: 14, error: 0.9 }, 2)).toBeNull();
-    expect(proposeForecastMargin({ nights: 14, error: 0.75 }, 2)).toBe(1.5);
+    expect(proposeMargin({ nights: 14, shortfall: 2.4 }, 2)).toBeNull();
+    expect(proposeMargin({ nights: 14, shortfall: 2 }, 2)).toBe(1.5);
+  });
+});
+
+describe("measuredVerandaLowerBound", () => {
+  it("retire la marge mesurée et le radiatif réduit", () => {
+    // 6,7 − 0,6 − 0,5
+    expect(measuredVerandaLowerBound(predictVerandaMinimum(MILD), 0.6)).toBe(
+      5.6,
+    );
+  });
+
+  it("double la marge mesurée quand le modèle extrapole", () => {
+    expect(measuredVerandaMargin(predictVerandaMinimum(MILD), 0.6)).toBe(0.6);
+    expect(measuredVerandaMargin(predictVerandaMinimum(FREEZING), 0.6)).toBe(
+      1.2,
+    );
+
+    const freezing = predictVerandaMinimum(FREEZING);
+
+    expect(measuredVerandaLowerBound(freezing, 0.6)).toBe(
+      Math.round((freezing.estimate - 1.2 - 0.5) * 10) / 10,
+    );
   });
 });

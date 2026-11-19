@@ -80,3 +80,16 @@ export function shouldSendFrostMessage(hour: number): boolean {
 export function shouldReviewNight(hour: number): boolean {
   return hour === 9;
 }
+
+const PARIS_WEEKDAY = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Europe/Paris",
+  weekday: "short",
+});
+
+/** Le bilan hebdomadaire de la veille de gel part le dimanche, après le bilan de 9 h. */
+export function shouldSendWeeklyFrostReview(instant: Date): boolean {
+  return (
+    PARIS_WEEKDAY.format(instant) === "Sun" &&
+    shouldReviewNight(parisHour(instant))
+  );
+}
