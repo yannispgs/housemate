@@ -10,6 +10,8 @@ import {
   erreursDesRappels,
   ficheSaisie,
   garantieSaisie,
+  interventionSaisie,
+  interventionValide,
   lire,
   marqueConnue,
   marquesConnues,
@@ -813,5 +815,69 @@ describe("erreurs des rappels pendant la saisie", () => {
       "rappels.0": "Choisis au moins un canal : e-mail ou notification.",
     });
     expect(erreursDesRappels(formulaire, aujourdhui)).toEqual({});
+  });
+});
+
+describe("intervention du carnet (§ 5.3)", () => {
+  const FICHE = "6f1c2c9e-5a5b-4e3e-9d3c-2b1f0a9e8d7c";
+  const VIDANGE = "0b8a4c1e-2f3d-4a5b-8c6d-7e8f9a0b1c2d";
+  const base = {
+    ficheId: FICHE,
+    le: "2026-03-03",
+    compteur: "45000",
+    cout: "",
+    consommables: [VIDANGE],
+    echeances: [],
+    libres: [],
+  };
+
+  it("lit le compteur et le coût, facultatifs, à la française", () => {
+    expect(lire(interventionSaisie, base)).toEqual({
+      ok: true,
+      valeur: { ...base, compteur: 45_000, cout: null },
+    });
+    expect(
+      lire(interventionSaisie, { ...base, compteur: "", cout: "1 089,906" }),
+    ).toMatchObject({ ok: true, valeur: { compteur: null, cout: 1089.91 } });
+  });
+
+  it("nettoie les lignes libres et en refuse une vide", () => {
+    expect(
+      lire(interventionSaisie, {
+        ...base,
+        consommables: [],
+        libres: ["  Plaquettes AR "],
+      }),
+    ).toMatchObject({ ok: true, valeur: { libres: ["Plaquettes AR"] } });
+    expect(lire(interventionSaisie, { ...base, libres: ["  "] })).toMatchObject(
+      { ok: false },
+    );
+  });
+
+  it("refuse une intervention sans aucune ligne, ou un coût négatif", () => {
+    expect(
+      lire(interventionSaisie, { ...base, consommables: [] }),
+    ).toMatchObject({
+      ok: false,
+      erreurs: { lignes: "Coche ou ajoute au moins une ligne." },
+    });
+    expect(lire(interventionSaisie, { ...base, cout: "-5" })).toMatchObject({
+      ok: false,
+      erreurs: { cout: "Un montant positif est attendu." },
+    });
+    expect(
+      lire(interventionSaisie, { ...base, cout: "beaucoup" }),
+    ).toMatchObject({ ok: false, erreurs: { cout: expect.any(String) } });
+  });
+
+  it("⚠️ refuse une date dans le futur", () => {
+    const lue = lire(interventionSaisie, base);
+
+    expect(
+      lue.ok && interventionValide(lue.valeur, fromISO("2026-03-02")),
+    ).toBe(false);
+    expect(
+      lue.ok && interventionValide(lue.valeur, fromISO("2026-03-03")),
+    ).toBe(true);
   });
 });

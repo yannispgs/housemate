@@ -59,9 +59,11 @@ beforeEach(async () => {
   await owner`delete from app.push_envoyes`;
   await owner`delete from app.rappels`;
   await owner`delete from app.completions`;
+  await owner`delete from app.lignes_libres`;
   await owner`delete from app.echeances`;
   await owner`delete from app.pieces_jointes`;
   await owner`delete from app.remplacements`;
+  await owner`delete from app.interventions`;
   await owner`delete from app.consommables`;
   await owner`delete from app.releves`;
   await owner`delete from app.fiches`;
@@ -148,6 +150,8 @@ describe("le rôle anonymous", () => {
     "consommables",
     "remplacements",
     "releves",
+    "interventions",
+    "lignes_libres",
     "adresses",
     "reglages_resumes",
     "resumes_envoyes",

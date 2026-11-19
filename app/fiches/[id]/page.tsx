@@ -30,11 +30,12 @@ import {
   consommablesDeFiche,
   echeancesDeFiche,
   NATURE_LABELS,
+  occurrenceACocher,
   shortDate,
 } from "@/lib/data/views";
 import { toISO } from "@/lib/domain/plain-date";
 import { annuler, cocher } from "../../_actions/echeances";
-import { remplacer } from "../../_actions/entretien";
+import { intervenir, remplacer } from "../../_actions/entretien";
 
 export const metadata: Metadata = { title: "Fiche" };
 
@@ -73,6 +74,7 @@ export default async function Page({
   const jour = { iso: toISO(today), court: shortDate(today) };
   const actions = { cocher, annuler, remplacer };
   const echeances = echeancesDeFiche(rows, fiche.id, today);
+  const consommablesDuCarnet = consommables.filter(c => c.ficheId === fiche.id);
   const plante = fiche.nature === "plante";
   const situation = situationPlante(fiche.attributs);
   // Ceux d'une plante ont leur propre section, modifiable (§ 12.4).
@@ -150,6 +152,25 @@ export default async function Page({
           entrees={carnet.entrees}
           actions={actions}
           jour={jour}
+          intervention={{
+            ficheId: fiche.id,
+            auCompteur: consommablesDuCarnet.some(
+              c => c.dureeKm !== null || c.releves.length > 0,
+            ),
+            consommables: consommablesDuCarnet.map(c => ({
+              id: c.id,
+              intitule: c.intitule,
+            })),
+            // Seules celles qui ont une occurrence à cocher.
+            echeances: rows
+              .filter(
+                r =>
+                  r.ficheId === fiche.id &&
+                  occurrenceACocher(r, today) !== null,
+              )
+              .map(r => ({ id: r.id, titre: r.titre })),
+            noter: intervenir,
+          }}
         />
       )}
 
