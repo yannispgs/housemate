@@ -304,29 +304,28 @@ function currentMargin(
  */
 export async function proposeMargins(sql: Sql): Promise<Mail[]> {
   const applied = await appliedMargins(sql);
-  const mails: Mail[] = [];
-
-  for (const stats of await coldShortfalls(sql)) {
+  const proposals = (await coldShortfalls(sql)).flatMap(stats => {
     const current = currentMargin(stats.location, applied);
     const proposed = proposeMargin(stats, current);
 
-    if (proposed === null) {
-      continue;
-    }
+    return proposed === null ? [] : [{ stats, current, proposed }];
+  });
+  const created = await Promise.all(
+    proposals.map(({ stats, proposed }) =>
+      recordMarginProposal(sql, {
+        emplacement: stats.location,
+        valeur: proposed,
+        nuits: stats.nights,
+        ecart: stats.shortfall,
+      }),
+    ),
+  );
 
-    const created = await recordMarginProposal(sql, {
-      emplacement: stats.location,
-      valeur: proposed,
-      nuits: stats.nights,
-      ecart: stats.shortfall,
-    });
-
-    if (created) {
-      mails.push(marginMail(stats.location, current, proposed, stats));
-    }
-  }
-
-  return mails;
+  return proposals
+    .filter((_, index) => created[index])
+    .map(({ stats, current, proposed }) =>
+      marginMail(stats.location, current, proposed, stats),
+    );
 }
 
 /**

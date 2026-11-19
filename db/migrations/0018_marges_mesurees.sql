@@ -13,43 +13,55 @@
 
 drop view meteo.erreur_prevision_froid;
 
+-- Les emplacements qui ont une marge mesurée, nommés une seule fois.
+create table meteo.emplacements_marge (
+  emplacement text primary key,
+  -- Véranda : mesurée sur toute la chaîne ; sinon, sur la prévision seule.
+  veranda boolean not null unique
+);
+
+insert into meteo.emplacements_marge (emplacement, veranda)
+values ('Extérieur', false), ('Véranda', true);
+
+grant select on meteo.emplacements_marge to meteo_veille;
+
 -- Le pire écart dangereux sur les 60 dernières nuits froides (minimum
 -- extérieur mesuré à 5 °C ou moins) de chaque emplacement ; 0 si le réel n'a
 -- jamais fini sous l'attendu.
 create view meteo.ecarts_froids as
 with nuits as (
-  select nuit, 'Extérieur' as emplacement, erreur_prevision as ecart
-  from meteo.nuits_gel
-  where min_exterieur <= 5 and erreur_prevision is not null
-  union all
-  select nuit, 'Véranda', min_veranda - estimation
-  from meteo.nuits_gel
-  where min_exterieur <= 5
-    and min_veranda is not null
-    and estimation is not null
-    and chauffee is not true
+  select n.nuit, e.emplacement,
+    case when e.veranda then n.min_veranda - n.estimation
+      else n.erreur_prevision end as ecart
+  from meteo.nuits_gel n
+  cross join meteo.emplacements_marge e
+  where n.min_exterieur <= 5 and (not e.veranda or n.chauffee is not true)
 ),
 recentes as (
   select emplacement, ecart,
     row_number() over (partition by emplacement order by nuit desc) as rang
   from nuits
+  where ecart is not null
 )
 select
   e.emplacement,
   count(r.ecart)::int as nuits,
   round(coalesce(max(greatest(-r.ecart, 0)), 0)::numeric, 2) as ecart
-from (values ('Extérieur'), ('Véranda')) e (emplacement)
+from meteo.emplacements_marge e
 left join recentes r on r.emplacement = e.emplacement and r.rang <= 60
 group by e.emplacement;
 
 grant select on meteo.ecarts_froids to meteo_veille;
 
 -- Une marge par emplacement, une proposition en attente par emplacement.
--- `erreur` devient `ecart` : ce n'est plus une erreur quadratique.
+-- Les marges d'avant étaient celles du dehors. `erreur` devient `ecart` : ce
+-- n'est plus une erreur quadratique.
 alter table meteo.marges_prevision
-  add column emplacement text not null default 'Extérieur'
-    check (emplacement in ('Extérieur', 'Véranda'));
-alter table meteo.marges_prevision alter column emplacement drop default;
+  add column emplacement text references meteo.emplacements_marge;
+update meteo.marges_prevision
+  set emplacement = (select emplacement from meteo.emplacements_marge
+    where not veranda);
+alter table meteo.marges_prevision alter column emplacement set not null;
 alter table meteo.marges_prevision rename column erreur to ecart;
 
 drop index meteo.marges_prevision_une_en_attente;
@@ -75,7 +87,7 @@ create function app.marge_prevision()
   as $$
     select e.emplacement, a.valeur, a.appliquee_le, p.id, p.valeur, p.nuits,
       p.ecart, p.proposee_le
-    from (values ('Extérieur'), ('Véranda')) e (emplacement)
+    from meteo.emplacements_marge e
     left join lateral (
       select valeur, appliquee_le from meteo.marges_prevision m
       where m.emplacement = e.emplacement and m.appliquee_le is not null
