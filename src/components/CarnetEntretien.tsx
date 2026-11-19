@@ -9,8 +9,12 @@
  *
  * ⚠️ Provisoire : pas encore dessinée dans Claude Design (a-dessiner.md).
  */
-import { useState } from "react";
-import { type EntreeCarnet, enteteEntree } from "@/lib/data/carnet";
+import { useEffect, useState } from "react";
+import {
+  ancreCarnet,
+  type EntreeCarnet,
+  enteteEntree,
+} from "@/lib/data/carnet";
 import type { LigneConsommable } from "@/lib/data/views";
 import {
   type ActionsFiche,
@@ -54,6 +58,26 @@ function Historique({
 }: Readonly<{ entrees: readonly EntreeCarnet[] }>) {
   const [ouvert, setOuvert] = useState(false);
 
+  // Un repère du graphique mène à une date du carnet (#carnet-AAAA-MM-JJ) :
+  // ouvrir l'historique, puis y aller.
+  useEffect(() => {
+    const suivre = () => {
+      const ancre = globalThis.location.hash.slice(1);
+
+      if (ancre.startsWith("carnet-")) {
+        setOuvert(true);
+        requestAnimationFrame(() =>
+          document.getElementById(ancre)?.scrollIntoView({ block: "center" }),
+        );
+      }
+    };
+
+    suivre();
+    globalThis.addEventListener("hashchange", suivre);
+
+    return () => globalThis.removeEventListener("hashchange", suivre);
+  }, []);
+
   return (
     <div className="flex flex-col gap-3">
       <button
@@ -66,10 +90,15 @@ function Historique({
       </button>
       {ouvert && (
         <ol className="m-0 flex list-none flex-col gap-3 p-0">
-          {entrees.map(entree => (
+          {entrees.map((entree, index) => (
             <li
               key={`${entree.genre} ${entree.le} ${entree.libelle}`}
-              className="flex flex-col gap-0.5"
+              id={
+                entrees[index - 1]?.le === entree.le
+                  ? undefined
+                  : ancreCarnet(entree.le)
+              }
+              className="scroll-mt-4 flex flex-col gap-0.5"
             >
               <span className="text-[12.5px] text-ink-secondary">
                 {enteteEntree(entree)}
