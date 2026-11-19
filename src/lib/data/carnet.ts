@@ -85,14 +85,39 @@ export function consommablesDesReperes(
   );
 }
 
+/** Un couloir du graphique du kilométrage : un consommable et ses changements. */
+export interface Couloir {
+  readonly consommable: string;
+  /** Les index, dans les repères, des interventions où il a été changé. */
+  readonly indices: readonly number[];
+  /** Le compteur du dernier changement. */
+  readonly dernier: number;
+  /** Les kilomètres entre deux changements, en moyenne ; null s'il n'y en a qu'un. */
+  readonly intervalleMoyen: number | null;
+}
+
 /**
- * Les repères à afficher (décision du foyer, 06/11/2026) : ceux dont un
- * consommable au moins n'est pas masqué. Un repère garde tout ce qui a été
- * fait ce jour-là.
+ * Un couloir par consommable (décision du foyer, 19/11/2026) : sous la
+ * courbe, chaque consommable a sa ligne, reconnue à sa place et non à une
+ * couleur, ce qui tient quel que soit leur nombre.
  */
-export function reperesAffiches(
-  reperes: readonly RepereCarnet[],
-  masques: ReadonlySet<string>,
-): RepereCarnet[] {
-  return reperes.filter(r => r.libelles.some(l => !masques.has(l)));
+export function couloirsDuCarnet(reperes: readonly RepereCarnet[]): Couloir[] {
+  return consommablesDesReperes(reperes).map(consommable => {
+    const changes = reperes.flatMap((r, index) =>
+      r.libelles.includes(consommable) ? [{ index, compteur: r.compteur }] : [],
+    );
+    const compteurs = changes.map(c => c.compteur);
+    const dernier = Math.max(...compteurs);
+    const premier = Math.min(...compteurs);
+
+    return {
+      consommable,
+      indices: changes.map(c => c.index),
+      dernier,
+      intervalleMoyen:
+        changes.length > 1
+          ? Math.round((dernier - premier) / (changes.length - 1))
+          : null,
+    };
+  });
 }

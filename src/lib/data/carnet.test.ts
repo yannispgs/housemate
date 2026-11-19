@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   ancreCarnet,
   consommablesDesReperes,
+  couloirsDuCarnet,
   enteteEntree,
-  reperesAffiches,
   reperesDuCarnet,
 } from "./carnet";
 
@@ -45,7 +45,7 @@ describe("reperesDuCarnet", () => {
   });
 });
 
-describe("filtre des repères par consommable", () => {
+describe("couloirs des consommables", () => {
   const reperes = [
     {
       le: "2026-03-03",
@@ -64,13 +64,26 @@ describe("filtre des repères par consommable", () => {
     ]);
   });
 
-  it("garde un repère tant qu'un de ses consommables est affiché", () => {
-    expect(reperesAffiches(reperes, new Set())).toEqual(reperes);
-    expect(
-      reperesAffiches(reperes, new Set(["Vidange"])).map(r => r.le),
-    ).toEqual(["2026-03-03", "2025-05-01"]);
-    expect(
-      reperesAffiches(reperes, new Set(["Vidange", "Filtre à air"])),
-    ).toEqual([reperes[1]]);
+  it("donne à chaque consommable son couloir", () => {
+    expect(couloirsDuCarnet(reperes)).toEqual([
+      {
+        consommable: "Filtre à air",
+        indices: [0],
+        dernier: 45_000,
+        intervalleMoyen: null,
+      },
+      {
+        consommable: "Pneus",
+        indices: [1],
+        dernier: 38_000,
+        intervalleMoyen: null,
+      },
+      {
+        consommable: "Vidange",
+        indices: [0, 2],
+        dernier: 45_000,
+        intervalleMoyen: 15_000,
+      },
+    ]);
   });
 });

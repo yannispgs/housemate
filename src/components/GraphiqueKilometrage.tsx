@@ -4,19 +4,19 @@
  * La section « Kilométrage » d'une fiche (SPEC § 5.3, décisions du 23/10 et
  * du 06/11/2026) : sur 1, 2 ou 5 ans ou tout l'historique, la courbe de
  * chaque donnée du compteur (relevés et remplacements notés au compteur),
- * un losange par intervention du carnet, de la couleur de la courbe et
- * filtrable par consommable, et les kilomètres de chaque année. Le calcul est
- * dans `@/lib/domain/kilometrage`.
+ * dessous un couloir par consommable avec un trait par changement (décision
+ * du 19/11/2026 : la place distingue les consommables, quel que soit leur
+ * nombre, là où des losanges d'une seule couleur s'entassaient sur la
+ * courbe), et les kilomètres de chaque année. Le calcul est dans
+ * `@/lib/domain/kilometrage`.
  *
  * ⚠️ Provisoire : pas encore dessinée dans Claude Design (a-dessiner.md).
  */
 import { useState } from "react";
 import {
   ancreCarnet,
-  consommablesDesReperes,
-  enteteEntree,
+  couloirsDuCarnet,
   type RepereCarnet,
-  reperesAffiches,
 } from "@/lib/data/carnet";
 import type { Releve } from "@/lib/domain/entretien";
 import {
@@ -33,6 +33,8 @@ import { fromISO } from "@/lib/domain/plain-date";
 import { Panel, SectionLabel } from "./Screen";
 
 const COURBE = { largeur: 340, hauteur: 190, gauche: 48, bas: 20, haut: 10 };
+/** Hauteur du trait d'un changement, dans son couloir. */
+const TRAIT = 14;
 const BARRES = { largeur: 340, hauteur: 110, haut: 16, bas: 18 };
 
 const NOMBRE = new Intl.NumberFormat("fr-FR");
@@ -47,7 +49,7 @@ function libellePeriode(periode: Periode): string {
 
 export function GraphiqueKilometrage({
   releves,
-  reperes: tous,
+  reperes,
   aujourdhui,
 }: Readonly<{
   releves: readonly Releve[];
@@ -56,25 +58,12 @@ export function GraphiqueKilometrage({
   aujourdhui: string;
 }>) {
   const [periode, setPeriode] = useState<Periode>(PERIODE_PAR_DEFAUT);
-  const [choisi, setChoisi] = useState<number | null>(null);
-  const [masques, setMasques] = useState<ReadonlySet<string>>(new Set());
-  const consommables = consommablesDesReperes(tous);
-  const reperes = reperesAffiches(tous, masques);
-  const basculer = (consommable: string) => {
-    const suivants = new Set(masques);
-
-    if (!suivants.delete(consommable)) {
-      suivants.add(consommable);
-    }
-
-    setMasques(suivants);
-    setChoisi(null);
-  };
+  const [choisi, setChoisi] = useState<string | null>(null);
+  const couloirs = couloirsDuCarnet(reperes);
   const jour = fromISO(aujourdhui);
-  // Tous les remplacements au compteur, même ceux dont le repère est masqué.
   const serie = serieKilometrique(
     releves,
-    tous.map(r => ({ le: fromISO(r.le), compteur: r.compteur })),
+    reperes.map(r => ({ le: fromISO(r.le), compteur: r.compteur })),
   );
   const c = courbe(
     serie,
@@ -85,7 +74,18 @@ export function GraphiqueKilometrage({
   );
   const debut = debutDePeriode(periode, serie, jour);
   const annees = anneesDeLaPeriode(kmParAn(serie, jour), debut);
-  const repere = choisi === null ? undefined : reperes[choisi];
+  const couloir = couloirs.find(k => k.consommable === choisi);
+  const marques = c.reperes.filter(r => couloir?.indices.includes(r.index));
+  const dernier = reperes.find(
+    (r, index) =>
+      couloir?.indices.includes(index) && r.compteur === couloir.dernier,
+  );
+  const compteur = serie.at(-1)?.valeur ?? 0;
+  // Six années au plus sous l'axe : au-delà, les libellés se chevauchent.
+  const pasAnnees = Math.ceil(c.graduationsX.length / 6);
+  const graduationsX = c.graduationsX.filter(
+    g => (jour.year - g.annee) % pasAnnees === 0,
+  );
 
   return (
     <Panel className="gap-3 p-[18px]">
@@ -102,7 +102,6 @@ export function GraphiqueKilometrage({
             aria-pressed={p === periode}
             onClick={() => {
               setPeriode(p);
-              setChoisi(null);
             }}
             className="h-9 flex-1 cursor-pointer rounded-full border text-[13px]"
             style={{
@@ -116,46 +115,6 @@ export function GraphiqueKilometrage({
           </button>
         ))}
       </fieldset>
-
-      {/* Un seul consommable : rien à filtrer. */}
-      {consommables.length > 1 && (
-        <fieldset
-          aria-label="Repères affichés"
-          className="m-0 flex min-w-0 flex-wrap gap-1.5 border-0 p-0"
-        >
-          {consommables.map(nom => {
-            const affiche = !masques.has(nom);
-
-            return (
-              <button
-                key={nom}
-                type="button"
-                aria-pressed={affiche}
-                onClick={() => basculer(nom)}
-                className="flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-[12.5px]"
-                style={{
-                  borderColor: affiche
-                    ? "var(--brand-strong)"
-                    : "var(--baseline)",
-                  color: affiche ? "var(--ink)" : "var(--ink-muted)",
-                }}
-              >
-                <span
-                  aria-hidden
-                  className="block size-2 rotate-45 border-2"
-                  style={{
-                    borderColor: affiche
-                      ? "var(--brand-strong)"
-                      : "var(--baseline)",
-                    background: affiche ? "var(--brand-strong)" : "transparent",
-                  }}
-                />
-                {nom}
-              </button>
-            );
-          })}
-        </fieldset>
-      )}
 
       {c.points.length === 0 && (
         <span className="text-[13.5px] text-ink-secondary">
@@ -190,7 +149,7 @@ export function GraphiqueKilometrage({
               </text>
             </g>
           ))}
-          {c.graduationsX.map(g => (
+          {graduationsX.map(g => (
             <g key={g.annee}>
               <line
                 x1={g.x}
@@ -231,56 +190,101 @@ export function GraphiqueKilometrage({
                 fill="var(--brand-strong)"
               />
             ))}
-        </svg>
-        {c.reperes.map(r => {
-          const intervention = reperes[r.index];
-
-          return (
-            <button
+          {/* Les changements du couloir choisi, reportés sur la courbe. */}
+          {marques.map(r => (
+            <circle
               key={r.index}
-              type="button"
-              aria-pressed={choisi === r.index}
-              aria-label={
-                intervention === undefined
-                  ? undefined
-                  : `${enteteEntree(intervention)} : ${intervention.libelles.join(", ")}`
-              }
-              onClick={() => setChoisi(choisi === r.index ? null : r.index)}
-              className="absolute size-6 -translate-x-1/2 -translate-y-1/2 cursor-pointer border-0 bg-transparent p-0"
-              style={{
-                left: `${(r.x / COURBE.largeur) * 100}%`,
-                top: `${(r.y / COURBE.hauteur) * 100}%`,
-              }}
-            >
-              <span
-                className="m-auto block size-2.5 rotate-45 border-2"
-                style={{
-                  borderColor: "var(--brand-strong)",
-                  background:
-                    choisi === r.index
-                      ? "var(--brand-strong)"
-                      : "var(--surface)",
-                }}
-              />
-            </button>
-          );
-        })}
+              cx={r.x}
+              cy={r.y}
+              r="4.5"
+              fill="var(--ink)"
+              stroke="var(--surface)"
+              strokeWidth="2"
+            />
+          ))}
+        </svg>
       </div>
 
-      {repere !== undefined && (
+      {couloirs.length > 0 && (
+        <>
+          <span className="pt-2 text-[12.5px] text-ink-secondary">
+            Changements, par consommable
+          </span>
+          <div className="flex flex-col">
+            {couloirs.map(k => {
+              const traits = c.reperes.filter(r => k.indices.includes(r.index));
+              const actif = k.consommable === choisi;
+
+              return (
+                <button
+                  key={k.consommable}
+                  type="button"
+                  aria-pressed={actif}
+                  aria-label={`${k.consommable} : ${traits.length} changement${traits.length > 1 ? "s" : ""} sur la période`}
+                  onClick={() => setChoisi(actif ? null : k.consommable)}
+                  className="flex min-h-11 cursor-pointer flex-col justify-center gap-0.5 rounded-md border-0 px-0 text-left"
+                  style={{ background: actif ? "var(--page)" : "transparent" }}
+                >
+                  <span
+                    className="flex gap-1.5 px-1 text-[12.5px] text-ink"
+                    style={{ fontWeight: actif ? 700 : 400 }}
+                  >
+                    {k.consommable}
+                    <span className="text-ink-muted">×{traits.length}</span>
+                  </span>
+                  <svg
+                    viewBox={`0 0 ${COURBE.largeur} ${TRAIT}`}
+                    className="block h-auto w-full"
+                    aria-hidden="true"
+                  >
+                    <line
+                      x1={COURBE.gauche}
+                      x2={COURBE.largeur}
+                      y1={TRAIT / 2}
+                      y2={TRAIT / 2}
+                      stroke="var(--grid)"
+                    />
+                    {traits.map(r => (
+                      <rect
+                        key={r.index}
+                        x={r.x - 2}
+                        y="0"
+                        width="4"
+                        height={TRAIT}
+                        rx="2"
+                        fill={actif ? "var(--ink)" : "var(--ink-secondary)"}
+                      />
+                    ))}
+                  </svg>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {couloir !== undefined && (
         <div className="flex flex-col gap-0.5 rounded-xl border border-border p-3">
-          <span className="text-[12.5px] text-ink-secondary">
-            {enteteEntree(repere)}
+          <span className="text-[15px] text-ink">{couloir.consommable}</span>
+          <span className="text-[13.5px] text-ink-secondary">
+            {couloir.indices.length} changement
+            {couloir.indices.length > 1 ? "s" : ""}
+            {couloir.intervalleMoyen === null
+              ? ""
+              : `, tous les ${NOMBRE.format(couloir.intervalleMoyen)} km en moyenne`}
           </span>
-          <span className="text-[15px] text-ink">
-            {repere.libelles.join(", ")}
+          <span className="text-[13.5px] text-ink-secondary">
+            Dernier à {NOMBRE.format(couloir.dernier)} km, il y a{" "}
+            {NOMBRE.format(Math.max(compteur - couloir.dernier, 0))} km
           </span>
-          <a
-            href={`#${ancreCarnet(repere.le)}`}
-            className="text-[13.5px] text-ink underline"
-          >
-            Voir au carnet
-          </a>
+          {dernier !== undefined && (
+            <a
+              href={`#${ancreCarnet(dernier.le)}`}
+              className="text-[13.5px] text-ink underline"
+            >
+              Voir au carnet
+            </a>
+          )}
         </div>
       )}
 
