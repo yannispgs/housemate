@@ -505,30 +505,28 @@ export async function declarerNuitChauffee(
 }
 
 /**
- * La marge de prévision de la veille gel : celle en vigueur, et la proposition
- * en attente. `null` hors d'un foyer.
+ * Les marges mesurées de la veille gel, une par emplacement : celle en
+ * vigueur, et la proposition en attente. Vide hors d'un foyer.
  */
-export async function lireMargePrevision(tx: Tx): Promise<MarginRow | null> {
-  const [row] = await tx<
+export async function lireMargePrevision(tx: Tx): Promise<MarginRow[]> {
+  const rows = await tx<
     {
+      emplacement: MarginRow["emplacement"];
       actuelle: number | null;
       appliquee_le: Date | null;
       proposition: string | null;
       proposee: number;
       nuits: number;
-      erreur: number;
+      ecart: number;
     }[]
   >`
-    select actuelle::float8 as actuelle, appliquee_le,
+    select emplacement, actuelle::float8 as actuelle, appliquee_le,
       proposition::text as proposition, proposee::float8 as proposee, nuits,
-      erreur::float8 as erreur
+      ecart::float8 as ecart
     from app.marge_prevision()`;
 
-  if (row === undefined) {
-    return null;
-  }
-
-  return {
+  return rows.map(row => ({
+    emplacement: row.emplacement,
     actuelle: row.actuelle,
     appliqueeLe: row.appliquee_le,
     proposition:
@@ -538,9 +536,9 @@ export async function lireMargePrevision(tx: Tx): Promise<MarginRow | null> {
             id: row.proposition,
             valeur: row.proposee,
             nuits: row.nuits,
-            erreur: row.erreur,
+            ecart: row.ecart,
           },
-  };
+  }));
 }
 
 /** « Appliquer » la marge proposée : `false` si elle n'est plus en attente. */

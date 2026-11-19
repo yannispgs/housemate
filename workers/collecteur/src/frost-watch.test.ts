@@ -358,18 +358,29 @@ describe("mailFor", () => {
 
 describe("marginMail", () => {
   it("dit sur quoi repose la proposition, et où la valider", () => {
-    const mail = marginMail(2, 1.2, { nights: 14, error: 0.6 });
+    const mail = marginMail("Véranda", 2, 1.2, { nights: 14, shortfall: 1.7 });
 
     expect(mail.subject).toBe(
-      "Veille gel : une nouvelle marge de prévision à valider",
+      "Veille gel : une nouvelle marge de la véranda à valider",
     );
     expect(mail.text).toBe(
       [
-        "Sur les 14 dernières nuits froides, la prévision s'est trompée de 0,6 °C en moyenne quadratique.",
-        "La veille propose de passer sa marge de prévision de 2,0 °C à 1,2 °C.",
+        "Sur les 14 dernières nuits froides, la véranda a fini au pire 1,7 °C sous le minimum attendu.",
+        "La veille propose de passer la marge de la véranda de 2,0 °C à 1,2 °C : le réel finirait au plus 0,5 °C sous le pire cas.",
         "",
         "Rien ne change sans validation : Réglages, section « Veille gel ».",
       ].join("\n"),
+    );
+  });
+
+  it("dit quand le réel n'a jamais fini sous l'attendu", () => {
+    const mail = marginMail("Extérieur", 2, 0.3, { nights: 12, shortfall: 0 });
+
+    expect(mail.subject).toBe(
+      "Veille gel : une nouvelle marge du dehors à valider",
+    );
+    expect(mail.text).toContain(
+      "le minimum extérieur a fini au-dessus du minimum attendu chaque fois.",
     );
   });
 });

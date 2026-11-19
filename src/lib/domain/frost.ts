@@ -102,33 +102,40 @@ export function predictVerandaMinimum({
  */
 export const DEFAULT_FORECAST_MARGIN = 2;
 
-/** Les règles de la proposition du matin (décisions du 26/10/2026). */
+/**
+ * Les règles de la proposition du matin (décisions du 26/10 et du 19/11/2026).
+ * La cible du foyer : le minimum réel finit au plus 0,5 °C sous le pire cas,
+ * quitte à finir jusqu'à 3 °C au-dessus — mieux vaut chauffer pour rien.
+ */
 export const MARGIN_PROPOSAL = {
   /** Assez de nuits froides mesurées pour proposer. */
   minNights: 10,
-  /** La marge couvre deux fois l'erreur quadratique moyenne. */
-  coverage: 2,
+  /** De combien le réel peut finir sous le pire cas. */
+  tolerance: 0.5,
   /**
-   * Plancher de l'erreur : le capteur relève à l'heure près, il ne sait pas
+   * Plancher de la marge : le capteur relève à l'heure près, il ne sait pas
    * juger plus fin (comme `FORECAST_BLEND.rmseFloor`).
    */
-  errorFloor: 0.3,
+  floor: 0.3,
   /** En deçà de cet écart avec la marge en vigueur, rien à proposer. */
   minChange: 0.5,
 } as const;
 
-export interface ForecastErrorStats {
+export interface ShortfallStats {
   readonly nights: number;
-  /** Erreur quadratique moyenne de la prévision, en °C. */
-  readonly error: number;
+  /**
+   * Le pire écart dangereux, en °C : de combien le minimum réel a fini sous
+   * l'attendu, au pire ; 0 s'il n'a jamais fini dessous.
+   */
+  readonly shortfall: number;
 }
 
 /**
- * La marge à proposer d'après l'erreur mesurée, ou `null` : trop peu de nuits,
- * ou trop proche de la marge en vigueur pour mériter une validation.
+ * La marge à proposer d'après le pire écart mesuré, ou `null` : trop peu de
+ * nuits, ou trop proche de la marge en vigueur pour mériter une validation.
  */
-export function proposeForecastMargin(
-  stats: ForecastErrorStats,
+export function proposeMargin(
+  stats: ShortfallStats,
   current: number,
 ): number | null {
   if (stats.nights < MARGIN_PROPOSAL.minNights) {
@@ -136,13 +143,51 @@ export function proposeForecastMargin(
   }
 
   const proposed = round1(
-    MARGIN_PROPOSAL.coverage *
-      Math.max(stats.error, MARGIN_PROPOSAL.errorFloor),
+    Math.max(
+      stats.shortfall - MARGIN_PROPOSAL.tolerance,
+      MARGIN_PROPOSAL.floor,
+    ),
   );
 
   return Math.abs(proposed - current) < MARGIN_PROPOSAL.minChange
     ? null
     : proposed;
+}
+
+/**
+ * La marge radiative de la véranda : une feuille descend sous l'air par nuit
+ * claire, même sous verre, et le capteur mesure l'air (SPEC § 12.2).
+ */
+export const VERANDA_RADIATIVE_MARGIN = {
+  /** Au départ, avec les marges additionnées (décision du 19/11/2026). */
+  start: 1.5,
+  /** Avec la marge mesurée, qui couvre déjà prévision et modèle. */
+  measured: 0.5,
+} as const;
+
+/**
+ * La marge mesurée de la véranda telle qu'appliquée ce soir : elle couvre la
+ * prévision et le modèle d'un coup, doublée quand le modèle extrapole.
+ */
+export function measuredVerandaMargin(
+  prediction: VerandaPrediction,
+  measuredMargin: number,
+): number {
+  return prediction.extrapolation === "none"
+    ? measuredMargin
+    : measuredMargin * 2;
+}
+
+/** Le pire cas dans la véranda avec sa marge mesurée, et le radiatif réduit. */
+export function measuredVerandaLowerBound(
+  prediction: VerandaPrediction,
+  measuredMargin: number,
+): number {
+  return round1(
+    prediction.estimate -
+      measuredVerandaMargin(prediction, measuredMargin) -
+      VERANDA_RADIATIVE_MARGIN.measured,
+  );
 }
 
 export interface WatchMargins {

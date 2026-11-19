@@ -207,12 +207,21 @@ export const DEMO_FROST: {
 export const DEMO_NEXT_UP =
   "Le prochain rendez-vous est le 1er octobre : rentrer le citronnier sous abri. Il apparaîtra ici quand son préavis s'ouvrira.";
 
-/** Une marge de prévision mesurée, à valider dans les réglages (§ 12.8). */
-export const DEMO_MARGIN: MarginView = marginView({
-  actuelle: null,
-  appliqueeLe: null,
-  proposition: { id: "1", valeur: 1.2, nuits: 14, erreur: 0.6 },
-});
+/** Une marge de la véranda mesurée, à valider dans les réglages (§ 12.8). */
+export const DEMO_MARGIN: MarginView = marginView([
+  {
+    emplacement: "Extérieur",
+    actuelle: null,
+    appliqueeLe: null,
+    proposition: null,
+  },
+  {
+    emplacement: "Véranda",
+    actuelle: null,
+    appliqueeLe: null,
+    proposition: { id: "1", valeur: 0.6, nuits: 14, ecart: 1.1 },
+  },
+]);
 
 /** Une échéance d'« À venir » : jardin, souple et normale sauf mention. */
 const upcoming = (

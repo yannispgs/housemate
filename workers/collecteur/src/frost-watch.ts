@@ -9,6 +9,8 @@ import {
   type Extrapolation,
   type FrostLevel,
   frostLevel,
+  MARGIN_PROPOSAL,
+  VERANDA_RADIATIVE_MARGIN,
 } from "../../../src/lib/domain/frost";
 
 /**
@@ -17,14 +19,15 @@ import {
  * viennent des fiches des plantes (§ 12.2).
  */
 export const FROST_WATCH = {
-  // La marge de prévision n'est pas ici : mesurée puis validée, elle se lit en
-  // base (`meteo.marges_prevision`), `DEFAULT_FORECAST_MARGIN` à défaut.
+  // Les marges mesurées ne sont pas ici : proposées puis validées, elles se
+  // lisent en base (`meteo.marges_prevision`), une par emplacement.
   veranda: {
     /**
-     * Marge radiative, gardée entière au démarrage bien qu'elle soit faible
-     * sous verre (SPEC § 12.2) : c'est un des premiers réglages à resserrer.
+     * Marge radiative du départ, tant que la marge de la véranda n'est pas
+     * mesurée : faible sous verre (SPEC § 12.2), resserrée de 3 à 1,5 °C le
+     * 19/11/2026 au vu du journal.
      */
-    radiativeMargin: 3,
+    radiativeMargin: VERANDA_RADIATIVE_MARGIN.start,
   },
   exterior: {
     radiativeMargin: 3,
@@ -457,16 +460,31 @@ export function frostMail(
 }
 
 /** Le mail court qui annonce une marge à valider (décision du 26/10/2026). */
+export type MarginLocation = "Extérieur" | "Véranda";
+
+const MARGIN_WHAT = {
+  Extérieur: "le minimum extérieur a fini",
+  Véranda: "la véranda a fini",
+} as const;
+
+/** L'annonce d'une marge mesurée à valider. */
 export function marginMail(
+  location: MarginLocation,
   current: number,
   proposed: number,
-  stats: { readonly nights: number; readonly error: number },
+  stats: { readonly nights: number; readonly shortfall: number },
 ): Mail {
+  const place = location === "Véranda" ? "de la véranda" : "du dehors";
+  const worst =
+    stats.shortfall === 0
+      ? `${MARGIN_WHAT[location]} au-dessus du minimum attendu chaque fois.`
+      : `${MARGIN_WHAT[location]} au pire ${celsius(stats.shortfall)} sous le minimum attendu.`;
+
   return {
-    subject: "Veille gel : une nouvelle marge de prévision à valider",
+    subject: `Veille gel : une nouvelle marge ${place} à valider`,
     text: [
-      `Sur les ${stats.nights} dernières nuits froides, la prévision s'est trompée de ${celsius(stats.error)} en moyenne quadratique.`,
-      `La veille propose de passer sa marge de prévision de ${celsius(current)} à ${celsius(proposed)}.`,
+      `Sur les ${stats.nights} dernières nuits froides, ${worst}`,
+      `La veille propose de passer la marge ${place} de ${celsius(current)} à ${celsius(proposed)} : le réel finirait au plus ${celsius(MARGIN_PROPOSAL.tolerance)} sous le pire cas.`,
       "",
       "Rien ne change sans validation : Réglages, section « Veille gel ».",
     ].join("\n"),

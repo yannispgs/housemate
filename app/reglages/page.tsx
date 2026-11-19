@@ -77,7 +77,7 @@ export default async function Page() {
         />
       }
       rows={rows}
-      marge={marge && marginView(marge)}
+      marge={marge.length > 0 ? marginView(marge) : null}
       appliquerMarge={appliquerMarge}
     />
   );

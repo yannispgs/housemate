@@ -1,51 +1,48 @@
 "use client";
 
 /**
- * La section « Veille gel » des réglages (SPEC § 12.8, décisions du
- * 26/10/2026) : la marge de prévision en vigueur, et celle que la veille
- * propose après assez de nuits froides. Rien ne change sans « Appliquer ».
+ * La section « Veille gel » des réglages (SPEC § 12.8, décisions du 26/10 et
+ * du 19/11/2026) : une marge mesurée par emplacement, Dehors et Véranda, celle
+ * en vigueur et celle que la veille propose après assez de nuits froides. Rien
+ * ne change sans « Appliquer ».
  * ⚠️ Provisoire : pas encore dessinée dans Claude Design.
  */
 import { useState, useTransition } from "react";
-import type { MarginView } from "@/lib/ui/frost";
+import type { MarginLocationView, MarginView } from "@/lib/ui/frost";
 import { CheckIcon } from "./icons";
 import { Panel } from "./Screen";
 
 const PANEL_LABEL =
   "text-[11.5px] leading-none font-semibold uppercase tracking-[.11em] text-ink-muted";
 
-export function VeilleGelPanel({
+type Appliquer = (proposition: string) => Promise<string | null>;
+
+function Marge({
   marge,
   appliquer,
-}: Readonly<{
-  marge: MarginView;
-  /** Server action ; absente en démo. */
-  appliquer?: (proposition: string) => Promise<string | null>;
-}>) {
+}: Readonly<{ marge: MarginLocationView; appliquer?: Appliquer }>) {
   const [appliquee, setAppliquee] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, demarrer] = useTransition();
   const proposition = marge.proposition;
 
   return (
-    <Panel className="gap-3 p-[18px]">
-      <span className={PANEL_LABEL}>Veille gel</span>
+    <section aria-label={marge.libelle} className="flex flex-col gap-2">
       <span className="flex items-baseline justify-between gap-3">
         <span className="text-[15px] leading-[1.3] text-ink">
-          Marge de prévision
+          Marge · {marge.libelle}
         </span>
         <span className="font-display text-[15px] text-ink">
           {appliquee && proposition ? proposition.valeur : marge.actuelle}
         </span>
       </span>
       <span className="text-[12.5px] leading-normal text-pretty text-ink-secondary">
-        {appliquee ? "Appliquée aujourd'hui." : marge.origine} Le pire cas de
-        chaque plante retranche cette marge au minimum annoncé.
+        {appliquee ? "Appliquée aujourd'hui." : marge.origine} {marge.role}
       </span>
 
       {proposition && !appliquee && (
         <section
-          aria-label="Marge proposée"
+          aria-label={`Marge proposée · ${marge.libelle}`}
           className="flex flex-col gap-2.5 rounded-[var(--radius-md)] bg-grid p-3"
         >
           <span className="text-[15px] leading-[1.3] text-ink">
@@ -83,6 +80,24 @@ export function VeilleGelPanel({
           </button>
         </section>
       )}
+    </section>
+  );
+}
+
+export function VeilleGelPanel({
+  marge,
+  appliquer,
+}: Readonly<{
+  marge: MarginView;
+  /** Server action ; absente en démo. */
+  appliquer?: Appliquer;
+}>) {
+  return (
+    <Panel className="gap-4 p-[18px]">
+      <span className={PANEL_LABEL}>Veille gel</span>
+      {marge.map(m => (
+        <Marge key={m.emplacement} marge={m} appliquer={appliquer} />
+      ))}
     </Panel>
   );
 }

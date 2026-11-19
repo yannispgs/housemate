@@ -8,12 +8,14 @@
  * 9 h » garde son sens les nuits de changement d'heure.
  */
 import type {
+  MarginLocation,
   ModelMinimum,
   ModelScore,
   PlantNight,
   WatchedPlant,
   WeightedModel,
 } from "./frost-watch";
+import type { WeekAlert, WeekModelMinimum, WeekNight } from "./frost-week";
 import type { Sql } from "./store";
 
 async function rows<T>(query: Promise<unknown>): Promise<T[]> {
@@ -321,44 +323,57 @@ export async function recordReview(
   `;
 }
 
-/** La marge de prévision en vigueur : la dernière appliquée, ou `null`. */
-export async function appliedForecastMargin(sql: Sql): Promise<number | null> {
-  const found = await rows<{ valeur: number }>(sql`
-    select valeur::float8 as valeur from meteo.marges_prevision
+/** Les marges mesurées en vigueur, par emplacement : la dernière appliquée. */
+export async function appliedMargins(
+  sql: Sql,
+): Promise<Partial<Record<MarginLocation, number>>> {
+  const found = await rows<{ emplacement: MarginLocation; valeur: number }>(sql`
+    select distinct on (emplacement) emplacement, valeur::float8 as valeur
+    from meteo.marges_prevision
     where appliquee_le is not null
-    order by appliquee_le desc, id desc
-    limit 1
+    order by emplacement, appliquee_le desc, id desc
   `);
 
-  return found[0]?.valeur ?? null;
+  return Object.fromEntries(
+    found.map(row => [row.emplacement, row.valeur]),
+  ) as Partial<Record<MarginLocation, number>>;
 }
 
-/** L'erreur de la prévision sur les dernières nuits froides. */
-export async function coldForecastError(
-  sql: Sql,
-): Promise<{ nights: number; error: number }> {
-  const found = await rows<{ nights: number; error: number }>(sql`
-    select nuits as nights, erreur::float8 as error
-    from meteo.erreur_prevision_froid
-  `);
+export interface LocationShortfall {
+  readonly location: MarginLocation;
+  readonly nights: number;
+  readonly shortfall: number;
+}
 
-  /* c8 ignore next -- repli inatteignable : un agrégat rend toujours sa ligne. */
-  return found[0] ?? { nights: 0, error: 0 };
+/** Le pire écart dangereux des dernières nuits froides, par emplacement. */
+export async function coldShortfalls(sql: Sql): Promise<LocationShortfall[]> {
+  return rows<LocationShortfall>(sql`
+    select emplacement as location, nuits as nights,
+      ecart::float8 as shortfall
+    from meteo.ecarts_froids
+    order by emplacement
+  `);
 }
 
 /**
- * Propose une marge : met à jour la proposition en attente, ou en crée une.
- * Rend `true` seulement à la création — c'est elle qui mérite un mail.
+ * Propose une marge pour un emplacement : met à jour sa proposition en
+ * attente, ou en crée une. Rend `true` seulement à la création — c'est elle
+ * qui mérite un mail.
  */
 export async function recordMarginProposal(
   sql: Sql,
-  proposal: { valeur: number; nuits: number; erreur: number },
+  proposal: {
+    emplacement: MarginLocation;
+    valeur: number;
+    nuits: number;
+    ecart: number;
+  },
 ): Promise<boolean> {
   const updated = await rows<{ id: number }>(sql`
     update meteo.marges_prevision set
       valeur = ${proposal.valeur}, nuits = ${proposal.nuits},
-      erreur = ${proposal.erreur}, proposee_le = now()
-    where appliquee_le is null
+      ecart = ${proposal.ecart}, proposee_le = now()
+    where appliquee_le is null and emplacement = ${proposal.emplacement}
     returning id
   `);
 
@@ -367,11 +382,72 @@ export async function recordMarginProposal(
   }
 
   const inserted = await rows<{ id: number }>(sql`
-    insert into meteo.marges_prevision (valeur, nuits, erreur)
-    values (${proposal.valeur}, ${proposal.nuits}, ${proposal.erreur})
+    insert into meteo.marges_prevision (emplacement, valeur, nuits, ecart)
+    values (${proposal.emplacement}, ${proposal.valeur}, ${proposal.nuits},
+      ${proposal.ecart})
     on conflict do nothing
     returning id
   `);
 
   return inserted.length > 0;
+}
+
+/** Les nuits du bilan de la semaine, `from` et `to` compris. */
+export async function weekNights(
+  sql: Sql,
+  from: string,
+  to: string,
+): Promise<WeekNight[]> {
+  return rows<WeekNight>(sql`
+    select
+      to_char(nuit, 'YYYY-MM-DD') as night,
+      exterieur_20h::float8 as "exteriorAt20h",
+      veranda_20h::float8 as "verandaAt20h",
+      prevision_min::float8 as "forecastMinimum",
+      estimation::float8 as estimate,
+      borne_basse::float8 as "lowerBound",
+      alerte as alert,
+      coalesce(chauffee, false) as heated,
+      min_exterieur::float8 as "minExterior",
+      min_veranda::float8 as "minVeranda"
+    from meteo.nuits_gel
+    where nuit between ${from}::date and ${to}::date
+    order by nuit
+  `);
+}
+
+/** Ce que chaque modèle annonçait à 20 h, les nuits de la semaine. */
+export async function weekModelMinima(
+  sql: Sql,
+  from: string,
+  to: string,
+): Promise<WeekModelMinimum[]> {
+  return rows<WeekModelMinimum>(sql`
+    select to_char(nuit, 'YYYY-MM-DD') as night, source, modele as model,
+      minimum::float8 as minimum
+    from meteo.minima_prevus
+    where nuit between ${from}::date and ${to}::date
+    order by nuit, source, modele
+  `);
+}
+
+/**
+ * Les plantes en alerte de la semaine. Le bilan part à l'adresse commune :
+ * une plante privée n'y figure pas, comme dans le mail du soir.
+ */
+export async function weekAlerts(
+  sql: Sql,
+  from: string,
+  to: string,
+): Promise<WeekAlert[]> {
+  return rows<WeekAlert>(sql`
+    select to_char(nuit, 'YYYY-MM-DD') as night, titre as title,
+      emplacement as location, seuil_degats::float8 as "damageThreshold",
+      borne_basse::float8 as "lowerBound"
+    from meteo.nuits_gel_plantes
+    where nuit between ${from}::date and ${to}::date
+      and niveau = 'alerte'
+      and reservee_a is null
+    order by nuit, titre
+  `);
 }

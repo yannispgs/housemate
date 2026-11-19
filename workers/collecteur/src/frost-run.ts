@@ -12,15 +12,20 @@
 import {
   DEFAULT_FORECAST_MARGIN,
   exteriorLowerBound,
+  measuredVerandaLowerBound,
+  measuredVerandaMargin,
   nightErrors,
   predictVerandaMinimum,
-  proposeForecastMargin,
+  proposeMargin,
+  VERANDA_MODEL,
+  VERANDA_RADIATIVE_MARGIN,
+  type VerandaPrediction,
   verandaLowerBound,
 } from "../../../src/lib/domain/frost";
 import {
-  appliedForecastMargin,
+  appliedMargins,
   claimMessage,
-  coldForecastError,
+  coldShortfalls,
   eveningReadings,
   forecastMinima,
   modelScores,
@@ -35,6 +40,9 @@ import {
   recordReview,
   releaseMessage,
   watchedPlants,
+  weekAlerts,
+  weekModelMinima,
+  weekNights,
 } from "./frost-store";
 import {
   assessPlants,
@@ -42,15 +50,52 @@ import {
   FROST_WATCH,
   frostMail,
   type Mail,
+  type MarginLocation,
   marginMail,
   nightMessage,
   type PlantNight,
 } from "./frost-watch";
+import { weeklyReviewMail } from "./frost-week";
 import type { Sql } from "./store";
 
-/** La marge de prévision en vigueur : validée, sinon celle de départ. */
-async function forecastMargin(sql: Sql): Promise<number> {
-  return (await appliedForecastMargin(sql)) ?? DEFAULT_FORECAST_MARGIN;
+/** Les marges qu'on retranche dans la véranda ce soir, détaillées au journal. */
+interface VerandaMargins {
+  readonly modelMargin: number;
+  readonly forecastMargin: number;
+  readonly radiativeMargin: number;
+  readonly lowerBound: number;
+}
+
+/**
+ * Le pire cas de la véranda : avec sa marge mesurée dès qu'elle est validée
+ * (décision du 19/11/2026), sinon les marges du départ additionnées. La marge
+ * mesurée couvre prévision et modèle d'un coup : le journal la range en marge
+ * du modèle, avec une marge de prévision nulle.
+ */
+function verandaMargins(
+  prediction: VerandaPrediction,
+  measured: number | undefined,
+  forecastMargin: number,
+): VerandaMargins {
+  if (measured === undefined) {
+    const start = {
+      forecastMargin,
+      radiativeMargin: FROST_WATCH.veranda.radiativeMargin,
+    };
+
+    return {
+      modelMargin: prediction.margin,
+      ...start,
+      lowerBound: verandaLowerBound(prediction, start),
+    };
+  }
+
+  return {
+    modelMargin: measuredVerandaMargin(prediction, measured),
+    forecastMargin: 0,
+    radiativeMargin: VERANDA_RADIATIVE_MARGIN.measured,
+    lowerBound: measuredVerandaLowerBound(prediction, measured),
+  };
 }
 
 export async function evaluateEvening(
@@ -72,11 +117,8 @@ export async function evaluateEvening(
     );
   }
 
-  const margin = await forecastMargin(sql);
-  const MARGINS = {
-    veranda: { forecastMargin: margin, ...FROST_WATCH.veranda },
-    exterior: { forecastMargin: margin, ...FROST_WATCH.exterior },
-  };
+  const applied = await appliedMargins(sql);
+  const forecastMargin = applied.Extérieur ?? DEFAULT_FORECAST_MARGIN;
 
   // La véranda se prédit dès que ses relevés sont là, même sans plante
   // dedans : le bilan du matin continue d'en calibrer le modèle.
@@ -88,18 +130,22 @@ export async function evaluateEvening(
           verandaAt20h: readings.veranda,
           forecastExteriorMinimum: forecast.minimum,
         });
-  const veranda =
+  const margins =
     prediction === null
       ? null
-      : {
-          estimate: prediction.estimate,
-          lowerBound: verandaLowerBound(prediction, MARGINS.veranda),
-        };
+      : verandaMargins(prediction, applied.Véranda, forecastMargin);
+  const veranda =
+    prediction === null || margins === null
+      ? null
+      : { estimate: prediction.estimate, lowerBound: margins.lowerBound };
   const plants = assessPlants(await watchedPlants(sql), {
     forecastMinimum: forecast.minimum,
     exterior: {
       estimate: forecast.minimum,
-      lowerBound: exteriorLowerBound(forecast.minimum, MARGINS.exterior),
+      lowerBound: exteriorLowerBound(forecast.minimum, {
+        forecastMargin,
+        ...FROST_WATCH.exterior,
+      }),
     },
     veranda,
   });
@@ -115,7 +161,7 @@ export async function evaluateEvening(
     forecastMethod: forecast.method,
     // Les marges telles qu'appliquées à la véranda ce soir ; celles du dehors
     // se lisent dans l'écart entre estimation et pire cas de ses plantes.
-    ...(prediction === null || veranda === null
+    ...(prediction === null || margins === null
       ? {
           estimate: null,
           modelMargin: null,
@@ -126,10 +172,10 @@ export async function evaluateEvening(
         }
       : {
           estimate: prediction.estimate,
-          modelMargin: prediction.margin,
-          forecastMargin: MARGINS.veranda.forecastMargin,
-          radiativeMargin: MARGINS.veranda.radiativeMargin,
-          lowerBound: veranda.lowerBound,
+          modelMargin: margins.modelMargin,
+          forecastMargin: margins.forecastMargin,
+          radiativeMargin: margins.radiativeMargin,
+          lowerBound: margins.lowerBound,
           extrapolation: prediction.extrapolation,
         }),
     alert,
@@ -235,25 +281,66 @@ export async function reviewNight(sql: Sql, night: string): Promise<void> {
   });
 }
 
-/**
- * Le matin, après le bilan : propose une marge de prévision si l'erreur
- * mesurée la justifie. Rend le mail qui l'annonce à la première proposition
- * seulement — les matins suivants la mettent à jour sans rien envoyer.
- */
-export async function proposeMargin(sql: Sql): Promise<Mail | null> {
-  const stats = await coldForecastError(sql);
-  const current = await forecastMargin(sql);
-  const proposed = proposeForecastMargin(stats, current);
+/** La marge en vigueur d'un emplacement, telle qu'une proposition la compare. */
+function currentMargin(
+  location: MarginLocation,
+  applied: Partial<Record<MarginLocation, number>>,
+): number {
+  const exterior = applied.Extérieur ?? DEFAULT_FORECAST_MARGIN;
 
-  if (proposed === null) {
-    return null;
+  if (location === "Extérieur") {
+    return exterior;
   }
 
-  const created = await recordMarginProposal(sql, {
-    valeur: proposed,
-    nuits: stats.nights,
-    erreur: stats.error,
-  });
+  // Au départ, la véranda additionne la marge du modèle et celle de la
+  // prévision : c'est ce que sa marge mesurée remplace.
+  return applied.Véranda ?? VERANDA_MODEL.margin + exterior;
+}
 
-  return created ? marginMail(current, proposed, stats) : null;
+/**
+ * Le matin, après le bilan : propose une marge par emplacement si le pire
+ * écart mesuré la justifie. Rend les mails qui l'annoncent, à la première
+ * proposition seulement — les matins suivants la mettent à jour en silence.
+ */
+export async function proposeMargins(sql: Sql): Promise<Mail[]> {
+  const applied = await appliedMargins(sql);
+  const proposals = (await coldShortfalls(sql)).flatMap(stats => {
+    const current = currentMargin(stats.location, applied);
+    const proposed = proposeMargin(stats, current);
+
+    return proposed === null ? [] : [{ stats, current, proposed }];
+  });
+  const created = await Promise.all(
+    proposals.map(({ stats, proposed }) =>
+      recordMarginProposal(sql, {
+        emplacement: stats.location,
+        valeur: proposed,
+        nuits: stats.nights,
+        ecart: stats.shortfall,
+      }),
+    ),
+  );
+
+  return proposals
+    .filter((_, index) => created[index])
+    .map(({ stats, current, proposed }) =>
+      marginMail(stats.location, current, proposed, stats),
+    );
+}
+
+/**
+ * Le bilan du dimanche (décision du 19/11/2026) : les nuits de `from` à
+ * `to`, comprises.
+ */
+export async function weeklyReview(
+  sql: Sql,
+  from: string,
+  to: string,
+): Promise<Mail | null> {
+  return weeklyReviewMail({
+    nights: await weekNights(sql, from, to),
+    models: await weekModelMinima(sql, from, to),
+    alerts: await weekAlerts(sql, from, to),
+    scores: await modelScores(sql),
+  });
 }

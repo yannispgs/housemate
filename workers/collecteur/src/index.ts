@@ -17,9 +17,10 @@ import {
 } from "./forecasts";
 import {
   evaluateEvening,
-  proposeMargin,
+  proposeMargins,
   reviewNight,
   sendPending,
+  weeklyReview,
 } from "./frost-run";
 import type { Mail } from "./frost-watch";
 import { demanderResumes } from "./resumes";
@@ -31,6 +32,7 @@ import {
   shouldReadSensors,
   shouldReviewNight,
   shouldSendFrostMessage,
+  shouldSendWeeklyFrostReview,
 } from "./schedule";
 import { buildMessage, deliver } from "./smtp";
 import { openSmtp } from "./smtp-socket";
@@ -100,10 +102,22 @@ async function watchFrost(env: Env, now: Date, hour: number): Promise<void> {
 
   if (shouldReviewNight(hour)) {
     await reviewNight(sql, parisDate(now, -1));
-    const proposal = await proposeMargin(sql);
 
-    if (proposal !== null) {
+    for (const proposal of await proposeMargins(sql)) {
       await sendMail(env, proposal);
+    }
+  }
+
+  // Le dimanche, les sept nuits jusqu'à celle qui vient d'être bilantée.
+  if (shouldSendWeeklyFrostReview(now)) {
+    const review = await weeklyReview(
+      sql,
+      parisDate(now, -7),
+      parisDate(now, -1),
+    );
+
+    if (review !== null) {
+      await sendMail(env, review);
     }
   }
 }
