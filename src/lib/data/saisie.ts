@@ -676,6 +676,68 @@ export function remplacementValide(
   return compare(fromISO(saisie.le), today) <= 0;
 }
 
+/**
+ * Une intervention du carnet (§ 5.3) : une date, le compteur et le coût
+ * facultatifs, et au moins une ligne — un consommable remplacé, une échéance
+ * faite ou une ligne libre.
+ */
+export const interventionSaisie = z
+  .object({
+    ficheId: z.uuid({ error: "Fiche inconnue." }),
+    le: dateIso,
+    compteur: z.preprocess(
+      v => (v === "" || v === undefined ? null : v),
+      entier(0, 10_000_000).nullable(),
+    ),
+    // « 89,90 » s'écrit avec une virgule en France ; arrondi au centime.
+    cout: z.preprocess(
+      v =>
+        v === "" || v === undefined
+          ? null
+          : String(v).replace(",", ".").replaceAll(/\s/g, ""),
+      z.coerce
+        .number({ error: "Un montant en euros est attendu." })
+        .min(0, "Un montant positif est attendu.")
+        .max(1_000_000, "1 000 000 € au plus.")
+        .transform(v => Math.round(v * 100) / 100)
+        .nullable(),
+    ),
+    consommables: z.array(z.uuid({ error: "Consommable inconnu." })),
+    echeances: z.array(z.uuid({ error: "Échéance inconnue." })),
+    libres: z.array(
+      z
+        .string()
+        .trim()
+        .min(1, "Une ligne vide ne dit rien.")
+        .max(120, "120 caractères au plus."),
+    ),
+  })
+  .refine(
+    i => i.consommables.length + i.echeances.length + i.libres.length > 0,
+    { error: "Coche ou ajoute au moins une ligne.", path: ["lignes"] },
+  );
+
+/** Ce que le formulaire d'une intervention envoie, tel quel. */
+export interface ChampsIntervention {
+  readonly ficheId: string;
+  readonly le: string;
+  readonly compteur: string;
+  readonly cout: string;
+  readonly consommables: readonly string[];
+  readonly echeances: readonly string[];
+  readonly libres: readonly string[];
+}
+
+export type InterventionSaisie = z.infer<typeof interventionSaisie>;
+
+/** Une intervention ne peut pas être datée du futur. */
+export function interventionValide(
+  saisie: InterventionSaisie,
+  today: PlainDate,
+): boolean {
+  return compare(fromISO(saisie.le), today) <= 0;
+}
+
 /* ------------------------------------------------------------------------ */
 /* Garantie : la fiche de l'objet et sa fin de garantie                     */
 /* ------------------------------------------------------------------------ */

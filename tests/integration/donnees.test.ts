@@ -34,6 +34,7 @@ import {
   modifierDureeDeVie,
   modifierPlante,
   modifierTenueConsommable,
+  noterIntervention,
   noterReleve,
   noterRemplacement,
   reglerEntretien,
@@ -1085,24 +1086,155 @@ describe("plan d'entretien (§ 5.3)", () => {
           libelle: "Vidange",
           le: "2026-03-03",
           compteur: 45_000,
+
+          intervention: null,
+          cout: null,
         },
         {
           genre: "echeance",
           libelle: "Révision",
           le: "2026-03-03",
           compteur: null,
+
+          intervention: null,
+          cout: null,
         },
         {
           genre: "remplacement",
           libelle: "Vidange",
           le: "2025-03-01",
           compteur: null,
+
+          intervention: null,
+          cout: null,
         },
       ],
     });
     expect(
       await commeMembre(sql(), voisin.compte, tx => lireCarnet(tx, ficheId)),
     ).toEqual({ entretien: false, entrees: [] });
+  });
+
+  it("⚠️ note une intervention d'un coup : remplacements, échéance, lignes libres, relevé", async () => {
+    const ficheId = await voiture(moi);
+    const revision = await echeanceDe(moi, {
+      titre: "Révision",
+      fiche: ficheId,
+    });
+    const [huile, filtre] = await commeMembre(sql(), moi.compte, tx =>
+      Promise.all([
+        ajouterConsommable(tx, ficheId, "Vidange", COURROIE),
+        ajouterConsommable(tx, ficheId, "Filtre à air", COURROIE),
+      ]),
+    );
+
+    await commeMembre(sql(), conjoint.compte, tx =>
+      noterIntervention(tx, {
+        ficheId,
+        le: fromISO("2026-03-03"),
+        compteur: 45_000,
+        cout: 320.5,
+        consommables: [huile as string, filtre as string],
+        echeances: [{ id: revision, occurrence: fromISO("2026-10-20") }],
+        libres: ["Plaquettes AR"],
+      }),
+    );
+
+    const [carnet, plan] = await commeMembre(sql(), moi.compte, tx =>
+      Promise.all([lireCarnet(tx, ficheId), lirePlanEntretien(tx, ficheId)]),
+    );
+    const intervention = carnet.entrees[0]?.intervention;
+    const ligne = { le: "2026-03-03", compteur: 45_000, cout: 320.5 };
+
+    expect(intervention).toEqual(expect.any(String));
+    expect(carnet.entrees).toEqual([
+      {
+        ...ligne,
+        genre: "remplacement",
+        libelle: "Filtre à air",
+        intervention,
+      },
+      { ...ligne, genre: "remplacement", libelle: "Vidange", intervention },
+      { ...ligne, genre: "libre", libelle: "Plaquettes AR", intervention },
+      { ...ligne, genre: "echeance", libelle: "Révision", intervention },
+    ]);
+    // Le kilométrage est aussi un relevé, et chaque remplacement compte.
+    expect(plan.releves).toEqual([
+      { le: fromISO("2026-03-03"), valeur: 45_000 },
+    ]);
+    expect(plan.consommables.map(c => c.remplacements)).toEqual([
+      [{ le: fromISO("2026-03-03"), compteur: 45_000 }],
+      [{ le: fromISO("2026-03-03"), compteur: 45_000 }],
+    ]);
+
+    // Un autre foyer n'en voit rien.
+    expect(
+      await commeMembre(sql(), voisin.compte, tx => lireCarnet(tx, ficheId)),
+    ).toEqual({ entretien: false, entrees: [] });
+  });
+
+  it("une intervention sans compteur ni coût ne note aucun relevé", async () => {
+    const ficheId = await voiture(moi);
+
+    await commeMembre(sql(), moi.compte, tx =>
+      noterIntervention(tx, {
+        ficheId,
+        le: fromISO("2026-03-03"),
+        compteur: null,
+        cout: null,
+        consommables: [],
+        echeances: [],
+        libres: ["Lavage"],
+      }),
+    );
+
+    const [carnet, plan] = await commeMembre(sql(), moi.compte, tx =>
+      Promise.all([lireCarnet(tx, ficheId), lirePlanEntretien(tx, ficheId)]),
+    );
+
+    expect(carnet.entrees).toMatchObject([
+      { genre: "libre", libelle: "Lavage", compteur: null, cout: null },
+    ]);
+    expect(plan.releves).toEqual([]);
+  });
+
+  it("⚠️ refuse une intervention datée du futur, ou qui mêle une autre fiche", async () => {
+    const ficheId = await voiture(moi);
+    const autre = await voiture(moi);
+    const ailleurs = await commeMembre(sql(), moi.compte, tx =>
+      ajouterConsommable(tx, autre, "Vidange", COURROIE),
+    );
+    const intervention = {
+      ficheId,
+      le: fromISO("2026-03-03"),
+      compteur: null,
+      cout: null,
+      consommables: [],
+      echeances: [],
+      libres: ["Lavage"],
+    };
+
+    await expect(
+      commeMembre(sql(), moi.compte, tx =>
+        noterIntervention(tx, { ...intervention, le: fromISO("2999-01-01") }),
+      ),
+    ).rejects.toThrow(/futur/);
+    await expect(
+      commeMembre(sql(), moi.compte, tx =>
+        noterIntervention(tx, { ...intervention, consommables: [ailleurs] }),
+      ),
+    ).rejects.toThrow(/sa fiche/);
+    // Ni chez un autre foyer.
+    await expect(
+      commeMembre(sql(), voisin.compte, tx =>
+        noterIntervention(tx, intervention),
+      ),
+    ).rejects.toThrow(/row-level security/);
+    // Rien n'est resté de ces essais.
+    expect(
+      (await commeMembre(sql(), moi.compte, tx => lireCarnet(tx, ficheId)))
+        .entrees,
+    ).toEqual([]);
   });
 });
 

@@ -513,22 +513,102 @@ export async function lireCarnet(tx: Tx, ficheId: string): Promise<Carnet> {
     select exists (select from app.consommables where fiche_id = ${ficheId})
       or exists (select from app.echeances where fiche_id = ${ficheId})
       as entretien`) as unknown as [{ entretien: boolean }];
+  // Une ligne d'une intervention prend sa date et son compteur : c'est ce
+  // qui les regroupe, au carnet comme sur le graphique.
   const entrees = await tx<EntreeCarnet[]>`
     select 'remplacement' as genre, c.intitule as libelle,
-      r.fait_le::text as le, r.compteur
+      r.fait_le::text as le, r.compteur,
+      r.intervention_id::text as intervention, i.cout::float8 as cout
     from app.remplacements r
     join app.consommables c on c.id = r.consommable_id
+    left join app.interventions i on i.id = r.intervention_id
     where c.fiche_id = ${ficheId}
     union all
-    select 'echeance', e.titre, c.faite_le::text, null
+    select 'echeance', e.titre, c.faite_le::text, i.compteur,
+      c.intervention_id::text, i.cout::float8
     from app.completions c
     join app.echeances e on e.id = c.echeance_id
+    left join app.interventions i on i.id = c.intervention_id
     where e.fiche_id = ${ficheId}
       and not c.annulee
       and not exists (select from app.completions v where v.corrige = c.id)
-    order by le desc, compteur desc nulls last, libelle`;
+    union all
+    select 'libre', l.libelle, i.fait_le::text, i.compteur, i.id::text,
+      i.cout::float8
+    from app.lignes_libres l
+    join app.interventions i on i.id = l.intervention_id
+    where i.fiche_id = ${ficheId}
+    order by le desc, compteur desc nulls last, intervention nulls last,
+      genre desc, libelle`;
 
   return { entretien, entrees: entrees.map(entree => ({ ...entree })) };
+}
+
+/** Une intervention à enregistrer (§ 5.3, carnet d'entretien). */
+export interface NouvelleIntervention {
+  readonly ficheId: string;
+  readonly le: PlainDate;
+  /** Le compteur ce jour-là, s'il a été noté. */
+  readonly compteur: number | null;
+  /** En euros, pour l'intervention entière. */
+  readonly cout: number | null;
+  /** Les consommables remplacés. */
+  readonly consommables: readonly string[];
+  /** Les échéances liées faites, chacune à l'occurrence qu'elle coche. */
+  readonly echeances: readonly {
+    readonly id: string;
+    readonly occurrence: PlainDate;
+  }[];
+  /** Ce qui est hors plan. */
+  readonly libres: readonly string[];
+}
+
+/**
+ * Enregistre une intervention d'un coup : chaque remplacement et chaque
+ * complétion cochés, à sa date et à son compteur, les lignes libres, et le
+ * kilométrage comme relevé du compteur (§ 5.3). Rend son id.
+ */
+export async function noterIntervention(
+  tx: Tx,
+  intervention: NouvelleIntervention,
+): Promise<string> {
+  const le = toISO(intervention.le);
+  const [row] = await tx`
+    insert into app.interventions (fiche_id, fait_le, compteur, cout)
+    values (${intervention.ficheId}, ${le}, ${intervention.compteur},
+      ${intervention.cout})
+    returning id::text`;
+  const id = row?.id as string;
+
+  await tx`
+    insert into app.remplacements
+      (consommable_id, fait_le, compteur, intervention_id)
+    select consommable, ${le}, ${intervention.compteur}, ${id}
+    from unnest(${intervention.consommables as string[]}::uuid[])
+      as consommable`;
+  await tx`
+    insert into app.completions
+      (echeance_id, occurrence, faite_le, intervention_id)
+    select echeance, occurrence, ${le}, ${id}
+    from unnest(
+      ${intervention.echeances.map(e => e.id)}::uuid[],
+      ${intervention.echeances.map(e => toISO(e.occurrence))}::date[]
+    ) as faites (echeance, occurrence)`;
+  await tx`
+    insert into app.lignes_libres (intervention_id, libelle)
+    select ${id}, libelle
+    from unnest(${intervention.libres as string[]}::text[]) as libelle`;
+
+  if (intervention.compteur !== null) {
+    await noterReleve(
+      tx,
+      intervention.ficheId,
+      intervention.le,
+      intervention.compteur,
+    );
+  }
+
+  return id;
 }
 
 export interface DureeDeVie {
